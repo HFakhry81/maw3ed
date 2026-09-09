@@ -9,6 +9,51 @@ function trackEvent(event, details = {}) {
     keepalive: true
   }).catch((error) => console.warn("Development event was not recorded", error));
 }
+const dashboardDate = "2025-05-14";
+const arabicDigits = (value) => String(value).replace(/\d/g, (digit) => "٠١٢٣٤٥٦٧٨٩"[digit]);
+const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+}[character]));
+const statusLabels = { confirmed: "مؤكد", pending: "بانتظار التأكيد", cancelled: "ملغى", completed: "مكتمل" };
+const appointmentColors = ["green", "blue", "yellow", "purple"];
+
+function renderAppointments(appointments) {
+  const list = document.getElementById("todayAppointmentsList");
+  if (!list) return;
+  if (!appointments.length) {
+    list.innerHTML = '<div class="empty-state">لا توجد مواعيد لهذا اليوم.</div>';
+    return;
+  }
+  list.innerHTML = appointments.map((appointment, index) => {
+    const hour = Number(appointment.time.split(":")[0]);
+    const minute = appointment.time.split(":")[1];
+    const displayHour = hour > 12 ? hour - 12 : hour;
+    const initials = appointment.patientName.trim().charAt(0);
+    const color = appointmentColors[index % appointmentColors.length];
+    return `<div class="appointment-item">
+      <div class="appointment-time"><b>${arabicDigits(`${displayHour}:${minute}`)}</b><span>${escapeHtml(appointment.period)}</span></div>
+      <div class="appointment-line ${color}"></div>
+      <div class="appointment-info"><b>${escapeHtml(appointment.patientName)}</b><span>${escapeHtml(appointment.serviceName)} • ${escapeHtml(appointment.doctorName)}</span></div>
+      <div class="appointment-avatar ${["pink", "peach", "lavender", "mint"][index % 4]}">${escapeHtml(initials)}</div>
+      <span class="status ${appointment.status}">${statusLabels[appointment.status] || "قيد المراجعة"}</span>
+    </div>`;
+  }).join("");
+}
+
+async function loadDashboardData() {
+  try {
+    const response = await fetch(`/api/dashboard?date=${dashboardDate}`);
+    if (!response.ok) throw new Error("Dashboard data request failed");
+    const payload = await response.json();
+    document.getElementById("todayAppointmentsCount").textContent = arabicDigits(payload.stats.appointmentsToday);
+    document.getElementById("newPatientsCount").textContent = arabicDigits(payload.stats.newPatients);
+    document.getElementById("completedExamsCount").textContent = arabicDigits(payload.stats.completedExams);
+    document.getElementById("attendanceRate").innerHTML = `${arabicDigits(payload.stats.attendanceRate)}<span class="percent">٪</span>`;
+    renderAppointments(payload.appointments);
+  } catch (error) {
+    console.warn("Dashboard data could not be loaded", error);
+  }
+}
 const titleMap = {
   dashboard: "لوحة التحكم", calendar: "التقويم", appointments: "المواعيد",
   customers: "المرضى", services: "الأقسام والعيادات", team: "الأطباء والطاقم",
@@ -50,12 +95,36 @@ function showToast(title = "تمت العملية بنجاح", message = "أضي
   toast.classList.add("show");
   setTimeout(() => toast.classList.remove("show"), 3200);
 }
-document.getElementById("appointmentForm").addEventListener("submit", (event) => {
+document.getElementById("appointmentForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  closeModal();
-  showToast();
-  trackEvent("appointment_created", { source: "prototype_form" });
-  event.target.reset();
+  const submitButton = event.target.querySelector(".form-submit");
+  submitButton.disabled = true;
+  try {
+    const response = await fetch("/api/appointments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patientName: document.getElementById("patientName").value,
+        departmentId: document.getElementById("departmentId").value,
+        doctorId: document.getElementById("doctorId").value,
+        date: document.getElementById("appointmentDate").value,
+        time: document.getElementById("appointmentTime").value
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "تعذر حفظ الموعد");
+    closeModal();
+    showToast("تم حفظ الموعد", "تمت إضافة الموعد إلى جدول اليوم.");
+    trackEvent("appointment_created", { appointmentId: payload.appointment.id, source: "appointment_form" });
+    event.target.reset();
+    document.getElementById("appointmentDate").value = dashboardDate;
+    await loadDashboardData();
+  } catch (error) {
+    showToast("تعذر حفظ الموعد", error.message);
+    trackEvent("appointment_create_failed", { reason: error.message });
+  } finally {
+    submitButton.disabled = false;
+  }
 });
 document.querySelector(".notification-button").addEventListener("click", () => {
   showToast("لا توجد إشعارات جديدة", "كل شيء محدث حتى الآن.");
@@ -102,6 +171,7 @@ document.getElementById("nextWeek").addEventListener("click", () => {
   trackEvent("week_navigated", { direction: "next" });
 });
 document.querySelector(".view-all").addEventListener("click", () => showView("appointments"));
+loadDashboardData();
 trackEvent("page_loaded", {
   view: "dashboard",
   language: document.documentElement.lang,

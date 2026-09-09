@@ -93,25 +93,25 @@
             <div class="stats-grid">
               <article class="stat-card">
                 <div class="stat-card-head"><span>مواعيد اليوم</span><div class="stat-icon blue">◷</div></div>
-                <div class="stat-value">٤٨</div>
+                <div class="stat-value" id="todayAppointmentsCount">٤٨</div>
                 <div class="stat-foot positive"><span>↑ ١٢٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="sparkline blue-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
               </article>
               <article class="stat-card">
                 <div class="stat-card-head"><span>مرضى جدد</span><div class="stat-icon yellow">♙</div></div>
-                <div class="stat-value">٣٢</div>
+                <div class="stat-value" id="newPatientsCount">٣٢</div>
                 <div class="stat-foot positive"><span>↑ ٨.٤٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="sparkline yellow-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
               </article>
               <article class="stat-card">
                 <div class="stat-card-head"><span>فحوصات مكتملة</span><div class="stat-icon purple">✚</div></div>
-                <div class="stat-value">١٢٨</div>
+                <div class="stat-value" id="completedExamsCount">١٢٨</div>
                 <div class="stat-foot positive"><span>↑ ٢٤٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="sparkline purple-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
               </article>
               <article class="stat-card">
                 <div class="stat-card-head"><span>نسبة الحضور</span><div class="stat-icon green">✓</div></div>
-                <div class="stat-value">٩٦<span class="percent">٪</span></div>
+                <div class="stat-value" id="attendanceRate">٩٦<span class="percent">٪</span></div>
                 <div class="stat-foot positive"><span>↑ ٣.٢٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="progress-track"><span style="width: 96%"></span></div>
               </article>
@@ -156,7 +156,7 @@
                   <button class="round-arrow">←</button>
                 </div>
                 <div class="today-progress"><div><span>نسبة الإنجاز</span><b>٦٧٪</b></div><div class="progress-track"><span style="width: 67%"></span></div></div>
-                <div class="appointment-list">
+                <div class="appointment-list" id="todayAppointmentsList">
                   <div class="appointment-item">
                     <div class="appointment-time"><b>٠٩:٠٠</b><span>صباحاً</span></div><div class="appointment-line green"></div>
                     <div class="appointment-info"><b>جود عبدالعزيز</b><span>أشعة سونار • د. خالد حسن</span></div><div class="appointment-avatar pink">ج</div><span class="status confirmed">مؤكد</span>
@@ -215,9 +215,9 @@
         <h2 id="modalTitle">أضف موعداً للمريض</h2>
         <p>أدخل تفاصيل المريض والعيادة وسيظهر الموعد مباشرة في الجدول الطبي.</p>
         <form id="appointmentForm">
-          <label>اسم المريض<input required type="text" placeholder="مثال: أحمد محمد" /></label>
-          <div class="form-row"><label>القسم أو العيادة<select><option>العيادات الباطنية</option><option>عيادة الأطفال</option><option>عيادة الأسنان</option><option>الأشعة</option><option>المختبر</option></select></label><label>التاريخ<input required type="date" value="2025-05-14" /></label></div>
-          <div class="form-row"><label>الوقت<input required type="time" value="09:00" /></label><label>الطبيب<select><option>د. سارة أحمد</option><option>د. خالد حسن</option><option>د. مازن علي</option></select></label></div>
+          <label>اسم المريض<input id="patientName" required type="text" placeholder="مثال: أحمد محمد" /></label>
+          <div class="form-row"><label>القسم أو العيادة<select id="departmentId"><option value="internal">الباطنية</option><option value="pediatrics">الأطفال</option><option value="dentistry">الأسنان</option><option value="radiology">الأشعة</option><option value="laboratory">المختبر</option></select></label><label>التاريخ<input id="appointmentDate" required type="date" value="2025-05-14" /></label></div>
+          <div class="form-row"><label>الوقت<input id="appointmentTime" required type="time" value="09:00" /></label><label>الطبيب<select id="doctorId"><option value="dr-sarah">د. سارة أحمد</option><option value="dr-khaled">د. خالد حسن</option><option value="dr-mazen">د. مازن علي</option></select></label></div>
           <button class="primary-button form-submit" type="submit">تأكيد الموعد <span>←</span></button>
         </form>
       </div>
