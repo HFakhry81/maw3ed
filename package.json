@@ -1,0 +1,9 @@
+{
+  "name": "maw3ed-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "لوحة تحكم منصة موعد",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
