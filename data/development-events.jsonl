@@ -1,0 +1,5 @@
+{"timestamp":"2026-09-09T00:00:00.000Z","event":"project_log_initialized","details":{"area":"development","version":"medical-prototype"},"source":"project"}
+{"timestamp":"2026-09-09T20:07:01.236Z","event":"manual_verification","details":{"source":"shell-check"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:07:02.195Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:07:29.293Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:07:30.037Z","event":"manual_verification","details":{"source":"api-check"},"source":"web-prototype"}
