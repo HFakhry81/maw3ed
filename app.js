@@ -3,7 +3,7 @@ const sections = document.querySelectorAll(".view-section");
 const pageTitle = document.getElementById("pageTitle");
 const titleMap = {
   dashboard: "لوحة التحكم", calendar: "التقويم", appointments: "المواعيد",
-  customers: "العملاء", services: "الخدمات", team: "فريق العمل",
+  customers: "المرضى", services: "الأقسام والعيادات", team: "الأطباء والطاقم",
   reports: "التقارير", settings: "الإعدادات"
 };
 
@@ -47,6 +47,13 @@ document.getElementById("appointmentForm").addEventListener("submit", (event) =>
   event.target.reset();
 });
 document.querySelector(".notification-button").addEventListener("click", () => showToast("لا توجد إشعارات جديدة", "كل شيء محدث حتى الآن."));
+document.getElementById("industryMode").addEventListener("change", (event) => {
+  const isMedical = event.target.value === "medical";
+  showToast(
+    isMedical ? "تم تفعيل القالب الطبي" : "تم تفعيل الوضع المرن",
+    isMedical ? "الأقسام والأطباء جاهزون للإدارة." : "يمكنك تخصيص الحقول والخدمات لأي نشاط."
+  );
+});
 
 document.getElementById("prevWeek").addEventListener("click", () => showToast("الأسبوع السابق", "يتم تجهيز مواعيد الأسبوع السابق."));
 document.getElementById("nextWeek").addEventListener("click", () => showToast("الأسبوع التالي", "يتم تجهيز مواعيد الأسبوع التالي."));

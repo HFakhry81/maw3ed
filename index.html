@@ -22,10 +22,13 @@
         <div class="workspace-switcher">
           <div class="workspace-avatar">س</div>
           <div class="workspace-copy">
-            <b>صالون سارة</b>
-            <span>مساحة العمل الرئيسية</span>
+            <b>مستشفى الشفاء</b>
+            <span>منصة إدارة المواعيد الطبية</span>
           </div>
-          <span class="chevron">⌄</span>
+          <select class="industry-mode" id="industryMode" aria-label="نوع النشاط">
+            <option value="medical">طبي</option>
+            <option value="flexible">مرن</option>
+          </select>
         </div>
 
         <nav class="main-nav">
@@ -34,12 +37,12 @@
           <button class="nav-item" data-view="calendar"><span class="nav-icon">▦</span>التقويم <i class="nav-badge">3</i></button>
           <button class="nav-item" data-view="appointments"><span class="nav-icon">◷</span>المواعيد</button>
 
-          <p class="nav-label nav-label-spaced">إدارة النشاط</p>
-          <button class="nav-item" data-view="customers"><span class="nav-icon">♙</span>العملاء</button>
-          <button class="nav-item" data-view="services"><span class="nav-icon">✦</span>الخدمات</button>
-          <button class="nav-item" data-view="team"><span class="nav-icon">♧</span>فريق العمل</button>
+          <p class="nav-label nav-label-spaced">تشغيل المستشفى</p>
+          <button class="nav-item" data-view="customers"><span class="nav-icon">♙</span>المرضى</button>
+          <button class="nav-item" data-view="services"><span class="nav-icon">✦</span>الأقسام والعيادات</button>
+          <button class="nav-item" data-view="team"><span class="nav-icon">♧</span>الأطباء والطاقم</button>
 
-          <p class="nav-label nav-label-spaced">النمو</p>
+          <p class="nav-label nav-label-spaced">الإدارة والتحليل</p>
           <button class="nav-item" data-view="reports"><span class="nav-icon">▥</span>التقارير</button>
           <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span>الإعدادات</button>
         </nav>
@@ -47,13 +50,13 @@
         <div class="sidebar-bottom">
           <div class="upgrade-card">
             <div class="upgrade-orb">✦</div>
-            <b>جاهز للنمو؟</b>
-            <p>اكتشف مزايا خطة الأعمال المتقدمة.</p>
-            <button>ترقية الخطة <span>←</span></button>
+            <b>قالب طبي مرن</b>
+            <p>خصص الأقسام والخدمات ليتوافق مع طريقة عملك.</p>
+            <button>إدارة التخصيص <span>←</span></button>
           </div>
           <div class="sidebar-user">
             <div class="user-avatar">س</div>
-            <div><b>سارة أحمد</b><span>مديرة النشاط</span></div>
+            <div><b>د. سارة أحمد</b><span>مديرة التشغيل الطبي</span></div>
             <button class="more-button" aria-label="المزيد">•••</button>
           </div>
         </div>
@@ -71,7 +74,7 @@
             <div class="top-divider"></div>
             <div class="top-user">
               <div class="top-user-avatar">س</div>
-              <div><b>مرحباً، سارة</b><span>الأربعاء، ١٤ مايو ٢٠٢٥</span></div>
+              <div><b>مرحباً، د. سارة</b><span>الأربعاء، ١٤ مايو ٢٠٢٥</span></div>
             </div>
           </div>
         </header>
@@ -80,9 +83,9 @@
           <section class="view-section active-view" data-section="dashboard">
             <div class="welcome-row">
               <div>
-                <div class="eyebrow"><span class="live-dot"></span> النشاط يسير بشكل ممتاز</div>
-                <h1>صباح الخير، سارة <span class="wave">✦</span></h1>
-                <p class="page-subtitle">إليك ملخص نشاط صالونك لهذا اليوم.</p>
+                <div class="eyebrow"><span class="live-dot"></span> نموذج طبي قابل للتخصيص</div>
+                <h1>صباح الخير، د. سارة <span class="wave">✦</span></h1>
+                <p class="page-subtitle">إليك ملخص العمل الطبي في مستشفى الشفاء لهذا اليوم.</p>
               </div>
               <button class="primary-button" id="newAppointment"><span>＋</span> موعد جديد</button>
             </div>
@@ -90,34 +93,39 @@
             <div class="stats-grid">
               <article class="stat-card">
                 <div class="stat-card-head"><span>مواعيد اليوم</span><div class="stat-icon blue">◷</div></div>
-                <div class="stat-value">٢٤</div>
+                <div class="stat-value">٤٨</div>
                 <div class="stat-foot positive"><span>↑ ١٢٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="sparkline blue-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
               </article>
               <article class="stat-card">
-                <div class="stat-card-head"><span>إجمالي الإيرادات</span><div class="stat-icon yellow">ر.س</div></div>
-                <div class="stat-value">٤,٨٥٠ <small>ر.س</small></div>
+                <div class="stat-card-head"><span>مرضى جدد</span><div class="stat-icon yellow">♙</div></div>
+                <div class="stat-value">٣٢</div>
                 <div class="stat-foot positive"><span>↑ ٨.٤٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="sparkline yellow-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
               </article>
               <article class="stat-card">
-                <div class="stat-card-head"><span>عملاء جدد</span><div class="stat-icon purple">♙</div></div>
-                <div class="stat-value">١٨</div>
+                <div class="stat-card-head"><span>فحوصات مكتملة</span><div class="stat-icon purple">✚</div></div>
+                <div class="stat-value">١٢٨</div>
                 <div class="stat-foot positive"><span>↑ ٢٤٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="sparkline purple-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
               </article>
               <article class="stat-card">
-                <div class="stat-card-head"><span>معدل الحضور</span><div class="stat-icon green">✓</div></div>
+                <div class="stat-card-head"><span>نسبة الحضور</span><div class="stat-icon green">✓</div></div>
                 <div class="stat-value">٩٦<span class="percent">٪</span></div>
                 <div class="stat-foot positive"><span>↑ ٣.٢٪</span><em>مقارنة بالأسبوع الماضي</em></div>
                 <div class="progress-track"><span style="width: 96%"></span></div>
               </article>
             </div>
 
+            <section class="panel department-strip">
+              <div class="department-copy"><span class="department-kicker">وحدات جاهزة للتفعيل</span><h2>الأقسام التي يخدمها النظام</h2><p>فعّل ما يناسب منشأتك، وأضف خدمات وأقساماً مخصصة عند الحاجة.</p></div>
+              <div class="department-chips"><span class="department-chip active"><i>✚</i> العيادات الخارجية</span><span class="department-chip"><i>◉</i> الأسنان</span><span class="department-chip"><i>⌁</i> الأشعة</span><span class="department-chip"><i>▦</i> المختبر</span><span class="department-chip"><i>♧</i> العلاج الطبيعي</span><span class="department-chip"><i>＋</i> إضافة قسم</span></div>
+            </section>
+
             <div class="content-grid">
               <section class="panel calendar-panel">
                 <div class="panel-heading">
-                  <div><h2>نظرة على الأسبوع</h2><p>مواعيدك من ١١ — ١٧ مايو ٢٠٢٥</p></div>
+                  <div><h2>الجدول الطبي للأسبوع</h2><p>مواعيد الأقسام من ١١ — ١٧ مايو ٢٠٢٥</p></div>
                   <div class="panel-actions"><button class="square-button" id="prevWeek">›</button><button class="square-button" id="nextWeek">‹</button><button class="text-button">هذا الأسبوع <span>⌄</span></button></div>
                 </div>
                 <div class="week-calendar">
@@ -126,11 +134,11 @@
                   </div>
                   <div class="calendar-body">
                     <div class="time-labels"><span>٠٩:٠٠</span><span>١٠:٠٠</span><span>١١:٠٠</span><span>١٢:٠٠</span><span>٠١:٠٠</span><span>٠٢:٠٠</span><span>٠٣:٠٠</span><span>٠٤:٠٠</span></div>
-                    <div class="day-column"><span class="booking b1">قص شعر<span>ليان محمد</span></span><span class="booking b2">صبغة شعر<span>نور علي</span></span></div>
-                    <div class="day-column"><span class="booking b3">جلسة عناية<span>مها خالد</span></span></div>
-                    <div class="day-column selected-day"><span class="booking b4">تسريحة<span>جود عبدالعزيز</span></span><span class="booking b5">مانيكير<span>ريم سعد</span></span></div>
-                    <div class="day-column"><span class="booking b6">قص شعر<span>هدى أحمد</span></span></div>
-                    <div class="day-column"><span class="booking b7">بديكير<span>رنا يوسف</span></span><span class="booking b8">عناية بالبشرة<span>سلمى علي</span></span></div>
+                    <div class="day-column"><span class="booking b1">كشف باطني<span>ليان محمد</span></span><span class="booking b2">تحاليل مخبرية<span>نور علي</span></span></div>
+                    <div class="day-column"><span class="booking b3">متابعة أطفال<span>مها خالد</span></span></div>
+                    <div class="day-column selected-day"><span class="booking b4">أشعة سونار<span>جود عبدالعزيز</span></span><span class="booking b5">عيادة الأسنان<span>ريم سعد</span></span></div>
+                    <div class="day-column"><span class="booking b6">كشف قلب<span>هدى أحمد</span></span></div>
+                    <div class="day-column"><span class="booking b7">علاج طبيعي<span>رنا يوسف</span></span><span class="booking b8">عيادة نساء<span>سلمى علي</span></span></div>
                     <div class="day-column"></div><div class="day-column"><span class="booking b9">جلسة عناية<span>غادة فهد</span></span></div>
                   </div>
                 </div>
@@ -138,26 +146,26 @@
 
               <section class="panel today-panel">
                 <div class="panel-heading">
-                  <div><h2>مواعيد اليوم</h2><p>الأربعاء، ١٤ مايو</p></div>
+                  <div><h2>مواعيد اليوم</h2><p>الأربعاء، ١٤ مايو • ٤٨ موعداً</p></div>
                   <button class="round-arrow">←</button>
                 </div>
                 <div class="today-progress"><div><span>نسبة الإنجاز</span><b>٦٧٪</b></div><div class="progress-track"><span style="width: 67%"></span></div></div>
                 <div class="appointment-list">
                   <div class="appointment-item">
                     <div class="appointment-time"><b>٠٩:٠٠</b><span>صباحاً</span></div><div class="appointment-line green"></div>
-                    <div class="appointment-info"><b>جود عبدالعزيز</b><span>تسريحة شعر • ٦٠ دقيقة</span></div><div class="appointment-avatar pink">ج</div><span class="status confirmed">مؤكد</span>
+                    <div class="appointment-info"><b>جود عبدالعزيز</b><span>أشعة سونار • د. خالد حسن</span></div><div class="appointment-avatar pink">ج</div><span class="status confirmed">مؤكد</span>
                   </div>
                   <div class="appointment-item">
                     <div class="appointment-time"><b>١١:٣٠</b><span>صباحاً</span></div><div class="appointment-line blue"></div>
-                    <div class="appointment-info"><b>ريم سعد</b><span>مانيكير • ٤٥ دقيقة</span></div><div class="appointment-avatar peach">ر</div><span class="status confirmed">مؤكد</span>
+                    <div class="appointment-info"><b>ريم سعد</b><span>عيادة الأسنان • د. ريم سعد</span></div><div class="appointment-avatar peach">ر</div><span class="status confirmed">مؤكد</span>
                   </div>
                   <div class="appointment-item">
                     <div class="appointment-time"><b>٠٢:٠٠</b><span>مساءً</span></div><div class="appointment-line yellow"></div>
-                    <div class="appointment-info"><b>هدى أحمد</b><span>قص شعر • ٣٠ دقيقة</span></div><div class="appointment-avatar lavender">هـ</div><span class="status pending">قيد الانتظار</span>
+                    <div class="appointment-info"><b>هدى أحمد</b><span>كشف قلب • د. مازن علي</span></div><div class="appointment-avatar lavender">هـ</div><span class="status pending">بانتظار التأكيد</span>
                   </div>
                   <div class="appointment-item">
                     <div class="appointment-time"><b>٠٤:٣٠</b><span>مساءً</span></div><div class="appointment-line purple"></div>
-                    <div class="appointment-info"><b>سلمى علي</b><span>عناية بالبشرة • ٩٠ دقيقة</span></div><div class="appointment-avatar mint">س</div><span class="status confirmed">مؤكد</span>
+                    <div class="appointment-info"><b>سلمى علي</b><span>عيادة النساء • د. سارة أحمد</span></div><div class="appointment-avatar mint">س</div><span class="status confirmed">مؤكد</span>
                   </div>
                 </div>
                 <button class="view-all">عرض كل المواعيد <span>←</span></button>
@@ -166,16 +174,16 @@
 
             <div class="bottom-grid">
               <section class="panel service-panel">
-                <div class="panel-heading"><div><h2>الخدمات الأكثر طلباً</h2><p>خلال آخر ٣٠ يوماً</p></div><button class="dots">•••</button></div>
+                <div class="panel-heading"><div><h2>الأقسام الأكثر طلباً</h2><p>خلال آخر ٣٠ يوماً</p></div><button class="dots">•••</button></div>
                 <div class="service-chart">
-                  <div class="donut"><div><b>١٢٨</b><span>موعد</span></div></div>
-                  <ul class="legend"><li><i class="dot dot-blue"></i><span>قص الشعر</span><b>٤٢٪</b></li><li><i class="dot dot-yellow"></i><span>العناية بالبشرة</span><b>٢٨٪</b></li><li><i class="dot dot-purple"></i><span>صبغات الشعر</span><b>١٨٪</b></li><li><i class="dot dot-soft"></i><span>أخرى</span><b>١٢٪</b></li></ul>
+                  <div class="donut"><div><b>٣٨٤</b><span>موعد</span></div></div>
+                  <ul class="legend"><li><i class="dot dot-blue"></i><span>الباطنية</span><b>٣٨٪</b></li><li><i class="dot dot-yellow"></i><span>الأطفال</span><b>٢٨٪</b></li><li><i class="dot dot-purple"></i><span>الأسنان</span><b>١٨٪</b></li><li><i class="dot dot-soft"></i><span>أقسام أخرى</span><b>١٦٪</b></li></ul>
                 </div>
               </section>
               <section class="panel customers-panel">
-                <div class="panel-heading"><div><h2>عملاء جدد</h2><p>آخر العملاء المنضمين</p></div><button class="text-button">عرض الكل <span>←</span></button></div>
+                <div class="panel-heading"><div><h2>مرضى جدد</h2><p>آخر الملفات الطبية المضافة</p></div><button class="text-button">عرض الكل <span>←</span></button></div>
                 <div class="customer-table"><div class="customer-row table-head"><span>العميل</span><span>تاريخ الانضمام</span><span>آخر زيارة</span></div>
-                  <div class="customer-row"><div class="customer-name"><i class="avatar coral">ن</i><b>نور علي</b></div><span>اليوم</span><span class="customer-tag">لم يزر بعد</span></div>
+                  <div class="customer-row"><div class="customer-name"><i class="avatar coral">ن</i><b>نور علي</b></div><span>اليوم</span><span class="customer-tag">موعد أول</span></div>
                   <div class="customer-row"><div class="customer-name"><i class="avatar sky">م</i><b>مها خالد</b></div><span>أمس</span><span>١٣ مايو ٢٠٢٥</span></div>
                   <div class="customer-row"><div class="customer-name"><i class="avatar gold">غ</i><b>غادة فهد</b></div><span>١٢ مايو</span><span>١٢ مايو ٢٠٢٥</span></div>
                 </div>
@@ -185,9 +193,9 @@
 
           <section class="view-section placeholder-view" data-section="calendar"><div class="placeholder-icon">▦</div><h2>التقويم الكامل</h2><p>ستتمكن من إدارة جدول فريقك بالتفصيل من هنا.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
           <section class="view-section placeholder-view" data-section="appointments"><div class="placeholder-icon">◷</div><h2>المواعيد</h2><p>كل حجوزاتك في مكان واحد، مع إمكانية التصفية والمتابعة.</p><button class="primary-button" id="placeholderNew">＋ إضافة موعد</button></section>
-          <section class="view-section placeholder-view" data-section="customers"><div class="placeholder-icon">♙</div><h2>العملاء</h2><p>ملفات عملائك وتاريخ زياراتهم جاهزة للإدارة.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
-          <section class="view-section placeholder-view" data-section="services"><div class="placeholder-icon">✦</div><h2>الخدمات</h2><p>أضف خدماتك وحدد أسعارها ومدتها ومقدميها.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
-          <section class="view-section placeholder-view" data-section="team"><div class="placeholder-icon">♧</div><h2>فريق العمل</h2><p>نظّم ورديات فريقك وتوزيع الخدمات بسهولة.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
+          <section class="view-section placeholder-view" data-section="customers"><div class="placeholder-icon">♙</div><h2>ملفات المرضى</h2><p>البيانات الأساسية وتاريخ المواعيد والمتابعات لكل مريض.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
+          <section class="view-section placeholder-view" data-section="services"><div class="placeholder-icon">✦</div><h2>الأقسام والعيادات</h2><p>فعّل أقسام المستشفى وحدد الخدمات والأطباء المرتبطين بكل قسم.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
+          <section class="view-section placeholder-view" data-section="team"><div class="placeholder-icon">♧</div><h2>الأطباء والطاقم</h2><p>نظّم جداول الأطباء والتمريض والاستقبال ووزّع المناوبات.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
           <section class="view-section placeholder-view" data-section="reports"><div class="placeholder-icon">▥</div><h2>التقارير</h2><p>مؤشرات واضحة تساعدك على اتخاذ قرارات أفضل.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
           <section class="view-section placeholder-view" data-section="settings"><div class="placeholder-icon">⚙</div><h2>الإعدادات</h2><p>تحكم في إعدادات الحساب، التنبيهات، وهوية صفحة الحجز.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
         </div>
@@ -197,13 +205,13 @@
     <div class="modal-backdrop" id="appointmentModal" aria-hidden="true">
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
         <button class="modal-close" id="closeModal">×</button>
-        <div class="modal-kicker">حجز جديد</div>
-        <h2 id="modalTitle">أضف موعداً جديداً</h2>
-        <p>أدخل تفاصيل الموعد وسيظهر مباشرة في جدولك.</p>
+          <div class="modal-kicker">حجز طبي جديد</div>
+        <h2 id="modalTitle">أضف موعداً للمريض</h2>
+        <p>أدخل تفاصيل المريض والعيادة وسيظهر الموعد مباشرة في الجدول الطبي.</p>
         <form id="appointmentForm">
-          <label>اسم العميل<input required type="text" placeholder="مثال: أحمد محمد" /></label>
-          <div class="form-row"><label>الخدمة<select><option>قص شعر</option><option>صبغة شعر</option><option>عناية بالبشرة</option><option>مانيكير</option></select></label><label>التاريخ<input required type="date" value="2025-05-14" /></label></div>
-          <div class="form-row"><label>الوقت<input required type="time" value="09:00" /></label><label>الموظف<select><option>سارة أحمد</option><option>نورا محمد</option><option>ريم خالد</option></select></label></div>
+          <label>اسم المريض<input required type="text" placeholder="مثال: أحمد محمد" /></label>
+          <div class="form-row"><label>القسم أو العيادة<select><option>العيادات الباطنية</option><option>عيادة الأطفال</option><option>عيادة الأسنان</option><option>الأشعة</option><option>المختبر</option></select></label><label>التاريخ<input required type="date" value="2025-05-14" /></label></div>
+          <div class="form-row"><label>الوقت<input required type="time" value="09:00" /></label><label>الطبيب<select><option>د. سارة أحمد</option><option>د. خالد حسن</option><option>د. مازن علي</option></select></label></div>
           <button class="primary-button form-submit" type="submit">تأكيد الموعد <span>←</span></button>
         </form>
       </div>
