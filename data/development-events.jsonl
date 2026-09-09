@@ -3,3 +3,8 @@
 {"timestamp":"2026-09-09T20:07:02.195Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
 {"timestamp":"2026-09-09T20:07:29.293Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
 {"timestamp":"2026-09-09T20:07:30.037Z","event":"manual_verification","details":{"source":"api-check"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:15:56.767Z","event":"view_changed","details":{"view":"appointments"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:15:57.148Z","event":"view_changed","details":{"view":"customers"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:15:57.897Z","event":"view_changed","details":{"view":"services"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:17:22.449Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:17:25.984Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
