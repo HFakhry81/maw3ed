@@ -88,6 +88,52 @@ document.getElementById("closeModal").addEventListener("click", closeModal);
 modal.addEventListener("click", (event) => { if (event.target === modal) closeModal(); });
 document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeModal(); });
 
+const emailModal = document.getElementById("emailVerificationModal");
+const closeEmailVerification = () => {
+  emailModal.classList.remove("open");
+  emailModal.setAttribute("aria-hidden", "true");
+};
+document.getElementById("verifyEmailOpen").addEventListener("click", () => {
+  emailModal.classList.add("open");
+  emailModal.setAttribute("aria-hidden", "false");
+  trackEvent("email_verification_opened");
+  setTimeout(() => document.getElementById("verificationEmail").focus(), 100);
+});
+document.getElementById("closeEmailVerification").addEventListener("click", closeEmailVerification);
+emailModal.addEventListener("click", (event) => { if (event.target === emailModal) closeEmailVerification(); });
+let verificationEmail = "";
+document.getElementById("emailVerificationRequest").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  verificationEmail = document.getElementById("verificationEmail").value.trim();
+  const response = await fetch("/api/auth/request-verification", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: verificationEmail, locale: document.documentElement.lang })
+  });
+  const payload = await response.json();
+  if (!response.ok) return showToast("تعذر إرسال الرمز", payload.error || "تحقق من البريد الإلكتروني.");
+  document.getElementById("emailVerificationRequest").hidden = true;
+  document.getElementById("emailVerificationCode").hidden = false;
+  const note = document.getElementById("emailDeliveryNote");
+  note.textContent = payload.devCode ? `وضع التطوير — الرمز: ${payload.devCode}` : "تم إرسال الرمز إلى بريدك.";
+  showToast("تم إرسال رمز التحقق", "تحقق من بريدك وأدخل الرمز المكون من 6 أرقام.");
+  trackEvent("email_verification_requested", { delivery: payload.delivery });
+  document.getElementById("verificationCode").focus();
+});
+document.getElementById("emailVerificationCode").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const response = await fetch("/api/auth/verify-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: verificationEmail, code: document.getElementById("verificationCode").value })
+  });
+  const payload = await response.json();
+  if (!response.ok) return showToast("رمز غير صالح", payload.error || "أعد المحاولة برمز جديد.");
+  closeEmailVerification();
+  showToast("تم توثيق البريد", "أصبح البريد جاهزاً لاستخدام الحساب.");
+  trackEvent("email_verified");
+});
+
 const toast = document.getElementById("toast");
 function showToast(title = "تمت العملية بنجاح", message = "أضيف الموعد إلى جدولك.") {
   toast.querySelector("b").textContent = title;

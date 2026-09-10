@@ -4,18 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a43b8" />
-    <title>موعد — إدارة مواعيدك ببساطة</title>
-    <link rel="icon" href="/attached_assets/256-256_1788983333195.png" />
+    <meta name="author" content="UpNexa-eg.com" />
+    <meta name="copyright" content="Copyright 2026 UpNexa-eg.com" />
+    <title>موعد Maw3ed — إدارة المواعيد الطبية</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/maw3ed-icon.svg" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="القائمة الرئيسية">
         <div class="brand">
-          <img class="brand-mark" src="/attached_assets/256-256_1788983333195.png" alt="شعار موعد" />
+          <img class="brand-mark" src="/assets/maw3ed-icon.svg" alt="أيقونة موعد Maw3ed" />
           <div class="brand-name">
             <strong>موعد</strong>
-            <span>إدارة أسهل، نمو أسرع</span>
+            <span>برنامج من UpNexa-eg.com</span>
           </div>
         </div>
 
@@ -68,6 +70,7 @@
             <span>مساحة العمل</span><b>/</b><strong id="pageTitle">لوحة التحكم</strong>
           </div>
           <div class="top-actions">
+            <button class="verify-badge" id="verifyEmailOpen"><span>✉</span> تحقق من البريد</button>
             <button class="icon-button notification-button" aria-label="الإشعارات">
               <span>♧</span><i></i>
             </button>
@@ -204,7 +207,12 @@
           <section class="view-section placeholder-view" data-section="team"><div class="placeholder-icon">♧</div><h2>الأطباء والطاقم</h2><p>نظّم جداول الأطباء والتمريض والاستقبال ووزّع المناوبات.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
           <section class="view-section placeholder-view" data-section="reports"><div class="placeholder-icon">▥</div><h2>التقارير</h2><p>مؤشرات واضحة تساعدك على اتخاذ قرارات أفضل.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
           <section class="view-section placeholder-view" data-section="settings"><div class="placeholder-icon">⚙</div><h2>الإعدادات</h2><p>تحكم في إعدادات الحساب، التنبيهات، وهوية صفحة الحجز.</p><button class="primary-button" data-go-dashboard>العودة للوحة التحكم</button></section>
-        </div>
+         </div>
+         <footer class="site-footer">
+           <span>© 2026 UpNexa-eg.com</span>
+           <b>موعد Maw3ed</b>
+           <span>جميع الحقوق محفوظة</span>
+         </footer>
       </main>
     </div>
 
@@ -219,6 +227,23 @@
           <div class="form-row"><label>القسم أو العيادة<select id="departmentId"><option value="internal">الباطنية</option><option value="pediatrics">الأطفال</option><option value="dentistry">الأسنان</option><option value="radiology">الأشعة</option><option value="laboratory">المختبر</option></select></label><label>التاريخ<input id="appointmentDate" required type="date" value="2025-05-14" /></label></div>
           <div class="form-row"><label>الوقت<input id="appointmentTime" required type="time" value="09:00" /></label><label>الطبيب<select id="doctorId"><option value="dr-sarah">د. سارة أحمد</option><option value="dr-khaled">د. خالد حسن</option><option value="dr-mazen">د. مازن علي</option></select></label></div>
           <button class="primary-button form-submit" type="submit">تأكيد الموعد <span>←</span></button>
+        </form>
+      </div>
+    </div>
+    <div class="modal-backdrop" id="emailVerificationModal" aria-hidden="true">
+      <div class="modal email-modal" role="dialog" aria-modal="true" aria-labelledby="emailVerificationTitle">
+        <button class="modal-close" id="closeEmailVerification">×</button>
+        <div class="modal-kicker">حماية الحساب</div>
+        <h2 id="emailVerificationTitle">تحقق من بريدك الإلكتروني</h2>
+        <p>نرسل رمزاً مؤقتاً من 6 أرقام لتأكيد ملكية البريد قبل تفعيل الحساب.</p>
+        <form id="emailVerificationRequest">
+          <label>البريد الإلكتروني<input id="verificationEmail" required type="email" placeholder="name@hospital.com" /></label>
+          <button class="primary-button form-submit" type="submit">إرسال رمز التحقق <span>←</span></button>
+        </form>
+        <form id="emailVerificationCode" class="verification-step" hidden>
+          <label>رمز التحقق<input id="verificationCode" required inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="••••••" /></label>
+          <button class="primary-button form-submit" type="submit">تأكيد البريد <span>✓</span></button>
+          <small id="emailDeliveryNote"></small>
         </form>
       </div>
     </div>
