@@ -8,3 +8,12 @@
 {"timestamp":"2026-09-09T20:15:57.897Z","event":"view_changed","details":{"view":"services"},"source":"web-prototype"}
 {"timestamp":"2026-09-09T20:17:22.449Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
 {"timestamp":"2026-09-09T20:17:25.984Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T20:24:11.026Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T21:24:41.581Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-09T21:28:37.921Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-10T09:53:51.763Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-10T09:57:14.802Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-10T23:22:58.325Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-10T23:26:18.600Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-10T23:27:05.158Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
+{"timestamp":"2026-09-10T23:27:08.283Z","event":"page_loaded","details":{"view":"dashboard","language":"ar","mode":"medical"},"source":"web-prototype"}
