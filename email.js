@@ -1,25 +1,49 @@
 const fs = require("fs");
 const path = require("path");
+const { ReplitConnectors } = require("@replit/connectors-sdk");
 
 const outboxFile = path.join(__dirname, "data", "email-outbox.jsonl");
+const connectors = new ReplitConnectors();
+
+function encodeMimeHeader(value) {
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(value, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+async function sendWithGmail({ email, code, locale }) {
+  const profileResponse = await connectors.proxy("google-mail", "/gmail/v1/users/me/profile", { method: "GET" });
+  if (!profileResponse.ok) throw new Error(`Gmail profile request failed with status ${profileResponse.status}`);
+  const profile = await profileResponse.json();
+  const subject = locale === "ar" ? "رمز التحقق من بريدك — موعد" : "Your Maw3ed verification code";
+  const direction = locale === "ar" ? "rtl" : "ltr";
+  const html = `<div style="font-family:Arial,sans-serif;direction:${direction}"><h2 style="color:#0b369c">Maw3ed</h2><p>${locale === "ar" ? "رمز التحقق الخاص بك هو:" : "Your verification code is:"}</p><strong style="font-size:28px;letter-spacing:6px">${code}</strong><p>${locale === "ar" ? "ينتهي الرمز خلال 10 دقائق." : "This code expires in 10 minutes."}</p><hr><small>UpNexa-eg.com</small></div>`;
+  const rawMessage = [
+    `From: Maw3ed <${profile.emailAddress}>`,
+    `To: ${email}`,
+    `Subject: ${encodeMimeHeader(subject)}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=UTF-8",
+    "Content-Transfer-Encoding: 8bit",
+    "",
+    html
+  ].join("\r\n");
+  const response = await connectors.proxy("google-mail", "/gmail/v1/users/me/messages/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: encodeBase64Url(rawMessage) })
+  });
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Gmail send failed with status ${response.status}: ${errorBody.slice(0, 200)}`);
+  }
+  return { mode: "gmail", sender: profile.emailAddress };
+}
 
 async function sendVerificationEmail({ email, code, locale }) {
-  const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (apiKey && from) {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from,
-        to: [email],
-        subject: locale === "ar" ? "رمز التحقق من بريدك — موعد" : "Your Maw3ed verification code",
-        html: `<div style="font-family:Arial,sans-serif;direction:${locale === "ar" ? "rtl" : "ltr"}"><h2>Maw3ed</h2><p>${locale === "ar" ? "رمز التحقق الخاص بك هو:" : "Your verification code is:"}</p><strong style="font-size:28px;letter-spacing:6px">${code}</strong><p>${locale === "ar" ? "ينتهي الرمز خلال 10 دقائق." : "This code expires in 10 minutes."}</p></div>`
-      })
-    });
-    if (!response.ok) throw new Error(`Email provider failed with status ${response.status}`);
-    return { mode: "resend" };
-  }
+  if (process.env.MAW3ED_EMAIL_MODE !== "outbox") return sendWithGmail({ email, code, locale });
 
   fs.mkdirSync(path.dirname(outboxFile), { recursive: true });
   const current = fs.existsSync(outboxFile) ? fs.readFileSync(outboxFile, "utf8") : "";
