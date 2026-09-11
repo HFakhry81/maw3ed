@@ -6,7 +6,7 @@ const dist = path.join(root, "dist");
 fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(dist, { recursive: true });
 
-for (const file of ["index.html", "styles.css", "app.js"]) {
+for (const file of ["index.html", "styles.css", "app.js", "auth.html", "auth.js", "plans.html", "plans.js", "admin.html", "admin.js"]) {
   fs.copyFileSync(path.join(root, file), path.join(dist, file));
 }
 for (const directory of ["attached_assets", "assets"]) {

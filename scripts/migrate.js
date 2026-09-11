@@ -3,9 +3,12 @@ const path = require("path");
 const { pool } = require("../db");
 
 async function main() {
-  const migration = fs.readFileSync(path.join(__dirname, "..", "db", "migrations", "001_initial.sql"), "utf8");
-  await pool.query(migration);
-  console.log("Maw3ed migration 001 applied.");
+  const directory = path.join(__dirname, "..", "db", "migrations");
+  const files = fs.readdirSync(directory).filter((file) => file.endsWith(".sql")).sort();
+  for (const file of files) {
+    await pool.query(fs.readFileSync(path.join(directory, file), "utf8"));
+    console.log(`Maw3ed migration ${file} applied.`);
+  }
   await pool.end();
 }
 
