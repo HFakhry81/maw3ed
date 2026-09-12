@@ -1,0 +1,34 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+
+# Logs and runtime data
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+data/*.jsonl
+!data/.gitkeep
+db/pgdata/
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

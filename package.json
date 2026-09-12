@@ -1,0 +1,33 @@
+{
+  "name": "maw3ed-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "لوحة تحكم منصة موعد",
+  "scripts": {
+    "dev": "concurrently -n \"server,client\" -c \"blue,green\" \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node server.js",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "node server.js",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "web:dist": "node scripts/setup-all.js",
+    "update:all": "node scripts/setup-all.js"
+  },
+  "dependencies": {
+    "@clerk/backend": "^3.17.2",
+    "@clerk/clerk-js": "^6.31.1",
+    "@replit/connectors-sdk": "^0.4.3",
+    "@whop/sdk": "^1.1.3",
+    "dotenv": "^16.4.5",
+    "lucide-react": "^1.45.0",
+    "pg": "^8.23.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "vite": "^6.0.7"
+  }
+}
