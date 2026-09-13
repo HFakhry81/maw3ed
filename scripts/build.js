@@ -12,7 +12,7 @@ execFileSync(process.execPath, [path.join(root, "node_modules", "vite", "bin", "
 for (const file of ["auth.html", "auth.js", "plans.html", "plans.js", "admin.html", "admin.js"]) {
   fs.copyFileSync(path.join(root, file), path.join(dist, file));
 }
-for (const directory of ["attached_assets", "assets"]) {
+for (const directory of ["assets"]) {
   const source = path.join(root, directory);
   if (fs.existsSync(source)) fs.cpSync(source, path.join(dist, directory), { recursive: true });
 }

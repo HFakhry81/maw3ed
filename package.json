@@ -4,7 +4,8 @@
   "private": true,
   "description": "لوحة تحكم منصة موعد",
   "scripts": {
-    "start": "npm run build && node server.js",
+    "start": "npm run build && if [ -f .env ]; then node --env-file=.env server.js; else node server.js; fi",
+    "dev": "vite --host 0.0.0.0",
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "build": "node scripts/build.js",

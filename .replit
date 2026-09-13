@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web"]
+modules = ["nodejs-20", "web", "postgresql-16"]
 [workflows]
 runButton = "Project"
 
@@ -17,7 +17,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm start"
+args = "PORT=5000 MAW3ED_STORAGE=local npm start"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
@@ -26,6 +26,14 @@ outputType = "webview"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 7000
+externalPort = 3000
+
+[[ports]]
+localPort = 7100
+externalPort = 3001
 
 [nix]
 channel = "stable-25_05"

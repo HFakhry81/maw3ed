@@ -8,7 +8,7 @@ const { createClerkClient, verifyToken } = require("@clerk/backend");
 const { whopRequest } = require("./whopClient");
 
 const root = __dirname;
-const port = 5000;
+const port = Number(process.env.PORT || 7000);
 const organizationId = "org-maw3ed";
 const eventsFile = path.join(root, "data", "development-events.jsonl");
 const emailOutboxFile = path.join(root, "data", "email-outbox.jsonl");
