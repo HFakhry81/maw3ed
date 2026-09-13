@@ -2,7 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { query, pool } = require("./db");
+const { query, pool, databaseConfigured } = require("./db");
 const { sendVerificationEmail, sendSubscriptionRequestEmail } = require("./email");
 const { createClerkClient, verifyToken } = require("@clerk/backend");
 const { whopRequest } = require("./whopClient");
@@ -12,6 +12,9 @@ const port = 5000;
 const organizationId = "org-maw3ed";
 const eventsFile = path.join(root, "data", "development-events.jsonl");
 const emailOutboxFile = path.join(root, "data", "email-outbox.jsonl");
+const localDataFile = path.join(root, "data", "maw3ed-data.json");
+const localData = JSON.parse(fs.readFileSync(localDataFile, "utf8"));
+const localVerificationCodes = new Map();
 const types = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -24,6 +27,66 @@ const types = {
 let clerkClient;
 
 fs.mkdirSync(path.dirname(eventsFile), { recursive: true });
+
+function localDashboardData(date) {
+  const appointments = localData.appointments.filter((appointment) => appointment.date === date);
+  return {
+    ok: true,
+    date,
+    stats: {
+      appointmentsToday: appointments.length,
+      newPatients: localData.stats.newPatients,
+      completedExams: localData.stats.completedExams,
+      attendanceRate: localData.stats.attendanceRate
+    },
+    appointments,
+    departments: localData.departments,
+    doctors: localData.doctors,
+    patients: localData.patients
+  };
+}
+
+function localAppointmentCreate(payload) {
+  const patientName = typeof payload.patientName === "string" ? payload.patientName.trim() : "";
+  const date = typeof payload.date === "string" ? payload.date : "";
+  const time = typeof payload.time === "string" ? payload.time : "";
+  const doctor = localData.doctors.find((item) => item.id === payload.doctorId);
+  const department = localData.departments.find((item) => item.id === payload.departmentId);
+  if (!patientName || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time) || !doctor || !department) {
+    const error = new Error("Patient, date, time, doctor and department are required");
+    error.statusCode = 400;
+    throw error;
+  }
+  const collision = localData.appointments.find((item) => item.date === date && item.time === time && item.status !== "cancelled" && (item.doctorId === doctor.id || item.departmentId === department.id));
+  if (collision) {
+    const error = new Error("This doctor or department is already booked at that time");
+    error.statusCode = 409;
+    error.conflictingAppointmentId = collision.id;
+    throw error;
+  }
+  let patient = localData.patients.find((item) => item.name.toLowerCase() === patientName.toLowerCase());
+  if (!patient) {
+    patient = { id: createId("patient"), name: patientName, joinedAt: date, lastVisit: "موعد أول" };
+    localData.patients.unshift(patient);
+  }
+  const hour = Number(time.slice(0, 2));
+  const appointment = {
+    id: createId("appointment"),
+    date,
+    time,
+    period: hour >= 12 ? "مساءً" : "صباحاً",
+    patientId: patient.id,
+    patientName: patient.name,
+    departmentId: department.id,
+    departmentName: department.name,
+    doctorId: doctor.id,
+    doctorName: doctor.name,
+    serviceName: department.defaultService,
+    status: "pending"
+  };
+  localData.appointments.push(appointment);
+  return appointment;
+}
 
 function sendJson(res, status, payload) {
   res.writeHead(status, {
@@ -92,6 +155,7 @@ function toAppointment(row) {
 }
 
 async function dashboardData(date) {
+  if (!databaseConfigured) return localDashboardData(date);
   const [appointmentsResult, newPatientsResult, metricsResult, departmentsResult, doctorsResult] = await Promise.all([
     query(
       `SELECT a.id, a.appointment_date, TO_CHAR(a.appointment_time, 'HH24:MI') AS appointment_time,
@@ -128,6 +192,7 @@ async function dashboardData(date) {
 }
 
 async function handleAppointmentCreate(payload) {
+  if (!databaseConfigured) return localAppointmentCreate(payload);
   const patientName = typeof payload.patientName === "string" ? payload.patientName.trim() : "";
   const date = typeof payload.date === "string" ? payload.date : "";
   const time = typeof payload.time === "string" ? payload.time : "";
@@ -275,6 +340,13 @@ async function getUserWorkspace(userId) {
 }
 
 async function listPlans() {
+  if (!databaseConfigured) {
+    return [
+      { plan_key: "free", display_name: "Free", description: "للبدء وإدارة المواعيد الأساسية", price_usd: 0, billing_period_days: 30, features: ["لوحة التحكم", "إدارة المواعيد"], limits: {}, active: true },
+      { plan_key: "pro", display_name: "Pro", description: "لفرق التشغيل الطبية النامية", price_usd: 29, billing_period_days: 30, features: ["تقارير متقدمة", "مساحات عمل متعددة"], limits: {}, active: true },
+      { plan_key: "ultimate", display_name: "Ultimate", description: "للمؤسسات والعمليات الكبيرة", price_usd: 79, billing_period_days: 30, features: ["دعم أولوية", "تخصيص كامل"], limits: {}, active: true }
+    ];
+  }
   const result = await query(
     `SELECT plan_key, display_name, description, price_usd, billing_period_days, features, limits,
             whop_plan_id, active
@@ -422,6 +494,11 @@ async function requestVerification(payload) {
     throw error;
   }
   const code = String(crypto.randomInt(100000, 1000000));
+  if (!databaseConfigured) {
+    localVerificationCodes.set(email, { hash: verificationHash(email, code), expiresAt: Date.now() + 600000 });
+    appendJsonLine(emailOutboxFile, { createdAt: new Date().toISOString(), to: email, code, type: "verification", mode: "development" });
+    return { ok: true, delivery: "development-outbox", expiresInSeconds: 600, devCode: code };
+  }
   await query(
     `INSERT INTO email_verifications (id, email, code_hash, expires_at)
      VALUES ($1, $2, $3, NOW() + INTERVAL '10 minutes')`,
@@ -436,6 +513,16 @@ async function requestVerification(payload) {
 async function verifyEmail(payload) {
   const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
   const code = typeof payload.code === "string" ? payload.code.trim() : "";
+  if (!databaseConfigured) {
+    const record = localVerificationCodes.get(email);
+    if (!record || record.expiresAt < Date.now() || record.hash !== verificationHash(email, code)) {
+      const error = new Error("Verification code is invalid or expired");
+      error.statusCode = 400;
+      throw error;
+    }
+    localVerificationCodes.delete(email);
+    return { ok: true, emailVerified: true };
+  }
   const result = await query(
     `SELECT id FROM email_verifications
      WHERE email = $1 AND code_hash = $2 AND verified_at IS NULL AND expires_at > NOW()
@@ -571,25 +658,32 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, events: result.rows });
     }
     if (requested === "/api/health" && req.method === "GET") {
-      await query("SELECT 1");
-      return sendJson(res, 200, { ok: true, service: "maw3ed-api", database: "postgresql" });
+      if (databaseConfigured) await query("SELECT 1");
+      return sendJson(res, 200, { ok: true, service: "maw3ed-api", database: databaseConfigured ? "postgresql" : "local-memory" });
     }
     if (requested === "/api/dashboard" && req.method === "GET") {
       return sendJson(res, 200, await dashboardData(requestUrl.searchParams.get("date") || "2025-05-14"));
     }
     if (requested === "/api/departments" && req.method === "GET") {
+      if (!databaseConfigured) return sendJson(res, 200, { ok: true, departments: localData.departments });
       const result = await query("SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name", [organizationId]);
       return sendJson(res, 200, { ok: true, departments: result.rows });
     }
     if (requested === "/api/doctors" && req.method === "GET") {
+      if (!databaseConfigured) return sendJson(res, 200, { ok: true, doctors: localData.doctors });
       const result = await query("SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name", [organizationId]);
       return sendJson(res, 200, { ok: true, doctors: result.rows });
     }
     if (requested === "/api/patients" && req.method === "GET") {
+      if (!databaseConfigured) return sendJson(res, 200, { ok: true, patients: localData.patients });
       const result = await query("SELECT id, name, email, joined_at AS \"joinedAt\", last_visit AS \"lastVisit\" FROM patients WHERE organization_id = $1 ORDER BY created_at DESC", [organizationId]);
       return sendJson(res, 200, { ok: true, patients: result.rows });
     }
     if (requested === "/api/appointments" && req.method === "GET") {
+      if (!databaseConfigured) {
+        const date = requestUrl.searchParams.get("date");
+        return sendJson(res, 200, { ok: true, appointments: localData.appointments.filter((appointment) => !date || appointment.date === date) });
+      }
       const date = requestUrl.searchParams.get("date");
       const result = await query(
         `SELECT a.id, a.appointment_date, TO_CHAR(a.appointment_time, 'HH24:MI') AS appointment_time,
@@ -627,15 +721,20 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, events: await readEventLog(Math.min(Math.max(Number(requestUrl.searchParams.get("limit")) || 50, 1), 200)) });
     }
 
+    const staticRoot = fs.existsSync(path.join(root, "dist", "index.html")) ? path.join(root, "dist") : root;
     const relative = requested === "/" ? "/index.html" : requested;
-    const filePath = path.resolve(root, `.${relative}`);
-    if (!filePath.startsWith(root)) return res.end("Forbidden");
+    const filePath = path.resolve(staticRoot, `.${relative}`);
+    if (!filePath.startsWith(staticRoot)) return res.end("Forbidden");
     fs.readFile(filePath, (error, data) => {
       if (error) {
         res.writeHead(error.code === "ENOENT" ? 404 : 500, { "Content-Type": "text/plain; charset=utf-8" });
         return res.end(error.code === "ENOENT" ? "Not found" : "Server error");
       }
-      res.writeHead(200, { "Content-Type": types[path.extname(filePath)] || "application/octet-stream", "Cache-Control": "no-store" });
+      const isHashedAsset = staticRoot.endsWith(`${path.sep}dist`) && /[-_][A-Za-z0-9_-]{8,}\.(?:js|css|svg|png|jpg|webp)$/.test(path.basename(filePath));
+      res.writeHead(200, {
+        "Content-Type": types[path.extname(filePath)] || "application/octet-stream",
+        "Cache-Control": isHashedAsset ? "public, max-age=31536000, immutable" : "no-store"
+      });
       res.end(data);
     });
   } catch (error) {

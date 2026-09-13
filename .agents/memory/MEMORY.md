@@ -1,1 +1,2 @@
 - [Gmail connector delivery](gmail-connector.md) — use the authenticated Replit Connectors SDK proxy in application code for Gmail API sends.
+- [Local runtime mode](local-runtime-mode.md) — local/VPS runs use checked-in in-memory data by default; PostgreSQL is explicit opt-in.

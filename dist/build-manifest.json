@@ -1,10 +1,9 @@
 {
   "name": "Maw3ed",
   "company": "UpNexa-eg.com",
-  "builtAt": "2026-09-10T23:32:33.854Z",
+  "builtAt": "2026-09-13T18:10:17.741Z",
   "files": [
     "index.html",
-    "styles.css",
-    "app.js"
+    "assets"
   ]
 }
