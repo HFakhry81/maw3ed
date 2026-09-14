@@ -1,4 +1,5 @@
 modules = ["nodejs-20", "web", "postgresql-16"]
+
 [workflows]
 runButton = "Project"
 
@@ -17,19 +18,16 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=5000 MAW3ED_STORAGE=postgres npm start"
-waitForPort = 5000
+# Keep Maw3ed on 7000 so it can run beside UpNexa (5000), Fanni (3000), Spendi.
+args = "PORT=7000 VITE_PORT=7100 BACKEND_PORT=7000 MAW3ED_STORAGE=memory npm start"
+waitForPort = 7000
 
 [workflows.workflow.metadata]
 outputType = "webview"
 
 [[ports]]
-localPort = 5000
-externalPort = 80
-
-[[ports]]
 localPort = 7000
-externalPort = 3000
+externalPort = 80
 
 [[ports]]
 localPort = 7100
@@ -42,4 +40,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 WHOP_COMPANY_ID = "biz_72blC6FBd4F1OO"
-MAW3ED_STORAGE = "postgres"
+MAW3ED_STORAGE = "memory"

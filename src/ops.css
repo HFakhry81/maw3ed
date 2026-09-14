@@ -496,3 +496,39 @@
     text-align: start;
   }
 }
+
+.header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.week-range { font-weight: 700; color: var(--ops-muted); }
+.week-calendar { overflow: auto; }
+.week-grid {
+  display: grid;
+  grid-template-columns: 64px repeat(7, minmax(120px, 1fr));
+  min-width: 980px;
+}
+.week-corner, .week-hour, .week-day-head, .week-cell {
+  border: 1px solid var(--ops-line);
+}
+.week-day-head, .week-hour {
+  background: #f8fbff;
+  padding: 8px;
+  text-align: center;
+}
+.week-day-head.today { background: #e8f1ff; color: var(--ops-blue); }
+.week-hour { color: var(--ops-muted); font-size: 0.78rem; }
+.week-cell { min-height: 58px; padding: 4px; cursor: cell; background: #fff; }
+.week-event {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 4px;
+  padding: 6px;
+  border-radius: 8px;
+  background: #eef5ff;
+  border-inline-start: 3px solid var(--ops-blue);
+  font-size: 0.75rem;
+}
+.week-event.status-confirmed { background: #e9f9f1; border-inline-start-color: #16ae7c; }
+.week-event.status-pending { background: #fff7e8; border-inline-start-color: #f5a623; }
+@media (max-width: 960px) {
+  .header-actions { width: 100%; }
+  .header-actions .primary-button { flex: 1; }
+}

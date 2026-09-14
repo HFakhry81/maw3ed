@@ -905,20 +905,45 @@ const server = http.createServer(async (req, res) => {
     });
     if (opsHandled) return;
 
-    const staticRoot = fs.existsSync(path.join(root, "dist", "index.html")) ? path.join(root, "dist") : root;
-    const relative = requested === "/" ? "/index.html" : requested;
-    const filePath = path.resolve(staticRoot, `.${relative}`);
+    const distRoot = path.join(root, "dist");
+    const hasReactDist = fs.existsSync(path.join(distRoot, "index.html"));
+    const staticRoot = hasReactDist ? distRoot : root;
+    let relative = requested === "/" ? "/index.html" : requested;
+    let filePath = path.resolve(staticRoot, `.${relative}`);
     if (!filePath.startsWith(staticRoot)) return res.end("Forbidden");
+
+    // React SPA: unknown extensionless routes fall back to dist/index.html
+    if (hasReactDist && !fs.existsSync(filePath) && !path.extname(relative) && !relative.startsWith("/api/")) {
+      relative = "/index.html";
+      filePath = path.join(distRoot, "index.html");
+    }
+
     fs.readFile(filePath, (error, data) => {
       if (error) {
+        if (hasReactDist && error.code === "ENOENT" && !path.extname(requested)) {
+          return fs.readFile(path.join(distRoot, "index.html"), (spaError, spaData) => {
+            if (spaError) {
+              res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+              return res.end("Not found");
+            }
+            res.writeHead(200, {
+              "Content-Type": "text/html; charset=utf-8",
+              "Cache-Control": "no-store",
+              "X-Maw3ed-UI": "react"
+            });
+            return res.end(spaData);
+          });
+        }
         res.writeHead(error.code === "ENOENT" ? 404 : 500, { "Content-Type": "text/plain; charset=utf-8" });
         return res.end(error.code === "ENOENT" ? "Not found" : "Server error");
       }
-      const isHashedAsset = staticRoot.endsWith(`${path.sep}dist`) && /[-_][A-Za-z0-9_-]{8,}\.(?:js|css|svg|png|jpg|webp)$/.test(path.basename(filePath));
-      res.writeHead(200, {
+      const isHashedAsset = hasReactDist && /[-_][A-Za-z0-9_-]{8,}\.(?:js|css|svg|png|jpg|webp)$/.test(path.basename(filePath));
+      const headers = {
         "Content-Type": types[path.extname(filePath)] || "application/octet-stream",
         "Cache-Control": isHashedAsset ? "public, max-age=31536000, immutable" : "no-store"
-      });
+      };
+      if (hasReactDist && path.basename(filePath) === "index.html") headers["X-Maw3ed-UI"] = "react";
+      res.writeHead(200, headers);
       res.end(data);
     });
   } catch (error) {
@@ -928,5 +953,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, "0.0.0.0", () => {
-  console.log(`Maw3ed dashboard running on port ${port}`);
+  const ui = fs.existsSync(path.join(root, "dist", "index.html")) ? "react-dist" : "dev-fallback";
+  console.log(`Maw3ed React dashboard on port ${port} (${ui})`);
+  console.log("Side-by-side ports: web/API 7000, Vite 7100, Postgres 5433/maw3ed");
 });

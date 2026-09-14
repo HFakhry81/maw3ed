@@ -4,6 +4,7 @@ import "./styles.css";
 import "./ops.css";
 import { api } from "./api";
 import { LOCALES, applyDocumentLocale, t } from "./i18n";
+import { CalendarView } from "./CalendarView.jsx";
 
 const NAV = [
   { id: "calendar", mark: "تق" },
@@ -39,7 +40,9 @@ function useOpsBootstrap() {
 function useAppointments() {
   const [appointments, setAppointments] = useState([]);
   const reload = useCallback(() => {
-    api.get("/api/appointments").then((result) => setAppointments(result.appointments || [])).catch(() => {});
+    api.get("/api/ops/appointments").then((result) => setAppointments(result.appointments || [])).catch(() => {
+      api.get("/api/appointments").then((result) => setAppointments(result.appointments || [])).catch(() => {});
+    });
   }, []);
   useEffect(reload, [reload]);
   return { appointments, reload };
@@ -57,98 +60,8 @@ function Drawer({ title, open, onClose, children }) {
   );
 }
 
-function CalendarView({ appointments, ops, onCreated, locale }) {
-  const [open, setOpen] = useState(false);
-  const [doctors, setDoctors] = useState([]);
-  const [departments, setDepartments] = useState([]);
-  const [form, setForm] = useState({
-    patientName: "",
-    date: new Date().toISOString().slice(0, 10),
-    time: "09:00",
-    doctorId: "",
-    departmentId: "",
-    paymentMethod: "cash",
-    notes: ""
-  });
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api.get("/api/doctors").then((result) => setDoctors(result.doctors || [])).catch(() => {});
-    api.get("/api/departments").then((result) => setDepartments(result.departments || [])).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    setForm((current) => ({
-      ...current,
-      doctorId: current.doctorId || doctors[0]?.id || "",
-      departmentId: current.departmentId || departments[0]?.id || ""
-    }));
-  }, [doctors, departments]);
-
-  const submit = async (event) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      await api.post("/api/appointments", {
-        patientName: form.patientName,
-        date: form.date,
-        time: form.time,
-        doctorId: form.doctorId,
-        departmentId: form.departmentId
-      });
-      setOpen(false);
-      onCreated?.();
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section className="ops-page">
-      <div className="ops-header">
-        <div>
-          <h1>{t(locale, "calendar")}</h1>
-          <p>عرض المواعيد مع إنشاء سريع</p>
-        </div>
-        <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ {t(locale, "createAppointment")}</button>
-      </div>
-      <div className="calendar-board panel">
-        {appointments.length === 0 ? <div className="empty-state">{t(locale, "empty")}</div> : appointments.map((item) => (
-          <article key={item.id} className={`appt-chip status-${item.status}`}>
-            <strong>{item.time}</strong>
-            <span>{item.patientName}</span>
-            <small>{item.serviceName} · {item.doctorName}</small>
-          </article>
-        ))}
-      </div>
-      <Drawer title={t(locale, "createAppointment")} open={open} onClose={() => setOpen(false)}>
-        <form className="stack-form" onSubmit={submit}>
-          <label>العميل<input required value={form.patientName} onChange={(e) => setForm({ ...form, patientName: e.target.value })} /></label>
-          <label>التاريخ<input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
-          <label>وقت البدء<input type="time" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></label>
-          <label>الموظف<select value={form.doctorId} onChange={(e) => setForm({ ...form, doctorId: e.target.value })}>
-            {doctors.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-          </select></label>
-          <label>القسم / الخدمة<select value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
-            {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-          </select></label>
-          <fieldset className="pay-row">
-            <legend>طريقة الدفع</legend>
-            {[["cash", "نقداً"], ["card", "بطاقة"], ["transfer", "EFT"]].map(([value, label]) => (
-              <label key={value}><input type="radio" name="pay" checked={form.paymentMethod === value} onChange={() => setForm({ ...form, paymentMethod: value })} /> {label}</label>
-            ))}
-          </fieldset>
-          <label>ملاحظة<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="غير مرئي للعملاء" /></label>
-          <div className="form-actions">
-            <button className="primary-button" disabled={busy}>{busy ? t(locale, "loading") : t(locale, "save")}</button>
-            <button type="button" className="secondary-button" onClick={() => setOpen(false)}>{t(locale, "cancel")}</button>
-          </div>
-        </form>
-      </Drawer>
-    </section>
-  );
+function CalendarViewProxy(props) {
+  return <CalendarView {...props} Drawer={Drawer} />;
 }
 
 function CustomersView({ ops, reload, locale }) {
@@ -533,7 +446,7 @@ function App() {
   const content = (() => {
     if (!ops && isPending) return <div className="loading-state">{t(locale, "loading")}</div>;
     switch (view) {
-      case "calendar": return <CalendarView appointments={appointments} ops={ops} locale={locale} onCreated={() => { reloadAppointments(); reload(); }} />;
+      case "calendar": return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={() => { reloadAppointments(); reload(); }} />;
       case "customers": return <CustomersView ops={ops} reload={reload} locale={locale} />;
       case "staff": return <StaffView ops={ops} reload={reload} locale={locale} />;
       case "services": return <ServicesView ops={ops} reload={reload} locale={locale} />;
@@ -546,7 +459,7 @@ function App() {
       case "payments": return <PlaceholderView title={t(locale, "payments")} body="بوابة الدفع الإلكتروني (Stripe) — مرحلة النمو" />;
       case "marketing": return <PlaceholderView title={t(locale, "marketing")} body="الخصومات والولاء — مرحلة النمو / Pro" />;
       case "integrations": return <PlaceholderView title={t(locale, "integrations")} body="Google Calendar و Stripe — مرحلة النمو" />;
-      default: return <CalendarView appointments={appointments} ops={ops} locale={locale} onCreated={reloadAppointments} />;
+      default: return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={reloadAppointments} />;
     }
   })();
 

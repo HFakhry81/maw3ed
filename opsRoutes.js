@@ -20,6 +20,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         calendarPreferences: ops.getCalendarPreferences(),
         notifications: ops.getNotificationSettings(),
         expenses: ops.listExpenses(),
+        appointments: ops.listAppointments(),
         stats: ops.getStatsSummary(localData?.appointments || [])
       });
       return true;
@@ -152,6 +153,21 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     }
     if (requested === "/api/ops/expenses" && req.method === "POST") {
       sendJson(res, 201, { ok: true, expense: ops.createExpense(await parseJsonBody(req)) });
+      return true;
+    }
+
+    if (requested === "/api/ops/appointments" && req.method === "GET") {
+      sendJson(res, 200, {
+        ok: true,
+        appointments: ops.listAppointments({
+          from: requestUrl.searchParams.get("from") || "",
+          to: requestUrl.searchParams.get("to") || ""
+        })
+      });
+      return true;
+    }
+    if (requested === "/api/ops/appointments" && req.method === "POST") {
+      sendJson(res, 201, { ok: true, appointment: ops.createAppointment(await parseJsonBody(req)) });
       return true;
     }
 

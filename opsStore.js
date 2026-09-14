@@ -102,6 +102,7 @@ function defaultStore() {
       pushDailyReminder: true
     },
     expenses: [],
+    appointments: [],
     planKey: "free"
   };
 }
@@ -409,7 +410,62 @@ function createExpense(payload) {
   return expense;
 }
 
-function getStatsSummary(appointments = []) {
+function listAppointments({ from = "", to = "" } = {}) {
+  return store.appointments
+    .filter((item) => (!from || item.date >= from) && (!to || item.date <= to))
+    .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+}
+
+function createAppointment(payload) {
+  const customerName = String(payload.customerName || payload.patientName || "").trim();
+  const date = String(payload.date || "");
+  const time = String(payload.time || "");
+  const staffId = String(payload.staffId || payload.doctorId || "");
+  const serviceId = String(payload.serviceId || "");
+  if (!customerName || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time) || !staffId) {
+    fail("العميل والتاريخ والوقت والموظف مطلوبون");
+  }
+  const staff = store.staff.find((person) => person.id === staffId);
+  if (!staff) fail("الموظف غير موجود", 404);
+  const service = store.services.find((item) => item.id === serviceId) || null;
+  const collision = store.appointments.find(
+    (item) => item.date === date && item.time === time && item.staffId === staffId && item.status !== "cancelled"
+  );
+  if (collision) fail("هذا الموظف محجوز في نفس الوقت", 409);
+
+  let customer = store.customers.find(
+    (item) => `${item.firstName} ${item.lastName}`.trim().toLowerCase() === customerName.toLowerCase()
+  );
+  if (!customer) {
+    const [firstName, ...rest] = customerName.split(/\s+/);
+    customer = createCustomer({ firstName, lastName: rest.join(" "), categoryId: "cat-new" });
+  }
+
+  const appointment = {
+    id: createId("appt"),
+    date,
+    time,
+    customerId: customer.id,
+    customerName: `${customer.firstName} ${customer.lastName}`.trim(),
+    staffId: staff.id,
+    staffName: staff.name,
+    serviceId: service?.id || null,
+    serviceName: service?.name || "موعد",
+    durationMinutes: service?.durationMinutes || 30,
+    paymentMethod: payload.paymentMethod || "cash",
+    paymentStatus: "unpaid",
+    amount: Number(service?.price || payload.amount || 0),
+    notes: String(payload.notes || ""),
+    status: service?.autoAccept ? "confirmed" : "pending",
+    createdAt: new Date().toISOString()
+  };
+  store.appointments.push(appointment);
+  persist();
+  return appointment;
+}
+
+function getStatsSummary(fallbackAppointments = []) {
+  const appointments = store.appointments.length ? store.appointments : fallbackAppointments;
   const completed = appointments.filter((item) => item.status === "completed" || item.status === "confirmed");
   const cancelled = appointments.filter((item) => item.status === "cancelled" || item.status === "canceled");
   return {
@@ -453,5 +509,7 @@ module.exports = {
   updateNotificationSettings,
   listExpenses,
   createExpense,
+  listAppointments,
+  createAppointment,
   getStatsSummary
 };
