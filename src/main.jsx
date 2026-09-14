@@ -51,8 +51,24 @@ const api = {
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || "تعذر إتمام العملية");
     return payload;
+  },
+  patch: async (url, body) => {
+    const response = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || "تعذر حفظ التخصيص");
+    return payload;
   }
 };
+
+function navigationLabel(item, profile) {
+  const labels = profile?.labels || {};
+  return {
+    appointments: labels.appointment,
+    patients: labels.customer,
+    services: labels.department,
+    team: labels.staff
+  }[item.id] || item.label;
+}
 
 function useDashboardData(date) {
   const [data, setData] = useState(null);
@@ -88,7 +104,8 @@ const AppointmentRow = memo(function AppointmentRow({ appointment, index }) {
   </div>;
 });
 
-function Sidebar({ activeView, onNavigate, collapsed, onToggle }) {
+function Sidebar({ activeView, onNavigate, collapsed, onToggle, profile }) {
+  const labels = profile?.labels || {};
   return <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
     <div className="brand">
       <img src="/assets/maw3ed-icon.svg" alt="موعد" />
@@ -96,31 +113,31 @@ function Sidebar({ activeView, onNavigate, collapsed, onToggle }) {
       <button className="sidebar-toggle" onClick={onToggle} aria-label="تبديل القائمة"><Icon name="menu" size={17} /></button>
     </div>
     <div className="workspace-card">
-      <div className="workspace-avatar">ش</div>
-      <div className="workspace-copy"><b>مستشفى الشفاء</b><span>مساحة العمل الطبية</span></div>
+      <div className="workspace-avatar">{(profile?.name || "م").charAt(0)}</div>
+      <div className="workspace-copy"><b>{profile?.name || "مساحة Maw3ed"}</b><span>{profile?.activityDisplayName || "مساحة عمل قابلة للتخصيص"}</span></div>
       <Icon name="chevron" size={14} />
     </div>
     <nav className="nav">
       {navigation.map((item, index) => <React.Fragment key={item.id}>
         {item.group && <p className="nav-label">{item.group}</p>}
         {!item.group && index === 0 && <p className="nav-label">الرئيسية</p>}
-        <button className={`nav-item ${activeView === item.id ? "active" : ""}`} onClick={() => onNavigate(item.id)} title={item.label}>
-          <Icon name={item.icon} size={18} /><span>{item.label}</span>{item.badge && <i className="nav-badge">{item.badge}</i>}
+        <button className={`nav-item ${activeView === item.id ? "active" : ""}`} onClick={() => onNavigate(item.id)} title={navigationLabel(item, profile)}>
+          <Icon name={item.icon} size={18} /><span>{navigationLabel(item, profile)}</span>{item.badge && <i className="nav-badge">{item.badge}</i>}
         </button>
       </React.Fragment>)}
     </nav>
     <div className="sidebar-footer">
-      <div className="upgrade-card"><span className="upgrade-mark">✦</span><b>قالب طبي مرن</b><p>خصّص مساحة العمل لتناسب فريقك.</p><button onClick={() => onNavigate("settings")}>إدارة التخصيص <Icon name="arrow" size={13} /></button></div>
+      <div className="upgrade-card"><span className="upgrade-mark">✦</span><b>قالب {profile?.activityDisplayName || "مرن"}</b><p>خصّص مساحة العمل لتناسب نشاطك.</p><button onClick={() => onNavigate("settings")}>إدارة التخصيص <Icon name="arrow" size={13} /></button></div>
       <div className="profile"><div className="profile-avatar">س</div><div><b>د. سارة أحمد</b><span>مديرة التشغيل الطبي</span></div><button aria-label="المزيد">•••</button></div>
     </div>
   </aside>;
 }
 
-function Header({ activeView, onVerify, onNotify, onToggleSidebar }) {
+function Header({ activeView, onVerify, onNotify, onToggleSidebar, profile }) {
   const current = navigation.find((item) => item.id === activeView);
   return <header className="topbar">
     <button className="mobile-menu" onClick={onToggleSidebar} aria-label="فتح القائمة"><Icon name="menu" size={20} /></button>
-    <div className="breadcrumb"><span>مساحة العمل</span><b>/</b><strong>{current?.label || "لوحة التحكم"}</strong></div>
+    <div className="breadcrumb"><span>{profile?.name || "مساحة العمل"}</span><b>/</b><strong>{navigationLabel(current || navigation[0], profile)}</strong></div>
     <div className="top-actions">
       <button className="verify-button" onClick={onVerify}><Icon name="mail" size={15} /><span>تحقق من البريد</span></button>
       <button className="notification" onClick={onNotify} aria-label="الإشعارات"><Icon name="bell" size={19} /><i /></button>
@@ -130,19 +147,21 @@ function Header({ activeView, onVerify, onNotify, onToggleSidebar }) {
   </header>;
 }
 
-function Dashboard({ data, isPending, onNewAppointment, onNavigate }) {
+function Dashboard({ data, isPending, onNewAppointment, onNavigate, profile }) {
   const stats = data?.stats || { appointmentsToday: 48, newPatients: 32, completedExams: 128, attendanceRate: 96 };
   const appointments = data?.appointments || [];
   const departments = data?.departments || [];
   const displayedAppointments = appointments.slice(0, 4);
+  const customerLabel = profile?.labels?.customer || "المرضى";
+  const appointmentLabel = profile?.labels?.appointment || "المواعيد";
   return <div className={isPending ? "dashboard is-loading" : "dashboard"}>
     <section className="hero-row">
-      <div><div className="eyebrow"><i /> نموذج طبي قابل للتخصيص</div><h1>صباح الخير، د. سارة <span>✦</span></h1><p>ملخص التشغيل الطبي في مستشفى الشفاء لهذا اليوم.</p></div>
+      <div><div className="eyebrow"><i /> {profile?.activityDisplayName || "مساحة عمل قابلة للتخصيص"}</div><h1>صباح الخير، فريق {profile?.name || "مساحة العمل"} <span>✦</span></h1><p>ملخص التشغيل وإدارة {appointmentLabel} لهذا اليوم.</p></div>
       <button className="primary-button" onClick={onNewAppointment}><Icon name="plus" size={17} /> موعد جديد</button>
     </section>
     <section className="stats-grid">
-      <StatCard label="مواعيد اليوم" value={arabicDigits(stats.appointmentsToday)} change="١٢٪" note="مقارنة بالأسبوع الماضي" tone="blue" icon="calendar" />
-      <StatCard label="مرضى جدد" value={arabicDigits(stats.newPatients)} change="٨.٤٪" note="مقارنة بالأسبوع الماضي" tone="amber" icon="users" />
+      <StatCard label={`${appointmentLabel} اليوم`} value={arabicDigits(stats.appointmentsToday)} change="١٢٪" note="مقارنة بالأسبوع الماضي" tone="blue" icon="calendar" />
+      <StatCard label={`${customerLabel} جدد`} value={arabicDigits(stats.newPatients)} change="٨.٤٪" note="مقارنة بالأسبوع الماضي" tone="amber" icon="users" />
       <StatCard label="فحوصات مكتملة" value={arabicDigits(stats.completedExams)} change="٢٤٪" note="مقارنة بالأسبوع الماضي" tone="violet" icon="stethoscope" />
       <StatCard label="نسبة الحضور" value={arabicDigits(stats.attendanceRate)} change="٣.٢٪" note="مقارنة بالأسبوع الماضي" tone="mint" icon="chart" progress={stats.attendanceRate} />
     </section>
@@ -164,7 +183,7 @@ function Dashboard({ data, isPending, onNewAppointment, onNavigate }) {
     </div>
     <div className="secondary-grid">
       <section className="panel demand-panel"><PanelHeading title="الأقسام الأكثر طلباً" subtitle="خلال آخر ٣٠ يوماً"><button className="dots">•••</button></PanelHeading><div className="demand-content"><div className="donut"><div><b>٣٨٤</b><span>موعد</span></div></div><ul><li><i className="dot dot-blue" />الباطنية <b>٣٨٪</b></li><li><i className="dot dot-amber" />الأطفال <b>٢٨٪</b></li><li><i className="dot dot-violet" />الأسنان <b>١٨٪</b></li><li><i className="dot dot-soft" />أقسام أخرى <b>١٦٪</b></li></ul></div></section>
-      <section className="panel patients-panel"><PanelHeading title="مرضى جدد" subtitle="آخر الملفات الطبية المضافة"><button className="quiet-link" onClick={() => onNavigate("patients")}>عرض الكل <Icon name="arrow" size={13} /></button></PanelHeading><PatientTable patients={data?.patients || []} /></section>
+       <section className="panel patients-panel"><PanelHeading title={`${customerLabel} جدد`} subtitle={`آخر ملفات ${customerLabel}`}><button className="quiet-link" onClick={() => onNavigate("patients")}>عرض الكل <Icon name="arrow" size={13} /></button></PanelHeading><PatientTable patients={data?.patients || []} /></section>
     </div>
   </div>;
 }
@@ -184,8 +203,9 @@ function PatientTable({ patients }) {
   return <div className="patient-table"><div className="patient-row table-head"><span>المريض</span><span>تاريخ الانضمام</span><span>آخر زيارة</span></div>{list.map((patient, index) => <div className="patient-row" key={patient.id || patient.name}><div className="patient-name"><i className={`patient-dot dot-${index}`} /> <b>{patient.name}</b></div><span>{patient.joinedAt || "اليوم"}</span><span className={patient.lastVisit === "موعد أول" ? "tag" : ""}>{patient.lastVisit || "موعد أول"}</span></div>)}</div>;
 }
 
-function OperationsView({ view, data, onBack, onNewAppointment }) {
-  const page = navigation.find((item) => item.id === view);
+function OperationsView({ view, data, onBack, onNewAppointment, profile, onProfileUpdated }) {
+  const basePage = navigation.find((item) => item.id === view);
+  const page = basePage ? { ...basePage, label: navigationLabel(basePage, profile) } : basePage;
   const appointments = data?.appointments || [];
   const patients = data?.patients || [];
   const departments = data?.departments || [];
@@ -198,7 +218,19 @@ function OperationsView({ view, data, onBack, onNewAppointment }) {
   if (view === "services") return <section className="operations-page"><OperationsHeader page={page} subtitle="الأقسام والخدمات المتاحة للفريق الطبي." onBack={onBack} /><section className="directory-grid departments-grid">{departments.map((department) => <article className="panel directory-card" key={department.id}><div className="service-icon"><Icon name="layers" size={19} /></div><div><b>{department.name}</b><span>{department.defaultService}</span><small>مفعّل في مساحة العمل</small></div></article>)}</section></section>;
   if (view === "team") return <section className="operations-page"><OperationsHeader page={page} subtitle="فريق الرعاية المرتبط بالأقسام الحالية." onBack={onBack} /><section className="directory-grid">{doctors.map((doctor, index) => <article className="panel directory-card" key={doctor.id}><div className={`doctor-avatar doctor-${index % 3}`}>{doctor.name.replace("د. ", "").charAt(0)}</div><div><b>{doctor.name}</b><span>{doctor.specialty}</span><small>متاح للحجز</small></div></article>)}</section></section>;
   if (view === "reports") return <section className="operations-page"><OperationsHeader page={page} subtitle="ملخص مؤشرات التشغيل للفترة الحالية." onBack={onBack} /><div className="report-grid"><StatCard label="مواعيد اليوم" value={arabicDigits(data?.stats?.appointmentsToday || 0)} change="مستقر" note="حسب الجدول الحالي" tone="blue" icon="calendar" /><StatCard label="مرضى جدد" value={arabicDigits(data?.stats?.newPatients || 0)} change="متابعة" note="بيانات مساحة العمل" tone="amber" icon="users" /><StatCard label="فحوصات مكتملة" value={arabicDigits(data?.stats?.completedExams || 0)} change="نشط" note="هذا الشهر" tone="violet" icon="stethoscope" /></div><section className="panel report-note"><Icon name="chart" size={21} /><div><b>الأداء واضح وقابل للمتابعة</b><p>استخدم لوحة التحكم لمقارنة الأداء اليومي وتوزيع المواعيد على الأقسام.</p></div></section></section>;
-  return <section className="operations-page"><OperationsHeader page={page} subtitle="إعدادات مساحة العمل والتنبيهات." onBack={onBack} /><section className="panel settings-list"><div><div><b>وضع التشغيل</b><span>محلي بدون قاعدة بيانات</span></div><strong className="setting-status">نشط</strong></div><div><div><b>لغة الواجهة</b><span>العربية — RTL</span></div><button className="secondary-button">تغيير اللغة</button></div><div><div><b>التنبيهات</b><span>إشعارات المواعيد الجديدة</span></div><button className="toggle active" aria-label="التنبيهات مفعلة"><i /></button></div></section></section>;
+  return <section className="operations-page"><OperationsHeader page={page} subtitle="خصص اسم النشاط ونوعه وتسمياته." onBack={onBack} /><ProfileSettings profile={profile} onProfileUpdated={onProfileUpdated} /><section className="panel settings-list"><div><div><b>وضع التشغيل</b><span>متوافق مع PostgreSQL والوضع المحلي</span></div><strong className="setting-status">نشط</strong></div><div><div><b>التنبيهات</b><span>إشعارات الحجوزات الجديدة</span></div><button className="toggle active" aria-label="التنبيهات مفعلة"><i /></button></div></section></section>;
+}
+
+function ProfileSettings({ profile, onProfileUpdated }) {
+  const [draft, setDraft] = useState({ name: "", activityType: "medical", primaryColor: "#2474df", labels: {} });
+  const [templates, setTemplates] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  useEffect(() => { if (profile) setDraft({ name: profile.name || "", activityType: profile.activityType || "medical", primaryColor: profile.primaryColor || "#2474df", labels: profile.labels || {} }); }, [profile]);
+  useEffect(() => { api.get("/api/activity-templates").then((result) => setTemplates(result.templates || [])).catch(() => {}); }, []);
+  const updateLabel = (key, value) => setDraft((current) => ({ ...current, labels: { ...current.labels, [key]: value } }));
+  const save = async (event) => { event.preventDefault(); setBusy(true); setMessage(""); try { const result = await api.patch("/api/workspace-profile", draft); onProfileUpdated(result.profile); setMessage("تم حفظ تخصيص مساحة العمل"); } catch (error) { setMessage(error.message); } finally { setBusy(false); } };
+  return <form className="panel profile-form" onSubmit={save}><div className="profile-form-heading"><div><span className="section-kicker">هوية النشاط</span><h3>تخصيص مساحة العمل</h3><p>اختر القالب المناسب ثم عدّل التسميات حسب نشاطك.</p></div><button className="primary-button" disabled={busy}>{busy ? "جارٍ الحفظ..." : "حفظ التخصيص"}</button></div><div className="form-row"><label>اسم النشاط<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="مثال: أكاديمية النخبة" required /></label><label>نوع النشاط<select value={draft.activityType} onChange={(event) => setDraft({ ...draft, activityType: event.target.value })}>{templates.map((template) => <option key={template.activity_type} value={template.activity_type}>{template.display_name}</option>)}</select></label></div><div className="form-row"><label>لون الهوية<input type="color" value={draft.primaryColor} onChange={(event) => setDraft({ ...draft, primaryColor: event.target.value })} /></label><label>تسمية العملاء<input value={draft.labels.customer || ""} onChange={(event) => updateLabel("customer", event.target.value)} placeholder="الطلاب / العملاء / المرضى" /></label></div><div className="form-row"><label>تسمية الفريق<input value={draft.labels.staff || ""} onChange={(event) => updateLabel("staff", event.target.value)} placeholder="المدربين / المشرفين / الأطباء" /></label><label>تسمية الحجوزات<input value={draft.labels.appointment || ""} onChange={(event) => updateLabel("appointment", event.target.value)} placeholder="الحصص / الحجوزات / المواعيد" /></label></div>{message && <small className="form-message">{message}</small>}</form>;
 }
 
 function OperationsHeader({ page, subtitle, onBack, action }) {
@@ -220,17 +252,19 @@ function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [toast, setToast] = useState(null);
+  const [profile, setProfile] = useState(null);
   const { data, error, isPending, reload } = useDashboardData(DASHBOARD_DATE);
   const departments = data?.departments || [];
   const doctors = data?.doctors || [];
   const notify = useCallback((title, message) => { setToast({ title, message }); window.setTimeout(() => setToast(null), 3600); }, []);
   const navigate = useCallback((view) => { setActiveView(view); if (view !== "dashboard") window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
   const onCreated = useCallback((message) => { if (message) notify("تعذر حفظ الموعد", message); else { notify("تم حفظ الموعد", "تمت إضافة الموعد إلى جدول اليوم."); reload(); } }, [notify, reload]);
+  useEffect(() => { api.get("/api/workspace-profile").then((result) => setProfile(result.profile)).catch(() => {}); }, []);
   return <div className="app-shell">
-    <Sidebar activeView={activeView} onNavigate={navigate} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
-    <main className="main-content"><Header activeView={activeView} onVerify={() => notify("توثيق البريد", "هذه الخطوة جاهزة للربط مع إعدادات الحساب.")} onNotify={() => notify("لا توجد إشعارات جديدة", "كل شيء محدث حتى الآن.")} onToggleSidebar={() => setCollapsed((value) => !value)} /><div className="page-wrap">
+    <Sidebar activeView={activeView} onNavigate={navigate} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} profile={profile} />
+    <main className="main-content"><Header activeView={activeView} profile={profile} onVerify={() => notify("توثيق البريد", "هذه الخطوة جاهزة للربط مع إعدادات الحساب.")} onNotify={() => notify("لا توجد إشعارات جديدة", "كل شيء محدث حتى الآن.")} onToggleSidebar={() => setCollapsed((value) => !value)} /><div className="page-wrap">
       {error && <div className="error-banner">تعذر تحميل البيانات: {error}<button onClick={reload}>إعادة المحاولة</button></div>}
-      <Suspense fallback={<div className="loading-state">جارٍ تجهيز مساحة العمل...</div>}>{activeView === "dashboard" ? <Dashboard data={data} isPending={isPending} onNewAppointment={() => setModalOpen(true)} onNavigate={navigate} /> : <OperationsView view={activeView} data={data} onBack={() => navigate("dashboard")} onNewAppointment={() => setModalOpen(true)} />}</Suspense>
+      <Suspense fallback={<div className="loading-state">جارٍ تجهيز مساحة العمل...</div>}>{activeView === "dashboard" ? <Dashboard data={data} profile={profile} isPending={isPending} onNewAppointment={() => setModalOpen(true)} onNavigate={navigate} /> : <OperationsView view={activeView} data={data} profile={profile} onProfileUpdated={setProfile} onBack={() => navigate("dashboard")} onNewAppointment={() => setModalOpen(true)} />}</Suspense>
     </div><footer className="site-footer"><span>© 2026 UpNexa-eg.com</span><b>موعد Maw3ed</b><span>جميع الحقوق محفوظة</span></footer></main>
     <AppointmentModal open={modalOpen} onClose={() => setModalOpen(false)} onCreated={onCreated} departments={departments} doctors={doctors} />
     {toast && <div className="toast" role="status"><span>✓</span><div><b>{toast.title}</b><small>{toast.message}</small></div></div>}

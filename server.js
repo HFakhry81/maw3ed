@@ -140,7 +140,7 @@ function createId(prefix) {
 function toAppointment(row) {
   return {
     id: row.id,
-    date: row.appointment_date,
+    date: row.appointment_date instanceof Date ? row.appointment_date.toISOString().slice(0, 10) : String(row.appointment_date).slice(0, 10),
     time: row.appointment_time,
     period: Number(String(row.appointment_time).slice(0, 2)) >= 12 ? "مساءً" : "صباحاً",
     patientId: row.patient_id,
@@ -154,9 +154,9 @@ function toAppointment(row) {
   };
 }
 
-async function dashboardData(date) {
+async function dashboardData(date, orgId = organizationId) {
   if (!databaseConfigured) return localDashboardData(date);
-  const [appointmentsResult, newPatientsResult, metricsResult, departmentsResult, doctorsResult] = await Promise.all([
+  const [appointmentsResult, newPatientsResult, metricsResult, departmentsResult, doctorsResult, patientsResult] = await Promise.all([
     query(
       `SELECT a.id, a.appointment_date, TO_CHAR(a.appointment_time, 'HH24:MI') AS appointment_time,
               a.patient_id, p.name AS patient_name, a.department_id, d.name AS department_name,
@@ -167,12 +167,14 @@ async function dashboardData(date) {
        JOIN doctors dr ON dr.id = a.doctor_id
        WHERE a.organization_id = $1 AND a.appointment_date = $2
        ORDER BY a.appointment_time ASC`,
-      [organizationId, date]
+      [orgId, date]
     ),
-    query("SELECT COUNT(*)::int AS count FROM patients WHERE organization_id = $1 AND joined_at = $2", [organizationId, date]),
-    query("SELECT completed_exams, attendance_rate FROM dashboard_metrics WHERE organization_id = $1", [organizationId]),
-    query("SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name", [organizationId]),
-    query("SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name", [organizationId])
+    query("SELECT COUNT(*)::int AS count FROM patients WHERE organization_id = $1 AND joined_at = $2", [orgId, date]),
+    query("SELECT completed_exams, attendance_rate FROM dashboard_metrics WHERE organization_id = $1", [orgId]),
+    query("SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]),
+    query("SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]),
+    query(`SELECT id, name, TO_CHAR(joined_at, 'YYYY-MM-DD') AS "joinedAt", last_visit AS "lastVisit"
+           FROM patients WHERE organization_id = $1 ORDER BY created_at DESC`, [orgId])
   ]);
 
   const metric = metricsResult.rows[0] || { completed_exams: 0, attendance_rate: 0 };
@@ -187,11 +189,12 @@ async function dashboardData(date) {
     },
     appointments: appointmentsResult.rows.map(toAppointment),
     departments: departmentsResult.rows,
-    doctors: doctorsResult.rows
+    doctors: doctorsResult.rows,
+    patients: patientsResult.rows
   };
 }
 
-async function handleAppointmentCreate(payload) {
+async function handleAppointmentCreate(payload, orgId = organizationId) {
   if (!databaseConfigured) return localAppointmentCreate(payload);
   const patientName = typeof payload.patientName === "string" ? payload.patientName.trim() : "";
   const date = typeof payload.date === "string" ? payload.date : "";
@@ -208,8 +211,8 @@ async function handleAppointmentCreate(payload) {
   try {
     await client.query("BEGIN");
     const [doctorResult, departmentResult] = await Promise.all([
-      client.query("SELECT id, name, specialty FROM doctors WHERE id = $1 AND organization_id = $2 AND active = true", [doctorId, organizationId]),
-      client.query("SELECT id, name, default_service FROM departments WHERE id = $1 AND organization_id = $2 AND active = true", [departmentId, organizationId])
+      client.query("SELECT id, name, specialty FROM doctors WHERE id = $1 AND organization_id = $2 AND active = true", [doctorId, orgId]),
+      client.query("SELECT id, name, default_service FROM departments WHERE id = $1 AND organization_id = $2 AND active = true", [departmentId, orgId])
     ]);
     const doctor = doctorResult.rows[0];
     const department = departmentResult.rows[0];
@@ -224,7 +227,7 @@ async function handleAppointmentCreate(payload) {
        WHERE organization_id = $1 AND appointment_date = $2 AND appointment_time = $3
          AND status <> 'cancelled' AND (doctor_id = $4 OR department_id = $5)
        FOR UPDATE`,
-      [organizationId, date, time, doctorId, departmentId]
+      [orgId, date, time, doctorId, departmentId]
     );
     if (collision.rows[0]) {
       const error = new Error("This doctor or department is already booked at that time");
@@ -235,14 +238,14 @@ async function handleAppointmentCreate(payload) {
 
     let patientResult = await client.query(
       "SELECT id, name FROM patients WHERE organization_id = $1 AND LOWER(name) = LOWER($2) LIMIT 1",
-      [organizationId, patientName]
+      [orgId, patientName]
     );
     let patient = patientResult.rows[0];
     if (!patient) {
       patient = (await client.query(
         `INSERT INTO patients (id, organization_id, name, joined_at, last_visit)
          VALUES ($1, $2, $3, $4, $5) RETURNING id, name`,
-        [createId("patient"), organizationId, patientName, date, "موعد أول"]
+        [createId("patient"), orgId, patientName, date, "موعد أول"]
       )).rows[0];
     }
 
@@ -253,7 +256,7 @@ async function handleAppointmentCreate(payload) {
        RETURNING id, appointment_date, TO_CHAR(appointment_time, 'HH24:MI') AS appointment_time,
                  patient_id, $9::text AS patient_name, department_id, $10::text AS department_name,
                  doctor_id, $11::text AS doctor_name, service_name, status`,
-      [createId("appointment"), organizationId, date, time, patient.id, departmentId, doctorId, department.default_service, patient.name, department.name, doctor.name]
+      [createId("appointment"), orgId, date, time, patient.id, departmentId, doctorId, department.default_service, patient.name, department.name, doctor.name]
     )).rows[0];
     await client.query("COMMIT");
     return toAppointment(appointment);
@@ -325,18 +328,118 @@ async function requirePlatformAdmin(req) {
   return user;
 }
 
-async function getUserWorkspace(userId) {
+async function getUserWorkspace(userId, workspaceId = null) {
   const result = await query(
-    `SELECT w.*, ws.role, pc.plan_key, pc.display_name AS plan_name, pc.features, pc.limits, pc.price_usd
+    `SELECT w.*, ws.role, o.id AS organization_id, o.activity_type AS organization_activity_type,
+            o.locale AS organization_locale, o.currency AS organization_currency,
+            o.timezone AS organization_timezone, o.logo_url, o.primary_color, o.labels AS organization_labels,
+            pc.plan_key, pc.display_name AS plan_name, pc.features, pc.limits, pc.price_usd
      FROM workspaces w
      JOIN workspace_members ws ON ws.workspace_id = w.id AND ws.user_id = $1
+     LEFT JOIN organizations o ON o.workspace_id = w.id
      JOIN plan_catalog pc ON pc.plan_key = COALESCE((SELECT plan_key FROM workspace_subscriptions
        WHERE workspace_id = w.id AND status IN ('active', 'past_due')
        ORDER BY created_at DESC LIMIT 1), 'free')
+     WHERE ($2::text IS NULL OR w.id = $2)
      ORDER BY w.created_at ASC LIMIT 1`,
-    [userId]
+    [userId, workspaceId]
   );
   return result.rows[0] || null;
+}
+
+async function getRequestOrganizationId(req, requestUrl) {
+  if (!databaseConfigured) return organizationId;
+  const workspaceId = req.headers["x-workspace-id"] || requestUrl.searchParams.get("workspace");
+  if (!workspaceId) return organizationId;
+  const user = await requireAppUser(req);
+  const workspace = await getUserWorkspace(user.id, workspaceId);
+  if (!workspace?.organization_id) {
+    const error = new Error("This workspace is not available for the current account");
+    error.statusCode = 403;
+    throw error;
+  }
+  return workspace.organization_id;
+}
+
+async function getOrganizationProfile(orgId) {
+  const result = await query(
+    `SELECT o.id, o.workspace_id AS "workspaceId", o.name, o.slug, o.activity_type AS "activityType",
+            o.locale, o.currency, o.timezone, o.logo_url AS "logoUrl",
+            o.primary_color AS "primaryColor", o.labels, o.settings,
+            t.display_name AS "activityDisplayName", t.description AS "activityDescription"
+     FROM organizations o
+     LEFT JOIN activity_templates t ON t.activity_type = o.activity_type
+     WHERE o.id = $1`,
+    [orgId]
+  );
+  return result.rows[0] || null;
+}
+
+async function updateOrganizationProfile(req, requestUrl, payload) {
+  const orgId = await getRequestOrganizationId(req, requestUrl);
+  if (process.env.CLERK_SECRET_KEY) {
+    const user = await requireAppUser(req);
+    const membership = await query(
+      `SELECT ws.role FROM workspace_members ws
+       JOIN organizations o ON o.workspace_id = ws.workspace_id
+       WHERE o.id = $1 AND ws.user_id = $2`,
+      [orgId, user.id]
+    );
+    if (!["owner", "admin", "manager"].includes(membership.rows[0]?.role)) {
+      const error = new Error("Workspace manager access is required");
+      error.statusCode = 403;
+      throw error;
+    }
+  } else if (orgId !== organizationId) {
+    const error = new Error("Workspace authentication is required");
+    error.statusCode = 401;
+    throw error;
+  }
+  const activityType = typeof payload.activityType === "string" ? payload.activityType.trim().toLowerCase() : null;
+  const template = activityType ? (await query("SELECT * FROM activity_templates WHERE activity_type = $1", [activityType])).rows[0] : null;
+  if (activityType && !template) {
+    const error = new Error("Unsupported activity type");
+    error.statusCode = 400;
+    throw error;
+  }
+  const labels = payload.labels && typeof payload.labels === "object" && !Array.isArray(payload.labels) ? payload.labels : null;
+  const allowedLabels = ["customer", "staff", "department", "service", "appointment"];
+  const safeLabels = labels ? Object.fromEntries(Object.entries(labels).filter(([key, value]) => allowedLabels.includes(key) && typeof value === "string" && value.trim()).map(([key, value]) => [key, value.trim()])) : null;
+  const current = await getOrganizationProfile(orgId);
+  const mergedLabels = { ...(activityType ? (template?.labels || {}) : (current?.labels || {})), ...(safeLabels || {}) };
+  const result = await query(
+    `UPDATE organizations
+     SET name = COALESCE($1, name),
+         activity_type = COALESCE($2, activity_type),
+         locale = COALESCE($3, locale),
+         currency = COALESCE($4, currency),
+         timezone = COALESCE($5, timezone),
+         logo_url = COALESCE($6, logo_url),
+         primary_color = COALESCE($7, primary_color),
+         labels = $8::jsonb,
+         settings = COALESCE($9::jsonb, settings),
+         updated_at = NOW()
+     WHERE id = $10
+     RETURNING id`,
+    [
+      typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : null,
+      activityType,
+      typeof payload.locale === "string" ? payload.locale : null,
+      typeof payload.currency === "string" ? payload.currency.toLowerCase() : null,
+      typeof payload.timezone === "string" ? payload.timezone : null,
+      typeof payload.logoUrl === "string" ? payload.logoUrl.trim() : null,
+      /^#[0-9a-f]{6}$/i.test(payload.primaryColor || "") ? payload.primaryColor : null,
+      JSON.stringify(mergedLabels),
+      payload.settings && typeof payload.settings === "object" && !Array.isArray(payload.settings) ? JSON.stringify(payload.settings) : null,
+      orgId
+    ]
+  );
+  if (!result.rows[0]) {
+    const error = new Error("Organization profile not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  return getOrganizationProfile(orgId);
 }
 
 async function listPlans() {
@@ -367,9 +470,15 @@ async function createWorkspace(user, payload) {
   const name = typeof payload.name === "string" ? payload.name.trim() : "";
   const activityType = typeof payload.activityType === "string" ? payload.activityType.trim().toLowerCase() : "medical";
   const locale = typeof payload.locale === "string" ? payload.locale : "ar";
-  const currency = typeof payload.currency === "string" ? payload.currency.toLowerCase() : "usd";
+  const currency = typeof payload.currency === "string" ? payload.currency.toLowerCase() : "egp";
   if (!name || !/^[a-z0-9-]{3,60}$/.test(payload.slug || "")) {
     const error = new Error("Workspace name and a slug containing 3-60 letters, numbers or hyphens are required");
+    error.statusCode = 400;
+    throw error;
+  }
+  const template = (await query("SELECT * FROM activity_templates WHERE activity_type = $1", [activityType])).rows[0];
+  if (!template) {
+    const error = new Error("Unsupported activity type");
     error.statusCode = 400;
     throw error;
   }
@@ -382,8 +491,43 @@ async function createWorkspace(user, payload) {
     "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
     [workspace.id, user.id]
   );
+  const newOrganizationId = `org-${workspace.id}`;
+  await query(
+    `INSERT INTO organizations
+      (id, workspace_id, name, slug, owner_company, activity_type, locale, currency, labels)
+     VALUES ($1, $2, $3, $4, 'UpNexa-eg.com', $5, $6, $7, $8::jsonb)`,
+    [newOrganizationId, workspace.id, name, payload.slug, activityType, locale, currency, JSON.stringify(template.labels)]
+  );
+  await query("INSERT INTO dashboard_metrics (organization_id) VALUES ($1)", [newOrganizationId]);
+  await query(
+    `INSERT INTO booking_pages (organization_id, slug, description, show_platform_branding)
+     VALUES ($1, $2, $3, $4)`,
+    [newOrganizationId, payload.slug, `احجز خدمات ${name} بسهولة`, activityType === "medical"]
+  );
+  await query(
+    `INSERT INTO departments (id, organization_id, name, default_service)
+     VALUES ($1, $2, $3, $4)`,
+    [`department-${workspace.id}-main`, newOrganizationId, template.labels.department, template.labels.service]
+  );
+  await query(
+    `INSERT INTO doctors (id, organization_id, name, specialty)
+     VALUES ($1, $2, $3, $4)`,
+    [`staff-${workspace.id}-main`, newOrganizationId, template.labels.staff, template.display_name]
+  );
+  await query(
+    `INSERT INTO customer_categories (id, organization_id, name, color)
+     VALUES ($1, $2, $3, $4)`,
+    [`customer-category-${workspace.id}-standard`, newOrganizationId, template.labels.customer, "#2474df"]
+  );
+  for (let weekday = 0; weekday <= 6; weekday += 1) {
+    await query(
+      `INSERT INTO working_hours (organization_id, weekday, opens_at, closes_at, is_closed)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newOrganizationId, weekday, "09:00", "17:00", weekday === 5]
+    );
+  }
   await logPlatformEvent(user.id, "workspace_created", "workspace", workspace.id, { activityType });
-  return workspace;
+  return { ...workspace, organization_id: newOrganizationId, labels: template.labels };
 }
 
 async function createWhopCheckout(user, planKey, requestUrl) {
@@ -661,22 +805,48 @@ const server = http.createServer(async (req, res) => {
       if (databaseConfigured) await query("SELECT 1");
       return sendJson(res, 200, { ok: true, service: "maw3ed-api", database: databaseConfigured ? "postgresql" : "local-memory" });
     }
+    if (requested === "/api/activity-templates" && req.method === "GET") {
+      if (!databaseConfigured) {
+        return sendJson(res, 200, { ok: true, templates: [
+          { activity_type: "medical", display_name: "مركز طبي" },
+          { activity_type: "education", display_name: "مركز تعليمي" },
+          { activity_type: "billiards", display_name: "صالة بلياردو" },
+          { activity_type: "salon", display_name: "صالون" },
+          { activity_type: "fitness", display_name: "مركز رياضي" },
+          { activity_type: "other", display_name: "نشاط مخصص" }
+        ] });
+      }
+      const result = await query("SELECT activity_type, display_name, description, labels, defaults FROM activity_templates ORDER BY display_name");
+      return sendJson(res, 200, { ok: true, templates: result.rows });
+    }
+    if (requested === "/api/workspace-profile" && req.method === "GET") {
+      const orgId = await getRequestOrganizationId(req, requestUrl);
+      return sendJson(res, 200, { ok: true, profile: databaseConfigured ? await getOrganizationProfile(orgId) : { id: organizationId, name: localData.organization?.name || "مستشفى الشفاء", activityType: "medical", locale: "ar", currency: "egp", timezone: "Africa/Cairo", labels: { customer: "المرضى", staff: "الأطباء", department: "الأقسام والعيادات", service: "الخدمات", appointment: "المواعيد" } } });
+    }
+    if (requested === "/api/workspace-profile" && req.method === "PATCH") {
+      return sendJson(res, 200, { ok: true, profile: await updateOrganizationProfile(req, requestUrl, await parseJsonBody(req)) });
+    }
     if (requested === "/api/dashboard" && req.method === "GET") {
-      return sendJson(res, 200, await dashboardData(requestUrl.searchParams.get("date") || "2025-05-14"));
+      const orgId = await getRequestOrganizationId(req, requestUrl);
+      return sendJson(res, 200, await dashboardData(requestUrl.searchParams.get("date") || "2025-05-14", orgId));
     }
     if (requested === "/api/departments" && req.method === "GET") {
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, departments: localData.departments });
-      const result = await query("SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name", [organizationId]);
+      const orgId = await getRequestOrganizationId(req, requestUrl);
+      const result = await query("SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]);
       return sendJson(res, 200, { ok: true, departments: result.rows });
     }
     if (requested === "/api/doctors" && req.method === "GET") {
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, doctors: localData.doctors });
-      const result = await query("SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name", [organizationId]);
+      const orgId = await getRequestOrganizationId(req, requestUrl);
+      const result = await query("SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]);
       return sendJson(res, 200, { ok: true, doctors: result.rows });
     }
     if (requested === "/api/patients" && req.method === "GET") {
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, patients: localData.patients });
-      const result = await query("SELECT id, name, email, joined_at AS \"joinedAt\", last_visit AS \"lastVisit\" FROM patients WHERE organization_id = $1 ORDER BY created_at DESC", [organizationId]);
+      const orgId = await getRequestOrganizationId(req, requestUrl);
+      const result = await query(`SELECT id, name, email, TO_CHAR(joined_at, 'YYYY-MM-DD') AS "joinedAt",
+        last_visit AS "lastVisit" FROM patients WHERE organization_id = $1 ORDER BY created_at DESC`, [orgId]);
       return sendJson(res, 200, { ok: true, patients: result.rows });
     }
     if (requested === "/api/appointments" && req.method === "GET") {
@@ -685,6 +855,7 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 200, { ok: true, appointments: localData.appointments.filter((appointment) => !date || appointment.date === date) });
       }
       const date = requestUrl.searchParams.get("date");
+      const orgId = await getRequestOrganizationId(req, requestUrl);
       const result = await query(
         `SELECT a.id, a.appointment_date, TO_CHAR(a.appointment_time, 'HH24:MI') AS appointment_time,
                 a.patient_id, p.name AS patient_name, a.department_id, d.name AS department_name,
@@ -693,12 +864,13 @@ const server = http.createServer(async (req, res) => {
          JOIN departments d ON d.id = a.department_id JOIN doctors dr ON dr.id = a.doctor_id
          WHERE a.organization_id = $1 AND ($2::date IS NULL OR a.appointment_date = $2::date)
          ORDER BY a.appointment_date, a.appointment_time`,
-        [organizationId, date || null]
+        [orgId, date || null]
       );
       return sendJson(res, 200, { ok: true, appointments: result.rows.map(toAppointment) });
     }
     if (requested === "/api/appointments" && req.method === "POST") {
-      const appointment = await handleAppointmentCreate(await parseJsonBody(req));
+      const orgId = await getRequestOrganizationId(req, requestUrl);
+      const appointment = await handleAppointmentCreate(await parseJsonBody(req), orgId);
       return sendJson(res, 201, { ok: true, appointment });
     }
     if (requested === "/api/auth/request-verification" && req.method === "POST") {

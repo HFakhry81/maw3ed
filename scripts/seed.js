@@ -22,6 +22,19 @@ async function main() {
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, default_service = EXCLUDED.default_service`,
         [department.id, organizationId, department.name, department.defaultService]
       );
+      await client.query(
+        `INSERT INTO service_categories (id, organization_id, name)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
+        [`category-${department.id}`, organizationId, department.name]
+      );
+      await client.query(
+        `INSERT INTO services
+          (id, organization_id, category_id, name, duration_minutes, buffer_minutes, pricing_type, price, public_booking)
+         VALUES ($1, $2, $3, $4, 30, 15, 'fixed', 0, true)
+         ON CONFLICT (id) DO UPDATE SET category_id = EXCLUDED.category_id, name = EXCLUDED.name`,
+        [`service-${department.id}`, organizationId, `category-${department.id}`, department.defaultService]
+      );
     }
     for (const doctor of source.doctors) {
       await client.query(
@@ -39,16 +52,42 @@ async function main() {
         [patient.id, organizationId, patient.name, patient.joinedAt, patient.lastVisit]
       );
     }
+    await client.query(
+      `INSERT INTO customer_categories (id, organization_id, name, color)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, color = EXCLUDED.color`,
+      ["customer-category-standard", organizationId, "عادي", "#2474df"]
+    );
+    await client.query(
+      `UPDATE patients SET category_id = $1 WHERE organization_id = $2 AND category_id IS NULL`,
+      ["customer-category-standard", organizationId]
+    );
     for (const appointment of source.appointments) {
       await client.query(
         `INSERT INTO appointments
-          (id, organization_id, appointment_date, appointment_time, patient_id, department_id, doctor_id, service_name, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          (id, organization_id, appointment_date, appointment_time, patient_id, department_id, doctor_id, service_id, service_name, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id) DO UPDATE SET appointment_date = EXCLUDED.appointment_date,
            appointment_time = EXCLUDED.appointment_time, patient_id = EXCLUDED.patient_id,
            department_id = EXCLUDED.department_id, doctor_id = EXCLUDED.doctor_id,
-           service_name = EXCLUDED.service_name, status = EXCLUDED.status`,
-        [appointment.id, organizationId, appointment.date, appointment.time, appointment.patientId, appointment.departmentId, appointment.doctorId, appointment.serviceName, appointment.status]
+           service_id = EXCLUDED.service_id, service_name = EXCLUDED.service_name, status = EXCLUDED.status`,
+        [appointment.id, organizationId, appointment.date, appointment.time, appointment.patientId, appointment.departmentId, appointment.doctorId, `service-${appointment.departmentId}`, appointment.serviceName, appointment.status]
+      );
+    }
+    await client.query(
+      `INSERT INTO booking_pages (organization_id, slug, description, phone, email, address)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (organization_id) DO UPDATE SET description = EXCLUDED.description,
+         phone = EXCLUDED.phone, email = EXCLUDED.email, address = EXCLUDED.address, updated_at = NOW()`,
+      [organizationId, "al-shifa", "احجز موعدك بسهولة مع مستشفى الشفاء", null, null, null]
+    );
+    for (let weekday = 0; weekday <= 6; weekday += 1) {
+      await client.query(
+        `INSERT INTO working_hours (organization_id, weekday, opens_at, closes_at, is_closed)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (organization_id, weekday) DO UPDATE SET opens_at = EXCLUDED.opens_at,
+           closes_at = EXCLUDED.closes_at, is_closed = EXCLUDED.is_closed`,
+        [organizationId, weekday, "09:00", "17:00", weekday === 5]
       );
     }
     await client.query(

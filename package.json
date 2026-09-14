@@ -6,8 +6,8 @@
   "scripts": {
     "start": "npm run build && if [ -f .env ]; then node --env-file=.env server.js; else node server.js; fi",
     "dev": "vite --host 0.0.0.0",
-    "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js",
+    "migrate": "if [ -f .env ]; then node --env-file=.env scripts/migrate.js; else node scripts/migrate.js; fi",
+    "seed": "if [ -f .env ]; then node --env-file=.env scripts/seed.js; else node scripts/seed.js; fi",
     "build": "node scripts/build.js",
     "web:dist": "npm run build"
   },
