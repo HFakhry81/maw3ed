@@ -12,9 +12,16 @@
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "web:dist": "node scripts/setup-all.js",
-    "update:all": "node scripts/setup-all.js"
-  },
-  "dependencies": {
+    "update:all": "node scripts/setup-all.js",
+    "db:init": "node scripts/init-db.js",
+    "db:migrate": "node scripts/migrate.js",
+    "db:seed": "node scripts/seed.js",
+    "build:api": "node scripts/build.js",
+    "build:web": "vite build",
+    "build:all": "pnpm db:migrate && pnpm build:api && pnpm build:web"
+    },
+   
+   "dependencies": {
     "@clerk/backend": "^3.17.2",
     "@clerk/clerk-js": "^6.31.1",
     "@replit/connectors-sdk": "^0.4.3",
