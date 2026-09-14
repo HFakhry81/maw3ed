@@ -8,6 +8,11 @@
     "dev": "vite --host 0.0.0.0",
     "migrate": "if [ -f .env ]; then node --env-file=.env scripts/migrate.js; else node scripts/migrate.js; fi",
     "seed": "if [ -f .env ]; then node --env-file=.env scripts/seed.js; else node scripts/seed.js; fi",
+    "change:start": "node scripts/development-log.js start",
+    "change:stage": "node scripts/development-log.js stage",
+    "change:finish": "node scripts/development-log.js finish",
+    "change:watch": "node scripts/development-log.js watch",
+    "change:report": "node scripts/development-log.js report",
     "build": "node scripts/build.js",
     "web:dist": "npm run build"
   },
