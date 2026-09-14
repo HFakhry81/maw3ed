@@ -1,274 +1,521 @@
-import React, { Suspense, memo, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
+import "./ops.css";
+import { api } from "./api";
+import { LOCALES, applyDocumentLocale, t } from "./i18n";
+import { CalendarView } from "./CalendarView.jsx";
 
-const DASHBOARD_DATE = "2025-05-14";
-const arabicDigits = (value) => String(value).replace(/\d/g, (digit) => "٠١٢٣٤٥٦٧٨٩"[digit]);
-const statusLabels = { confirmed: "مؤكد", pending: "بانتظار التأكيد", cancelled: "ملغى", completed: "مكتمل" };
-const colorNames = ["blue", "mint", "amber", "violet"];
-
-const navigation = [
-  { id: "dashboard", label: "لوحة التحكم", icon: "grid" },
-  { id: "calendar", label: "التقويم", icon: "calendar", badge: 3 },
-  { id: "appointments", label: "المواعيد", icon: "clock" },
-  { id: "patients", label: "المرضى", icon: "users", group: "تشغيل المستشفى" },
-  { id: "services", label: "الأقسام والعيادات", icon: "layers" },
-  { id: "team", label: "الأطباء والطاقم", icon: "stethoscope" },
-  { id: "reports", label: "التقارير", icon: "chart", group: "الإدارة والتحليل" },
-  { id: "settings", label: "الإعدادات", icon: "settings" }
+const NAV = [
+  { id: "calendar", mark: "تق" },
+  { id: "customers", mark: "عم" },
+  { id: "staff", mark: "مو" },
+  { id: "schedule", mark: "جد" },
+  { id: "services", mark: "خد" },
+  { id: "bookingPage", mark: "حجز" },
+  { id: "stats", mark: "إحص" },
+  { id: "payments", mark: "دفع", growth: true },
+  { id: "expenses", mark: "مص" },
+  { id: "marketing", mark: "تس", growth: true, badge: "جديد" },
+  { id: "notifications", mark: "تنب" },
+  { id: "preferences", mark: "تفض" },
+  { id: "integrations", mark: "ربط", growth: true }
 ];
 
-function Icon({ name, size = 18 }) {
-  const paths = {
-    grid: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></>,
-    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M7 3v4M17 3v4M3 10h18" /><path d="M7 14h.01M11 14h.01M15 14h.01M7 18h.01M11 18h.01" /></>,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    users: <><path d="M16 20v-1.7a3.3 3.3 0 0 0-3.3-3.3H7.3A3.3 3.3 0 0 0 4 18.3V20" /><circle cx="10" cy="7" r="3" /><path d="M20 20v-1.5a3.2 3.2 0 0 0-2.4-3.1M16.5 4.1a3 3 0 0 1 0 5.8" /></>,
-    layers: <><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 12 9 5 9-5M3 16l9 5 9-5" /></>,
-    stethoscope: <><path d="M6 3v5a4 4 0 0 0 8 0V3M4 3h4M12 3h4" /><path d="M14 15a4 4 0 1 0 8 0v-2" /><circle cx="20" cy="10" r="2" /></>,
-    chart: <><path d="M4 19V5M4 19h17" /><path d="m7 15 4-4 3 2 5-7" /></>,
-    settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.5 1.5-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-2.1v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-1.5-1.5.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H7v-2.1h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.5-1.5.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V5h2.1v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.5 1.5-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2v2.1h-.2a1.7 1.7 0 0 0-1.5 1Z" /></>,
-    bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></>,
-    mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 7 9 6 9-6" /></>,
-    plus: <><path d="M12 5v14M5 12h14" /></>,
-    arrow: <><path d="M5 12h14M13 6l6 6-6 6" /></>,
-    chevron: <path d="m7 10 5 5 5-5" />,
-    menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
-    close: <><path d="m6 6 12 12M18 6 6 18" /></>
-  };
-  return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
-}
+const MOBILE_NAV = ["calendar", "customers", "services", "staff", "more"];
 
-const api = {
-  get: async (url) => {
-    const response = await fetch(url);
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "تعذر تحميل البيانات");
-    return payload;
-  },
-  post: async (url, body) => {
-    const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "تعذر إتمام العملية");
-    return payload;
-  },
-  patch: async (url, body) => {
-    const response = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || "تعذر حفظ التخصيص");
-    return payload;
-  }
-};
-
-function navigationLabel(item, profile) {
-  const labels = profile?.labels || {};
-  return {
-    appointments: labels.appointment,
-    patients: labels.customer,
-    services: labels.department,
-    team: labels.staff
-  }[item.id] || item.label;
-}
-
-function useDashboardData(date) {
-  const [data, setData] = useState(null);
+function useOpsBootstrap() {
+  const [ops, setOps] = useState(null);
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
   const reload = useCallback(() => {
     startTransition(() => {
-      api.get(`/api/dashboard?date=${date}`).then(setData).catch((requestError) => setError(requestError.message));
+      api.get("/api/ops/bootstrap").then(setOps).catch((err) => setError(err.message));
     });
-  }, [date]);
+  }, []);
   useEffect(reload, [reload]);
-  return { data, error, isPending, reload };
+  return { ops, setOps, error, isPending, reload };
 }
 
-const StatCard = memo(function StatCard({ label, value, change, note, tone, icon, progress }) {
-  return <article className={`stat-card stat-${tone}`}>
-    <div className="stat-top"><span>{label}</span><span className="stat-icon"><Icon name={icon} size={17} /></span></div>
-    <strong className="stat-value">{value}{progress ? <small>٪</small> : null}</strong>
-    <div className="stat-foot"><b>↑ {change}</b><span>{note}</span></div>
-    {progress ? <div className="stat-progress"><i style={{ width: `${progress}%` }} /></div> : <div className="mini-bars">{[35, 55, 42, 72, 48, 80, 64, 92].map((height) => <i key={height} style={{ height: `${height}%` }} />)}</div>}
-  </article>;
-});
-
-const AppointmentRow = memo(function AppointmentRow({ appointment, index }) {
-  const [hour, minute] = appointment.time.split(":");
-  const displayHour = Number(hour) > 12 ? Number(hour) - 12 : Number(hour);
-  return <div className="appointment-row">
-    <div className="time"><b>{arabicDigits(`${displayHour}:${minute}`)}</b><span>{appointment.period}</span></div>
-    <i className={`appointment-marker ${colorNames[index % colorNames.length]}`} />
-    <div className="appointment-copy"><b>{appointment.patientName}</b><span>{appointment.serviceName} <em>•</em> {appointment.doctorName}</span></div>
-    <div className={`patient-avatar avatar-${index % 4}`}>{appointment.patientName.trim().charAt(0)}</div>
-    <span className={`status ${appointment.status}`}>{statusLabels[appointment.status] || "قيد المراجعة"}</span>
-  </div>;
-});
-
-function Sidebar({ activeView, onNavigate, collapsed, onToggle, profile }) {
-  const labels = profile?.labels || {};
-  return <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
-    <div className="brand">
-      <img src="/assets/maw3ed-icon.svg" alt="موعد" />
-      <div><strong>موعد</strong><span>إدارة الرعاية بوضوح</span></div>
-      <button className="sidebar-toggle" onClick={onToggle} aria-label="تبديل القائمة"><Icon name="menu" size={17} /></button>
-    </div>
-    <div className="workspace-card">
-      <div className="workspace-avatar">{(profile?.name || "م").charAt(0)}</div>
-      <div className="workspace-copy"><b>{profile?.name || "مساحة Maw3ed"}</b><span>{profile?.activityDisplayName || "مساحة عمل قابلة للتخصيص"}</span></div>
-      <Icon name="chevron" size={14} />
-    </div>
-    <nav className="nav">
-      {navigation.map((item, index) => <React.Fragment key={item.id}>
-        {item.group && <p className="nav-label">{item.group}</p>}
-        {!item.group && index === 0 && <p className="nav-label">الرئيسية</p>}
-        <button className={`nav-item ${activeView === item.id ? "active" : ""}`} onClick={() => onNavigate(item.id)} title={navigationLabel(item, profile)}>
-          <Icon name={item.icon} size={18} /><span>{navigationLabel(item, profile)}</span>{item.badge && <i className="nav-badge">{item.badge}</i>}
-        </button>
-      </React.Fragment>)}
-    </nav>
-    <div className="sidebar-footer">
-      <div className="upgrade-card"><span className="upgrade-mark">✦</span><b>قالب {profile?.activityDisplayName || "مرن"}</b><p>خصّص مساحة العمل لتناسب نشاطك.</p><button onClick={() => onNavigate("settings")}>إدارة التخصيص <Icon name="arrow" size={13} /></button></div>
-      <div className="profile"><div className="profile-avatar">س</div><div><b>د. سارة أحمد</b><span>مديرة التشغيل الطبي</span></div><button aria-label="المزيد">•••</button></div>
-    </div>
-  </aside>;
+function useAppointments() {
+  const [appointments, setAppointments] = useState([]);
+  const reload = useCallback(() => {
+    api.get("/api/ops/appointments").then((result) => setAppointments(result.appointments || [])).catch(() => {
+      api.get("/api/appointments").then((result) => setAppointments(result.appointments || [])).catch(() => {});
+    });
+  }, []);
+  useEffect(reload, [reload]);
+  return { appointments, reload };
 }
 
-function Header({ activeView, onVerify, onNotify, onToggleSidebar, profile }) {
-  const current = navigation.find((item) => item.id === activeView);
-  return <header className="topbar">
-    <button className="mobile-menu" onClick={onToggleSidebar} aria-label="فتح القائمة"><Icon name="menu" size={20} /></button>
-    <div className="breadcrumb"><span>{profile?.name || "مساحة العمل"}</span><b>/</b><strong>{navigationLabel(current || navigation[0], profile)}</strong></div>
-    <div className="top-actions">
-      <button className="verify-button" onClick={onVerify}><Icon name="mail" size={15} /><span>تحقق من البريد</span></button>
-      <button className="notification" onClick={onNotify} aria-label="الإشعارات"><Icon name="bell" size={19} /><i /></button>
-      <div className="top-divider" />
-      <div className="top-user"><div><b>مرحباً، د. سارة</b><span>الأربعاء، ١٤ مايو ٢٠٢٥</span></div><div className="top-avatar">س</div></div>
-    </div>
-  </header>;
-}
-
-function Dashboard({ data, isPending, onNewAppointment, onNavigate, profile }) {
-  const stats = data?.stats || { appointmentsToday: 48, newPatients: 32, completedExams: 128, attendanceRate: 96 };
-  const appointments = data?.appointments || [];
-  const departments = data?.departments || [];
-  const displayedAppointments = appointments.slice(0, 4);
-  const customerLabel = profile?.labels?.customer || "المرضى";
-  const appointmentLabel = profile?.labels?.appointment || "المواعيد";
-  return <div className={isPending ? "dashboard is-loading" : "dashboard"}>
-    <section className="hero-row">
-      <div><div className="eyebrow"><i /> {profile?.activityDisplayName || "مساحة عمل قابلة للتخصيص"}</div><h1>صباح الخير، فريق {profile?.name || "مساحة العمل"} <span>✦</span></h1><p>ملخص التشغيل وإدارة {appointmentLabel} لهذا اليوم.</p></div>
-      <button className="primary-button" onClick={onNewAppointment}><Icon name="plus" size={17} /> موعد جديد</button>
-    </section>
-    <section className="stats-grid">
-      <StatCard label={`${appointmentLabel} اليوم`} value={arabicDigits(stats.appointmentsToday)} change="١٢٪" note="مقارنة بالأسبوع الماضي" tone="blue" icon="calendar" />
-      <StatCard label={`${customerLabel} جدد`} value={arabicDigits(stats.newPatients)} change="٨.٤٪" note="مقارنة بالأسبوع الماضي" tone="amber" icon="users" />
-      <StatCard label="فحوصات مكتملة" value={arabicDigits(stats.completedExams)} change="٢٤٪" note="مقارنة بالأسبوع الماضي" tone="violet" icon="stethoscope" />
-      <StatCard label="نسبة الحضور" value={arabicDigits(stats.attendanceRate)} change="٣.٢٪" note="مقارنة بالأسبوع الماضي" tone="mint" icon="chart" progress={stats.attendanceRate} />
-    </section>
-    <section className="insight-strip">
-      <div><span className="section-kicker">مساحة عمل منظمة</span><h2>كل ما يحتاجه فريقك في مكان واحد</h2><p>تابع المواعيد والمرضى وأداء الأقسام من لوحة واحدة.</p></div>
-      <div className="department-chips">{departments.slice(0, 8).map((department, index) => <button className={index === 0 ? "active" : ""} key={department.id} onClick={() => onNavigate("services")}><span>{index === 0 ? "+" : "•"}</span>{department.name}</button>)}</div>
-    </section>
-    <div className="main-grid">
-      <section className="panel schedule-panel">
-        <PanelHeading title="الجدول الطبي للأسبوع" subtitle="مواعيد الأقسام من ١١ — ١٧ مايو ٢٠٢٥"><div className="panel-tools"><button aria-label="الأسبوع السابق">›</button><button aria-label="الأسبوع التالي">‹</button><button className="quiet-button">هذا الأسبوع <Icon name="chevron" size={12} /></button></div></PanelHeading>
-        <WeekCalendar />
-      </section>
-      <section className="panel today-panel">
-        <PanelHeading title="مواعيد اليوم" subtitle={`الأربعاء، ١٤ مايو • ${arabicDigits(stats.appointmentsToday)} موعداً`}><button className="round-button" onClick={() => onNavigate("appointments")}><Icon name="arrow" size={16} /></button></PanelHeading>
-        <div className="today-progress"><div><span>نسبة الإنجاز</span><b>٦٧٪</b></div><div className="progress-track"><i style={{ width: "67%" }} /></div></div>
-        <div className="appointment-list">{displayedAppointments.length ? displayedAppointments.map((appointment, index) => <AppointmentRow key={appointment.id} appointment={appointment} index={index} />) : <div className="empty-state">لا توجد مواعيد لهذا اليوم.</div>}</div>
-        <button className="view-all" onClick={() => onNavigate("appointments")}>عرض كل المواعيد <Icon name="arrow" size={14} /></button>
-      </section>
-    </div>
-    <div className="secondary-grid">
-      <section className="panel demand-panel"><PanelHeading title="الأقسام الأكثر طلباً" subtitle="خلال آخر ٣٠ يوماً"><button className="dots">•••</button></PanelHeading><div className="demand-content"><div className="donut"><div><b>٣٨٤</b><span>موعد</span></div></div><ul><li><i className="dot dot-blue" />الباطنية <b>٣٨٪</b></li><li><i className="dot dot-amber" />الأطفال <b>٢٨٪</b></li><li><i className="dot dot-violet" />الأسنان <b>١٨٪</b></li><li><i className="dot dot-soft" />أقسام أخرى <b>١٦٪</b></li></ul></div></section>
-       <section className="panel patients-panel"><PanelHeading title={`${customerLabel} جدد`} subtitle={`آخر ملفات ${customerLabel}`}><button className="quiet-link" onClick={() => onNavigate("patients")}>عرض الكل <Icon name="arrow" size={13} /></button></PanelHeading><PatientTable patients={data?.patients || []} /></section>
-    </div>
-  </div>;
-}
-
-function PanelHeading({ title, subtitle, children }) {
-  return <div className="panel-heading"><div><h2>{title}</h2><p>{subtitle}</p></div>{children}</div>;
-}
-
-function WeekCalendar() {
-  const bookings = [["كشف باطني", "ليان محمد", "blue"], ["تحاليل مخبرية", "نور علي", "amber"], ["متابعة أطفال", "مها خالد", "mint"], ["أشعة سونار", "جود عبدالعزيز", "violet"], ["عيادة الأسنان", "ريم سعد", "blue"], ["كشف قلب", "هدى أحمد", "coral"], ["علاج طبيعي", "رنا يوسف", "mint"]];
-  return <div className="week-calendar"><div className="week-head"><span /><span>الأحد<small>١١</small></span><span>الإثنين<small>١٢</small></span><span className="today">الثلاثاء<small>١٣</small></span><span>الأربعاء<small>١٤</small></span><span>الخميس<small>١٥</small></span><span>الجمعة<small>١٦</small></span><span>السبت<small>١٧</small></span></div><div className="calendar-body"><div className="time-labels">{["٠٩:٠٠", "١٠:٠٠", "١١:٠٠", "١٢:٠٠", "٠١:٠٠", "٠٢:٠٠", "٠٣:٠٠"].map((time) => <span key={time}>{time}</span>)}</div>{Array.from({ length: 7 }, (_, index) => <div className={`day-column ${index === 2 ? "selected" : ""}`} key={index}>{bookings.filter((_, bookingIndex) => bookingIndex % 7 === index || (index === 0 && bookingIndex === 1)).map((booking, bookingIndex) => <span className={`booking booking-${booking[2]}`} style={{ top: `${12 + bookingIndex * 76}px` }} key={booking[0]}>{booking[0]}<small>{booking[1]}</small></span>)}</div>)}</div></div>;
-}
-
-function PatientTable({ patients }) {
-  const fallback = [{ name: "نور علي", joinedAt: "اليوم", lastVisit: "موعد أول" }, { name: "مها خالد", joinedAt: "أمس", lastVisit: "١٣ مايو ٢٠٢٥" }, { name: "غادة فهد", joinedAt: "١٢ مايو", lastVisit: "١٢ مايو ٢٠٢٥" }];
-  const list = patients.length ? patients.slice(0, 3) : fallback;
-  return <div className="patient-table"><div className="patient-row table-head"><span>المريض</span><span>تاريخ الانضمام</span><span>آخر زيارة</span></div>{list.map((patient, index) => <div className="patient-row" key={patient.id || patient.name}><div className="patient-name"><i className={`patient-dot dot-${index}`} /> <b>{patient.name}</b></div><span>{patient.joinedAt || "اليوم"}</span><span className={patient.lastVisit === "موعد أول" ? "tag" : ""}>{patient.lastVisit || "موعد أول"}</span></div>)}</div>;
-}
-
-function OperationsView({ view, data, onBack, onNewAppointment, profile, onProfileUpdated }) {
-  const basePage = navigation.find((item) => item.id === view);
-  const page = basePage ? { ...basePage, label: navigationLabel(basePage, profile) } : basePage;
-  const appointments = data?.appointments || [];
-  const patients = data?.patients || [];
-  const departments = data?.departments || [];
-  const doctors = data?.doctors || [];
-  const [search, setSearch] = useState("");
-  const filteredAppointments = useMemo(() => appointments.filter((appointment) => `${appointment.patientName} ${appointment.doctorName} ${appointment.departmentName}`.includes(search.trim())), [appointments, search]);
-  if (view === "calendar") return <section className="operations-page"><OperationsHeader page={page} subtitle="نظرة سريعة على توزيع المواعيد خلال الأسبوع." onBack={onBack} /><div className="calendar-summary">{["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"].map((day, index) => <div className={index === 3 ? "calendar-day active" : "calendar-day"} key={day}><span>{day}</span><b>{arabicDigits(index === 3 ? appointments.length : Math.max(1, appointments.length - index % 3))}</b><small>موعد</small></div>)}</div><section className="panel operations-panel"><PanelHeading title="مواعيد الأسبوع" subtitle="البيانات الحالية من مساحة العمل" /><div className="appointment-list">{appointments.map((appointment, index) => <AppointmentRow key={appointment.id} appointment={appointment} index={index} />)}</div></section></section>;
-  if (view === "appointments") return <section className="operations-page"><OperationsHeader page={page} subtitle="كل الحجوزات في مكان واحد مع بحث سريع." onBack={onBack} action={<button className="primary-button" onClick={onNewAppointment}><Icon name="plus" size={16} /> إضافة موعد</button>} /><section className="panel operations-panel"><div className="list-toolbar"><label className="search-field"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="ابحث باسم المريض أو الطبيب..." /></label><span className="result-count">{arabicDigits(filteredAppointments.length)} موعد</span></div>{filteredAppointments.length ? <div className="appointment-list">{filteredAppointments.map((appointment, index) => <AppointmentRow key={appointment.id} appointment={appointment} index={index} />)}</div> : <div className="empty-state large">لا توجد نتائج مطابقة للبحث.</div>}</section></section>;
-  if (view === "patients") return <section className="operations-page"><OperationsHeader page={page} subtitle="ملفات المرضى المرتبطة بالمواعيد الحالية." onBack={onBack} /><section className="panel operations-panel"><PanelHeading title="دليل المرضى" subtitle={`${arabicDigits(patients.length)} ملفات نشطة`} /><div className="directory-grid">{patients.map((patient, index) => <article className="directory-card" key={patient.id}><div className={`patient-avatar avatar-${index % 4}`}>{patient.name.charAt(0)}</div><div><b>{patient.name}</b><span>آخر زيارة: {patient.lastVisit || "غير محدد"}</span><small>انضم في {patient.joinedAt || "اليوم"}</small></div></article>)}</div></section></section>;
-  if (view === "services") return <section className="operations-page"><OperationsHeader page={page} subtitle="الأقسام والخدمات المتاحة للفريق الطبي." onBack={onBack} /><section className="directory-grid departments-grid">{departments.map((department) => <article className="panel directory-card" key={department.id}><div className="service-icon"><Icon name="layers" size={19} /></div><div><b>{department.name}</b><span>{department.defaultService}</span><small>مفعّل في مساحة العمل</small></div></article>)}</section></section>;
-  if (view === "team") return <section className="operations-page"><OperationsHeader page={page} subtitle="فريق الرعاية المرتبط بالأقسام الحالية." onBack={onBack} /><section className="directory-grid">{doctors.map((doctor, index) => <article className="panel directory-card" key={doctor.id}><div className={`doctor-avatar doctor-${index % 3}`}>{doctor.name.replace("د. ", "").charAt(0)}</div><div><b>{doctor.name}</b><span>{doctor.specialty}</span><small>متاح للحجز</small></div></article>)}</section></section>;
-  if (view === "reports") return <section className="operations-page"><OperationsHeader page={page} subtitle="ملخص مؤشرات التشغيل للفترة الحالية." onBack={onBack} /><div className="report-grid"><StatCard label="مواعيد اليوم" value={arabicDigits(data?.stats?.appointmentsToday || 0)} change="مستقر" note="حسب الجدول الحالي" tone="blue" icon="calendar" /><StatCard label="مرضى جدد" value={arabicDigits(data?.stats?.newPatients || 0)} change="متابعة" note="بيانات مساحة العمل" tone="amber" icon="users" /><StatCard label="فحوصات مكتملة" value={arabicDigits(data?.stats?.completedExams || 0)} change="نشط" note="هذا الشهر" tone="violet" icon="stethoscope" /></div><section className="panel report-note"><Icon name="chart" size={21} /><div><b>الأداء واضح وقابل للمتابعة</b><p>استخدم لوحة التحكم لمقارنة الأداء اليومي وتوزيع المواعيد على الأقسام.</p></div></section></section>;
-  return <section className="operations-page"><OperationsHeader page={page} subtitle="خصص اسم النشاط ونوعه وتسمياته." onBack={onBack} /><ProfileSettings profile={profile} onProfileUpdated={onProfileUpdated} /><section className="panel settings-list"><div><div><b>وضع التشغيل</b><span>متوافق مع PostgreSQL والوضع المحلي</span></div><strong className="setting-status">نشط</strong></div><div><div><b>التنبيهات</b><span>إشعارات الحجوزات الجديدة</span></div><button className="toggle active" aria-label="التنبيهات مفعلة"><i /></button></div></section></section>;
-}
-
-function ProfileSettings({ profile, onProfileUpdated }) {
-  const [draft, setDraft] = useState({ name: "", activityType: "medical", primaryColor: "#2474df", labels: {} });
-  const [templates, setTemplates] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  useEffect(() => { if (profile) setDraft({ name: profile.name || "", activityType: profile.activityType || "medical", primaryColor: profile.primaryColor || "#2474df", labels: profile.labels || {} }); }, [profile]);
-  useEffect(() => { api.get("/api/activity-templates").then((result) => setTemplates(result.templates || [])).catch(() => {}); }, []);
-  const updateLabel = (key, value) => setDraft((current) => ({ ...current, labels: { ...current.labels, [key]: value } }));
-  const save = async (event) => { event.preventDefault(); setBusy(true); setMessage(""); try { const result = await api.patch("/api/workspace-profile", draft); onProfileUpdated(result.profile); setMessage("تم حفظ تخصيص مساحة العمل"); } catch (error) { setMessage(error.message); } finally { setBusy(false); } };
-  return <form className="panel profile-form" onSubmit={save}><div className="profile-form-heading"><div><span className="section-kicker">هوية النشاط</span><h3>تخصيص مساحة العمل</h3><p>اختر القالب المناسب ثم عدّل التسميات حسب نشاطك.</p></div><button className="primary-button" disabled={busy}>{busy ? "جارٍ الحفظ..." : "حفظ التخصيص"}</button></div><div className="form-row"><label>اسم النشاط<input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="مثال: أكاديمية النخبة" required /></label><label>نوع النشاط<select value={draft.activityType} onChange={(event) => setDraft({ ...draft, activityType: event.target.value })}>{templates.map((template) => <option key={template.activity_type} value={template.activity_type}>{template.display_name}</option>)}</select></label></div><div className="form-row"><label>لون الهوية<input type="color" value={draft.primaryColor} onChange={(event) => setDraft({ ...draft, primaryColor: event.target.value })} /></label><label>تسمية العملاء<input value={draft.labels.customer || ""} onChange={(event) => updateLabel("customer", event.target.value)} placeholder="الطلاب / العملاء / المرضى" /></label></div><div className="form-row"><label>تسمية الفريق<input value={draft.labels.staff || ""} onChange={(event) => updateLabel("staff", event.target.value)} placeholder="المدربين / المشرفين / الأطباء" /></label><label>تسمية الحجوزات<input value={draft.labels.appointment || ""} onChange={(event) => updateLabel("appointment", event.target.value)} placeholder="الحصص / الحجوزات / المواعيد" /></label></div>{message && <small className="form-message">{message}</small>}</form>;
-}
-
-function OperationsHeader({ page, subtitle, onBack, action }) {
-  return <div className="operations-header"><div><span className="section-kicker">إدارة مساحة العمل</span><h2>{page?.label}</h2><p>{subtitle}</p></div><div className="placeholder-actions">{action}<button className="secondary-button" onClick={onBack}><Icon name="arrow" size={14} /> لوحة التحكم</button></div></div>;
-}
-
-function AppointmentModal({ open, onClose, onCreated, departments, doctors }) {
-  const [form, setForm] = useState({ patientName: "", departmentId: departments[0]?.id || "", doctorId: doctors[0]?.id || "", date: DASHBOARD_DATE, time: "09:00" });
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (departments[0] && !form.departmentId) setForm((current) => ({ ...current, departmentId: departments[0].id })); if (doctors[0] && !form.doctorId) setForm((current) => ({ ...current, doctorId: doctors[0].id })); }, [departments, doctors, form.departmentId, form.doctorId]);
+function Drawer({ title, open, onClose, children }) {
   if (!open) return null;
-  const update = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
-  const submit = async (event) => { event.preventDefault(); setBusy(true); try { await api.post("/api/appointments", form); onCreated(); onClose(); setForm((current) => ({ ...current, patientName: "" })); } catch (error) { onCreated(error.message); } finally { setBusy(false); } };
-  return <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="appointment-title"><button className="modal-close" onClick={onClose} aria-label="إغلاق"><Icon name="close" size={17} /></button><span className="section-kicker">تنظيم موعد جديد</span><h2 id="appointment-title">أضف موعداً إلى جدول اليوم</h2><p>سيظهر الموعد فوراً لفريق التشغيل بعد الحفظ.</p><form onSubmit={submit}><label>اسم المريض<input name="patientName" value={form.patientName} onChange={update} placeholder="مثال: أحمد محمد" required /></label><div className="form-row"><label>القسم<select name="departmentId" value={form.departmentId} onChange={update}>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label><label>الطبيب<select name="doctorId" value={form.doctorId} onChange={update}>{doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.name}</option>)}</select></label></div><div className="form-row"><label>التاريخ<input type="date" name="date" value={form.date} onChange={update} required /></label><label>الوقت<input type="time" name="time" value={form.time} onChange={update} required /></label></div><button className="primary-button form-submit" disabled={busy}>{busy ? "جارٍ الحفظ..." : "حفظ الموعد"} <Icon name="arrow" size={15} /></button></form></section></div>;
+  return (
+    <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <aside className="drawer-panel" role="dialog" aria-modal="true">
+        <header><h3>{title}</h3><button type="button" onClick={onClose} aria-label="close">✕</button></header>
+        {children}
+      </aside>
+    </div>
+  );
+}
+
+function CalendarViewProxy(props) {
+  return <CalendarView {...props} Drawer={Drawer} />;
+}
+
+function CustomersView({ ops, reload, locale }) {
+  const [search, setSearch] = useState("");
+  const [categoryId, setCategoryId] = useState("all");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", categoryId: "cat-new" });
+  const customers = useMemo(() => {
+    const list = ops?.customers || [];
+    const q = search.trim().toLowerCase();
+    return list.filter((customer) => {
+      const hay = `${customer.firstName} ${customer.lastName} ${customer.phone} ${customer.email}`.toLowerCase();
+      return (!q || hay.includes(q)) && (categoryId === "all" || customer.categoryId === categoryId);
+    });
+  }, [ops, search, categoryId]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    await api.post("/api/ops/customers", form);
+    setOpen(false);
+    setForm({ firstName: "", lastName: "", phone: "", email: "", categoryId: "cat-new" });
+    reload();
+  };
+
+  return (
+    <section className="ops-page">
+      <div className="ops-header">
+        <div><h1>{t(locale, "customers")}</h1><p>إدارة علاقات العملاء والفئات</p></div>
+        <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ {t(locale, "add")}</button>
+      </div>
+      <div className="toolbar">
+        <input placeholder={t(locale, "search")} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="chips">
+          <button type="button" className={categoryId === "all" ? "chip active" : "chip"} onClick={() => setCategoryId("all")}>الكل</button>
+          {(ops?.customerCategories || []).map((category) => (
+            <button key={category.id} type="button" className={categoryId === category.id ? "chip active" : "chip"} onClick={() => setCategoryId(category.id)}>{category.name}</button>
+          ))}
+        </div>
+      </div>
+      <div className="data-table panel">
+        {customers.map((customer) => (
+          <div className="table-row" key={customer.id}>
+            <div className="avatar">{customer.firstName.charAt(0)}</div>
+            <div><b>{customer.firstName} {customer.lastName}</b><small>{(ops?.customerCategories || []).find((c) => c.id === customer.categoryId)?.name}</small></div>
+            <span>{customer.phone || "—"}</span>
+            <span>{customer.email || "—"}</span>
+          </div>
+        ))}
+        {!customers.length && <div className="empty-state">{t(locale, "empty")}</div>}
+      </div>
+      <Drawer title="إضافة عميل" open={open} onClose={() => setOpen(false)}>
+        <form className="stack-form" onSubmit={submit}>
+          <label>الاسم الأول<input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></label>
+          <label>اللقب<input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></label>
+          <label>الهاتف<input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+          <label>البريد<input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+          <label>الفئة<select value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+            {(ops?.customerCategories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select></label>
+          <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
+        </form>
+      </Drawer>
+    </section>
+  );
+}
+
+function StaffView({ ops, reload, locale }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", title: "" });
+  const submit = async (event) => {
+    event.preventDefault();
+    await api.post("/api/ops/staff", form);
+    setOpen(false);
+    setForm({ name: "", title: "" });
+    reload();
+  };
+  return (
+    <section className="ops-page">
+      <div className="ops-header">
+        <div><h1>{t(locale, "staff")}</h1><p>الموظفون ومقدمو الخدمات</p></div>
+        <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ إضافة موظف</button>
+      </div>
+      <div className="data-table panel">
+        {(ops?.staff || []).map((person) => (
+          <div className="table-row" key={person.id}>
+            <div className="avatar">{person.name.charAt(0)}</div>
+            <div><b>{person.name}</b><small>{person.title}</small></div>
+            <span>{person.servicesCount || 0} خدمات</span>
+            <button type="button" className="danger-button" onClick={async () => { await api.del(`/api/ops/staff/${person.id}`); reload(); }}>حذف</button>
+          </div>
+        ))}
+      </div>
+      <Drawer title="إضافة موظف" open={open} onClose={() => setOpen(false)}>
+        <form className="stack-form" onSubmit={submit}>
+          <label>الاسم<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label>المهنة<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+          <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
+        </form>
+      </Drawer>
+    </section>
+  );
+}
+
+function ServicesView({ ops, reload, locale }) {
+  const [categoryId, setCategoryId] = useState(ops?.serviceCategories?.[0]?.id || "");
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", categoryId: "", durationMinutes: 30, bufferMinutes: 0, price: 0, providerId: "", publicBooking: true, autoAccept: true });
+  useEffect(() => {
+    if (!categoryId && ops?.serviceCategories?.[0]) setCategoryId(ops.serviceCategories[0].id);
+  }, [ops, categoryId]);
+  const services = (ops?.services || []).filter((service) => !categoryId || service.categoryId === categoryId);
+  const submit = async (event) => {
+    event.preventDefault();
+    await api.post("/api/ops/services", { ...form, categoryId: form.categoryId || categoryId });
+    setOpen(false);
+    reload();
+  };
+  return (
+    <section className="ops-page">
+      <div className="ops-header">
+        <div><h1>{t(locale, "services")}</h1><p>فئات الخدمات والتسعير والمدة</p></div>
+        <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ إضافة خدمة</button>
+      </div>
+      <div className="split-panels">
+        <aside className="panel category-list">
+          <div className="panel-head"><b>فئة الخدمة</b><button type="button" onClick={async () => {
+            const name = window.prompt("اسم الفئة");
+            if (name) { await api.post("/api/ops/service-categories", { name }); reload(); }
+          }}>+ إضافة</button></div>
+          {(ops?.serviceCategories || []).map((category) => (
+            <button key={category.id} type="button" className={categoryId === category.id ? "cat active" : "cat"} onClick={() => setCategoryId(category.id)}>{category.name}</button>
+          ))}
+        </aside>
+        <div className="panel service-list">
+          {services.map((service) => (
+            <div className="table-row" key={service.id}>
+              <div><b>{service.name}</b><small>{service.durationMinutes} د · تأخير {service.bufferMinutes} د</small></div>
+              <span>E£{service.price}</span>
+              <button type="button" className="danger-button" onClick={async () => { await api.del(`/api/ops/services/${service.id}`); reload(); }}>حذف</button>
+            </div>
+          ))}
+          {!services.length && <div className="empty-state">{t(locale, "empty")}</div>}
+        </div>
+      </div>
+      <Drawer title="إضافة خدمة" open={open} onClose={() => setOpen(false)}>
+        <form className="stack-form" onSubmit={submit}>
+          <label>الاسم<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label>الفئة<select value={form.categoryId || categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+            {(ops?.serviceCategories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select></label>
+          <label>مقدم الخدمة<select value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })}>
+            <option value="">—</option>
+            {(ops?.staff || []).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+          </select></label>
+          <div className="form-row">
+            <label>المدة (د)<input type="number" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })} /></label>
+            <label>وقت التأخير<input type="number" value={form.bufferMinutes} onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })} /></label>
+          </div>
+          <label>السعر<input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></label>
+          <label className="check"><input type="checkbox" checked={form.publicBooking} onChange={(e) => setForm({ ...form, publicBooking: e.target.checked })} /> عرض على صفحة الحجز</label>
+          <label className="check"><input type="checkbox" checked={form.autoAccept} onChange={(e) => setForm({ ...form, autoAccept: e.target.checked })} /> قبول تلقائي</label>
+          <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
+        </form>
+      </Drawer>
+    </section>
+  );
+}
+
+function ScheduleView({ ops, reload, locale }) {
+  const [tab, setTab] = useState("general");
+  const [days, setDays] = useState(ops?.schedule?.general || []);
+  useEffect(() => { setDays(ops?.schedule?.general || []); }, [ops]);
+  const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  const save = async () => {
+    await api.put("/api/ops/working-hours", { days });
+    reload();
+  };
+  return (
+    <section className="ops-page">
+      <div className="ops-header"><div><h1>{t(locale, "schedule")}</h1><p>ساعات العمل والأيام المغلقة</p></div>{tab === "general" && <button className="primary-button" type="button" onClick={save}>{t(locale, "save")}</button>}</div>
+      <div className="tabs">
+        {[["general", "عام"], ["closed", "الأيام المغلقة"], ["specific", "أيام محددة"]].map(([id, label]) => (
+          <button key={id} type="button" className={tab === id ? "tab active" : "tab"} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
+      {tab === "general" && (
+        <div className="panel schedule-table">
+          {days.map((day, index) => (
+            <div className="schedule-row" key={day.weekday}>
+              <b>{dayNames[index]}</b>
+              <label className="switch"><input type="checkbox" checked={day.isOpen} onChange={(e) => setDays((current) => current.map((item, i) => i === index ? { ...item, isOpen: e.target.checked } : item))} /><i /></label>
+              <input type="time" value={day.opensAt} disabled={!day.isOpen} onChange={(e) => setDays((current) => current.map((item, i) => i === index ? { ...item, opensAt: e.target.value } : item))} />
+              <input type="time" value={day.closesAt} disabled={!day.isOpen} onChange={(e) => setDays((current) => current.map((item, i) => i === index ? { ...item, closesAt: e.target.value } : item))} />
+            </div>
+          ))}
+        </div>
+      )}
+      {tab === "closed" && (
+        <div className="panel">
+          <button className="primary-button" type="button" onClick={async () => {
+            const startDate = window.prompt("تاريخ البدء YYYY-MM-DD");
+            if (!startDate) return;
+            await api.post("/api/ops/closed-days", { startDate, endDate: startDate, description: window.prompt("الوصف") || "" });
+            reload();
+          }}>+ إضافة أيام مغلقة</button>
+          {(ops?.schedule?.closedDays || []).map((item) => <div key={item.id} className="table-row"><b>{item.startDate}</b><span>{item.description || "—"}</span></div>)}
+        </div>
+      )}
+      {tab === "specific" && (
+        <div className="panel">
+          <button className="primary-button" type="button" onClick={async () => {
+            const title = window.prompt("العنوان");
+            const startDate = window.prompt("من تاريخ YYYY-MM-DD");
+            if (!title || !startDate) return;
+            await api.post("/api/ops/specific-days", { title, startDate, endDate: startDate, opensAt: "08:00", closesAt: "16:00" });
+            reload();
+          }}>+ إضافة أيام محددة</button>
+          {(ops?.schedule?.specificDays || []).map((item) => <div key={item.id} className="table-row"><b>{item.title}</b><span>{item.startDate} · {item.opensAt}-{item.closesAt}</span></div>)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function BookingPageView({ ops, reload, locale }) {
+  const page = ops?.bookingPage || {};
+  const [draft, setDraft] = useState(page);
+  useEffect(() => setDraft(page), [ops]);
+  const save = async (event) => {
+    event.preventDefault();
+    await api.put("/api/ops/booking-page", draft);
+    reload();
+  };
+  return (
+    <section className="ops-page">
+      <div className="ops-header"><div><h1>{t(locale, "bookingPage")}</h1><p>هوية صفحة الحجز العامة</p></div></div>
+      <form className="panel booking-form" onSubmit={save}>
+        <label className="switch-line"><span>تفعيل الحجز عبر الإنترنت</span><input type="checkbox" checked={!!draft.onlineBookingEnabled} onChange={(e) => setDraft({ ...draft, onlineBookingEnabled: e.target.checked })} /></label>
+        <label>اسم العمل<input value={draft.businessName || ""} onChange={(e) => setDraft({ ...draft, businessName: e.target.value })} /></label>
+        <label>الرابط /slug<input value={draft.slug || ""} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} /></label>
+        <div className="form-row">
+          <label>البريد<input value={draft.email || ""} onChange={(e) => setDraft({ ...draft, email: e.target.value })} /></label>
+          <label>الهاتف<input value={draft.phone || ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /></label>
+        </div>
+        <label>الوصف<textarea value={draft.description || ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></label>
+        <p className="muted">الرابط العام: <a href={`/book.html?slug=${draft.slug}`} target="_blank" rel="noreferrer">/book.html?slug={draft.slug}</a></p>
+        <button className="primary-button" type="submit">{t(locale, "save")}</button>
+      </form>
+    </section>
+  );
+}
+
+function StatsView({ ops, locale }) {
+  const stats = ops?.stats || {};
+  return (
+    <section className="ops-page">
+      <div className="ops-header"><div><h1>{t(locale, "stats")}</h1><p>ملخص الأداء الأساسي</p></div></div>
+      <div className="stats-cards">
+        <article className="panel"><span>مكتمل / مؤكد</span><b>{stats.appointments?.completedCount || 0}</b></article>
+        <article className="panel"><span>ملغى</span><b>{stats.appointments?.cancelledCount || 0}</b></article>
+        <article className="panel"><span>إجمالي المواعيد</span><b>{stats.appointments?.totalCount || 0}</b></article>
+        <article className="panel"><span>العملاء</span><b>{stats.customersCount || 0}</b></article>
+        <article className="panel"><span>الخدمات</span><b>{stats.servicesCount || 0}</b></article>
+        <article className="panel"><span>المصروفات</span><b>E£{stats.expensesTotal || 0}</b></article>
+      </div>
+    </section>
+  );
+}
+
+function ExpensesView({ ops, reload, locale }) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", amount: 0, category: "rent", date: new Date().toISOString().slice(0, 10), description: "", recurrence: "none" });
+  const submit = async (event) => {
+    event.preventDefault();
+    await api.post("/api/ops/expenses", form);
+    setOpen(false);
+    reload();
+  };
+  return (
+    <section className="ops-page">
+      <div className="ops-header"><div><h1>{t(locale, "expenses")}</h1><p>تتبع المصروفات</p></div><button className="primary-button" type="button" onClick={() => setOpen(true)}>+ إضافة مصروف</button></div>
+      <div className="panel">
+        {(ops?.expenses || []).map((expense) => <div key={expense.id} className="table-row"><b>{expense.name}</b><span>{expense.category}</span><span>E£{expense.amount}</span><span>{expense.date}</span></div>)}
+        {!(ops?.expenses || []).length && <div className="empty-state">{t(locale, "empty")}</div>}
+      </div>
+      <Drawer title="إضافة مصروف" open={open} onClose={() => setOpen(false)}>
+        <form className="stack-form" onSubmit={submit}>
+          <label>الاسم<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <label>المبلغ<input type="number" required value={form.amount} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} /></label>
+          <label>الفئة<select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+            <option value="rent">إيجار</option><option value="bills">فواتير</option><option value="supplies">لوازم</option><option value="general">عام</option>
+          </select></label>
+          <label>التاريخ<input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
+          <label>الوصف<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+          <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
+        </form>
+      </Drawer>
+    </section>
+  );
+}
+
+function PlaceholderView({ title, body }) {
+  return <section className="ops-page"><div className="ops-header"><div><h1>{title}</h1><p>{body}</p></div></div><div className="panel empty-state growth-note">متاح في مرحلة النمو — الواجهة جاهزة والقفل مفعّل للخطة المجانية.</div></section>;
+}
+
+function NotificationsView({ ops, reload, locale }) {
+  const [draft, setDraft] = useState(ops?.notifications || {});
+  useEffect(() => setDraft(ops?.notifications || {}), [ops]);
+  const save = async () => {
+    await api.put("/api/ops/notifications", draft);
+    reload();
+  };
+  return (
+    <section className="ops-page">
+      <div className="ops-header"><div><h1>{t(locale, "notifications")}</h1><p>البريد مجاني · المراسلة Pro</p></div><button className="primary-button" type="button" onClick={save}>{t(locale, "save")}</button></div>
+      <div className="notif-grid">
+        <article className="panel">
+          <h3>البريد الإلكتروني</h3>
+          {Object.entries(draft.email || {}).map(([key, value]) => (
+            <label key={key} className="check"><input type="checkbox" checked={!!value} onChange={(e) => setDraft({ ...draft, email: { ...draft.email, [key]: e.target.checked } })} /> {key}</label>
+          ))}
+        </article>
+        <article className="panel locked">
+          <h3>واتساب / SMS <span className="pro-badge">Pro</span></h3>
+          <p className="muted">مقفلة في الخطة المجانية</p>
+        </article>
+        <article className="panel">
+          <h3>تذكير يومي</h3>
+          <label className="check"><input type="checkbox" checked={!!draft.pushDailyReminder} onChange={(e) => setDraft({ ...draft, pushDailyReminder: e.target.checked })} /> تفعيل</label>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function PreferencesView({ ops, reload, locale }) {
+  const [draft, setDraft] = useState(ops?.calendarPreferences || {});
+  useEffect(() => setDraft(ops?.calendarPreferences || {}), [ops]);
+  return (
+    <section className="ops-page">
+      <div className="ops-header"><div><h1>{t(locale, "preferences")}</h1><p>عرض التقويم</p></div>
+        <button className="primary-button" type="button" onClick={async () => { await api.put("/api/ops/calendar-preferences", draft); reload(); }}>{t(locale, "save")}</button>
+      </div>
+      <div className="panel stack-form">
+        <label className="check"><input type="checkbox" checked={!!draft.showBusinessHoursOnly} onChange={(e) => setDraft({ ...draft, showBusinessHoursOnly: e.target.checked })} /> إظهار ساعات العمل فقط</label>
+        <label className="check"><input type="checkbox" checked={!!draft.multiServiceEnabled} onChange={(e) => setDraft({ ...draft, multiServiceEnabled: e.target.checked })} /> تفعيل خدمات متعددة</label>
+        <label>ألوان المواعيد<select value={draft.appointmentColorMode || "service"} onChange={(e) => setDraft({ ...draft, appointmentColorMode: e.target.value })}>
+          <option value="service">حسب لون الخدمة</option>
+          <option value="status">حسب الحالة</option>
+        </select></label>
+      </div>
+    </section>
+  );
 }
 
 function App() {
-  const [activeView, setActiveView] = useState("dashboard");
-  const [collapsed, setCollapsed] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [locale, setLocale] = useState(localStorage.getItem("maw3ed.locale") || "ar");
+  const [view, setView] = useState("calendar");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const { ops, error, isPending, reload } = useOpsBootstrap();
+  const { appointments, reload: reloadAppointments } = useAppointments();
   const [profile, setProfile] = useState(null);
-  const { data, error, isPending, reload } = useDashboardData(DASHBOARD_DATE);
-  const departments = data?.departments || [];
-  const doctors = data?.doctors || [];
-  const notify = useCallback((title, message) => { setToast({ title, message }); window.setTimeout(() => setToast(null), 3600); }, []);
-  const navigate = useCallback((view) => { setActiveView(view); if (view !== "dashboard") window.scrollTo({ top: 0, behavior: "smooth" }); }, []);
-  const onCreated = useCallback((message) => { if (message) notify("تعذر حفظ الموعد", message); else { notify("تم حفظ الموعد", "تمت إضافة الموعد إلى جدول اليوم."); reload(); } }, [notify, reload]);
-  useEffect(() => { api.get("/api/workspace-profile").then((result) => setProfile(result.profile)).catch(() => {}); }, []);
-  return <div className="app-shell">
-    <Sidebar activeView={activeView} onNavigate={navigate} collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} profile={profile} />
-    <main className="main-content"><Header activeView={activeView} profile={profile} onVerify={() => notify("توثيق البريد", "هذه الخطوة جاهزة للربط مع إعدادات الحساب.")} onNotify={() => notify("لا توجد إشعارات جديدة", "كل شيء محدث حتى الآن.")} onToggleSidebar={() => setCollapsed((value) => !value)} /><div className="page-wrap">
-      {error && <div className="error-banner">تعذر تحميل البيانات: {error}<button onClick={reload}>إعادة المحاولة</button></div>}
-      <Suspense fallback={<div className="loading-state">جارٍ تجهيز مساحة العمل...</div>}>{activeView === "dashboard" ? <Dashboard data={data} profile={profile} isPending={isPending} onNewAppointment={() => setModalOpen(true)} onNavigate={navigate} /> : <OperationsView view={activeView} data={data} profile={profile} onProfileUpdated={setProfile} onBack={() => navigate("dashboard")} onNewAppointment={() => setModalOpen(true)} />}</Suspense>
-    </div><footer className="site-footer"><span>© 2026 UpNexa-eg.com</span><b>موعد Maw3ed</b><span>جميع الحقوق محفوظة</span></footer></main>
-    <AppointmentModal open={modalOpen} onClose={() => setModalOpen(false)} onCreated={onCreated} departments={departments} doctors={doctors} />
-    {toast && <div className="toast" role="status"><span>✓</span><div><b>{toast.title}</b><small>{toast.message}</small></div></div>}
-  </div>;
+
+  useEffect(() => {
+    applyDocumentLocale(locale);
+    localStorage.setItem("maw3ed.locale", locale);
+  }, [locale]);
+
+  useEffect(() => {
+    api.get("/api/workspace-profile").then((result) => setProfile(result.profile)).catch(() => {});
+  }, []);
+
+  const navigate = (id) => {
+    if (id === "more") {
+      setMoreOpen((value) => !value);
+      return;
+    }
+    setView(id);
+    setMoreOpen(false);
+  };
+
+  const content = (() => {
+    if (!ops && isPending) return <div className="loading-state">{t(locale, "loading")}</div>;
+    switch (view) {
+      case "calendar": return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={() => { reloadAppointments(); reload(); }} />;
+      case "customers": return <CustomersView ops={ops} reload={reload} locale={locale} />;
+      case "staff": return <StaffView ops={ops} reload={reload} locale={locale} />;
+      case "services": return <ServicesView ops={ops} reload={reload} locale={locale} />;
+      case "schedule": return <ScheduleView ops={ops} reload={reload} locale={locale} />;
+      case "bookingPage": return <BookingPageView ops={ops} reload={reload} locale={locale} />;
+      case "stats": return <StatsView ops={ops} locale={locale} />;
+      case "expenses": return <ExpensesView ops={ops} reload={reload} locale={locale} />;
+      case "notifications": return <NotificationsView ops={ops} reload={reload} locale={locale} />;
+      case "preferences": return <PreferencesView ops={ops} reload={reload} locale={locale} />;
+      case "payments": return <PlaceholderView title={t(locale, "payments")} body="بوابة الدفع الإلكتروني (Stripe) — مرحلة النمو" />;
+      case "marketing": return <PlaceholderView title={t(locale, "marketing")} body="الخصومات والولاء — مرحلة النمو / Pro" />;
+      case "integrations": return <PlaceholderView title={t(locale, "integrations")} body="Google Calendar و Stripe — مرحلة النمو" />;
+      default: return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={reloadAppointments} />;
+    }
+  })();
+
+  return (
+    <div className={`ops-shell ${isPending ? "is-pending" : ""}`}>
+      <aside className="ops-sidebar">
+        <div className="ops-brand">
+          <img src="/assets/maw3ed-icon.svg" alt="" />
+          <div><strong>{t(locale, "brand")}</strong><span>{t(locale, "tagline")}</span></div>
+        </div>
+        <div className="workspace-pill">
+          <b>{profile?.name || ops?.bookingPage?.businessName || "مساحة موعد"}</b>
+          <span>{profile?.activityDisplayName || "مساحة عمل"}</span>
+        </div>
+        <nav className="ops-nav">
+          {NAV.map((item) => (
+            <button key={item.id} type="button" className={view === item.id ? "nav-item active" : "nav-item"} onClick={() => navigate(item.id)}>
+              <span className="nav-ico" aria-hidden="true">{item.mark}</span>
+              <span>{t(locale, item.id)}</span>
+              {item.badge && <i className="new-badge">{item.badge}</i>}
+              {item.growth && <i className="lock-dot" title="Growth" />}
+            </button>
+          ))}
+        </nav>
+        <div className="ops-sidebar-foot">
+          <label className="locale-select">
+            <span>اللغة</span>
+            <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+              {LOCALES.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+            </select>
+          </label>
+          <div className="user-chip"><b>مستخدم موعد</b><span>{t(locale, "free")}</span></div>
+        </div>
+      </aside>
+      <main className="ops-main">
+        {error && <div className="error-banner">{error}<button type="button" onClick={reload}>إعادة</button></div>}
+        <Suspense fallback={<div className="loading-state">{t(locale, "loading")}</div>}>{content}</Suspense>
+        <footer className="ops-footer">{t(locale, "poweredBy")}</footer>
+      </main>
+      <nav className="mobile-bottom-nav" aria-label="mobile">
+        {MOBILE_NAV.map((id) => (
+          <button key={id} type="button" className={(id === "more" ? moreOpen : view === id) ? "active" : ""} onClick={() => navigate(id)}>
+            <span>{id === "more" ? "•••" : NAV.find((item) => item.id === id)?.mark}</span>
+            <small>{id === "more" ? "المزيد" : t(locale, id)}</small>
+          </button>
+        ))}
+      </nav>
+      {moreOpen && (
+        <div className="more-sheet">
+          {NAV.filter((item) => !MOBILE_NAV.includes(item.id)).map((item) => (
+            <button key={item.id} type="button" onClick={() => navigate(item.id)}>{t(locale, item.id)}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 createRoot(document.getElementById("root")).render(<App />);
