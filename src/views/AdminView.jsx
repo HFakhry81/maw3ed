@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../../api/client';
+import { api } from '../api/client';
 
 export default function AdminView({ onShowToast }) {
   const [overview, setOverview] = useState(null);

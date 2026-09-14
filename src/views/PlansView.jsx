@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, trackEvent } from '../../api/client';
+import { api, trackEvent } from "../api/client";
 
 const featureLabels = {
   public_booking: 'صفحة حجز عامة للمرضى',
