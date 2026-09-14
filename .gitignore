@@ -1,0 +1,8 @@
+node_modules/
+.yarn/
+.env
+data/maw3ed-ops.json
+data/email-outbox.jsonl
+data/development-events.jsonl
+*.log
+.DS_Store

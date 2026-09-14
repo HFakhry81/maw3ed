@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1a6deb" />
+    <title>حجز موعد — Maw3ed</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/maw3ed-icon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet" />
+    <style>
+      body { margin: 0; font-family: Cairo, "IBM Plex Sans Arabic", Tahoma, sans-serif; background: linear-gradient(180deg, #eaf2ff, #f6f8fb); color: #13233f; }
+      .book-wrap { max-width: 720px; margin: 0 auto; padding: 28px 16px 48px; }
+      .hero { display: grid; gap: 8px; margin-bottom: 18px; }
+      .hero h1 { margin: 0; font-size: clamp(1.8rem, 4vw, 2.4rem); letter-spacing: -0.04em; }
+      .card { background: #fff; border: 1px solid #e7edf5; border-radius: 16px; padding: 16px; box-shadow: 0 10px 30px rgba(19,52,100,.06); margin-bottom: 12px; }
+      .svc { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid #eef2f7; }
+      .svc:last-child { border-bottom: 0; }
+      button.cta { border: 0; border-radius: 12px; padding: 12px 16px; background: linear-gradient(120deg,#0d4bb8,#1a6deb); color:#fff; font-weight:800; cursor:pointer; }
+      .foot { margin-top: 18px; color: #7b889e; font-size: .85rem; }
+    </style>
+  </head>
+  <body>
+    <div class="book-wrap" id="app">جارٍ تحميل صفحة الحجز...</div>
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const slug = params.get("slug") || "maw3ed-demo";
+      const root = document.getElementById("app");
+      try {
+        const response = await fetch(`/api/public/booking/${encodeURIComponent(slug)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "تعذر التحميل");
+        const page = data.page;
+        root.innerHTML = `
+          <section class="hero">
+            <div class="eyebrow" style="color:#1a6deb;font-weight:700">${page.industry || "خدمة"}</div>
+            <h1>${page.businessName}</h1>
+            <p>${page.description || ""}</p>
+            <div>${page.phone || ""} · ${page.email || ""}</div>
+          </section>
+          <section class="card">
+            <h2 style="margin-top:0">الخدمات المتاحة</h2>
+            ${(data.services || []).map((service) => `
+              <div class="svc">
+                <div><b>${service.name}</b><div style="color:#7b889e;font-size:.85rem">${service.durationMinutes} دقيقة</div></div>
+                <div><b>E£${service.price}</b></div>
+              </div>
+            `).join("") || "<p>لا توجد خدمات عامة حالياً.</p>"}
+          </section>
+          <button class="cta" id="bookBtn">إنشاء موعد</button>
+          <p class="foot">${page.showPlatformBranding ? "مدعوم من موعد · UpNexa-eg.com" : ""}</p>
+        `;
+        document.getElementById("bookBtn")?.addEventListener("click", async () => {
+          const patientName = prompt("اسمك الكامل");
+          if (!patientName) return;
+          const date = prompt("التاريخ YYYY-MM-DD", new Date().toISOString().slice(0, 10));
+          const time = prompt("الوقت HH:MM", "10:00");
+          if (!date || !time) return;
+          const result = await fetch("/api/appointments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ patientName, date, time, doctorId: "dr-sarah", departmentId: "outpatient" })
+          });
+          const payload = await result.json();
+          alert(result.ok ? "تم إنشاء الموعد بنجاح" : (payload.error || "فشل الحجز"));
+        });
+      } catch (error) {
+        root.textContent = error.message;
+      }
+    </script>
+  </body>
+</html>

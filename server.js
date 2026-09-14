@@ -6,6 +6,7 @@ const { query, pool, databaseConfigured } = require("./db");
 const { sendVerificationEmail, sendSubscriptionRequestEmail } = require("./email");
 const { createClerkClient, verifyToken } = require("@clerk/backend");
 const { whopRequest } = require("./whopClient");
+const { tryHandleOpsApi } = require("./opsRoutes");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 7000);
@@ -892,6 +893,17 @@ const server = http.createServer(async (req, res) => {
     if (requested === "/api/development-events" && req.method === "GET") {
       return sendJson(res, 200, { ok: true, events: await readEventLog(Math.min(Math.max(Number(requestUrl.searchParams.get("limit")) || 50, 1), 200)) });
     }
+
+    const opsHandled = await tryHandleOpsApi({
+      requested,
+      req,
+      res,
+      requestUrl,
+      sendJson,
+      parseJsonBody,
+      localData
+    });
+    if (opsHandled) return;
 
     const staticRoot = fs.existsSync(path.join(root, "dist", "index.html")) ? path.join(root, "dist") : root;
     const relative = requested === "/" ? "/index.html" : requested;
