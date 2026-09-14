@@ -8,6 +8,30 @@ function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
 }
 
+const MEDICAL_DEPARTMENTS = [
+  { id: "dept-outpatient", name: "العيادات الخارجية" },
+  { id: "dept-internal", name: "الباطنية" },
+  { id: "dept-pediatrics", name: "الأطفال" },
+  { id: "dept-obgyn", name: "النساء والولادة" },
+  { id: "dept-dental", name: "الأسنان" },
+  { id: "dept-radiology", name: "الأشعة" },
+  { id: "dept-lab", name: "المختبر" },
+  { id: "dept-dermatology", name: "الجلدية" },
+  { id: "dept-ophthalmology", name: "العيون" },
+  { id: "dept-cardiology", name: "القلب" },
+  { id: "dept-orthopedics", name: "العظام" },
+  { id: "dept-ent", name: "الأنف والأذن" },
+  { id: "dept-er", name: "الطوارئ" },
+  { id: "dept-physio", name: "العلاج الطبيعي" },
+  { id: "dept-pharmacy", name: "الصيدلية" }
+];
+
+const PLAN_LIMITS = {
+  free: { staff: 2, services: 10, appointmentsPerMonth: 100 },
+  pro: { staff: 10, services: Infinity, appointmentsPerMonth: Infinity },
+  business: { staff: Infinity, services: Infinity, appointmentsPerMonth: Infinity }
+};
+
 function defaultStore() {
   return {
     customerCategories: [
@@ -21,18 +45,18 @@ function defaultStore() {
     ],
     staff: [
       { id: "staff-hf", name: "هيثم فخري", title: "مشرف حجز", active: true },
-      { id: "staff-rec", name: "أحمد استقبال", title: "Reception", active: true },
-      { id: "staff-lab", name: "منى معمل", title: "أخصائي معمل", active: true }
+      { id: "staff-rec", name: "أحمد استقبال", title: "Reception", active: true }
     ],
-    serviceCategories: [
-      { id: "svc-cat-er", name: "قسم الطوارئ", sort: 0 },
-      { id: "svc-cat-lab", name: "المعمل والتحاليل الطبية", sort: 1 },
-      { id: "svc-cat-ped", name: "عيادة الأطفال", sort: 2 }
-    ],
+    serviceCategories: MEDICAL_DEPARTMENTS.map((department, sort) => ({
+      id: department.id,
+      name: department.name,
+      sort,
+      enabled: true
+    })),
     services: [
       {
         id: "svc-1",
-        categoryId: "svc-cat-er",
+        categoryId: "dept-er",
         name: "كشف أخصائي",
         durationMinutes: 30,
         bufferMinutes: 30,
@@ -47,7 +71,7 @@ function defaultStore() {
       },
       {
         id: "svc-2",
-        categoryId: "svc-cat-er",
+        categoryId: "dept-er",
         name: "تذكرة دخول طوارئ",
         durationMinutes: 30,
         bufferMinutes: 15,
@@ -103,6 +127,8 @@ function defaultStore() {
     },
     expenses: [],
     appointments: [],
+    activityMode: "medical",
+    medicalDepartments: MEDICAL_DEPARTMENTS.map((department) => ({ ...department, enabled: true })),
     planKey: "free"
   };
 }
@@ -187,7 +213,83 @@ function listStaff({ search = "" } = {}) {
     }));
 }
 
+
+function getPlanLimits() {
+  return PLAN_LIMITS[store.planKey] || PLAN_LIMITS.free;
+}
+
+function monthKey(date = new Date()) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function getPlanUsage() {
+  const limits = getPlanLimits();
+  const month = monthKey();
+  const appointmentsThisMonth = store.appointments.filter((item) => String(item.date || "").startsWith(month)).length;
+  const usage = {
+    planKey: store.planKey || "free",
+    staff: { used: store.staff.length, limit: limits.staff },
+    services: { used: store.services.length, limit: limits.services },
+    appointmentsThisMonth: { used: appointmentsThisMonth, limit: limits.appointmentsPerMonth }
+  };
+  const warnings = [];
+  for (const [key, bucket] of Object.entries(usage)) {
+    if (!bucket || typeof bucket !== "object" || !Number.isFinite(bucket.limit)) continue;
+    if (bucket.limit > 0 && bucket.used / bucket.limit >= 0.8) {
+      warnings.push({ key, used: bucket.used, limit: bucket.limit });
+    }
+  }
+  return { ...usage, warnings };
+}
+
+function assertPlanCapacity(kind) {
+  const limits = getPlanLimits();
+  const usage = getPlanUsage();
+  if (kind === "staff" && Number.isFinite(limits.staff) && usage.staff.used >= limits.staff) {
+    fail(`تم بلوغ حد الموظفين في الخطة المجانية (${limits.staff}). رقِّ الخطة للمتابعة.`, 402);
+  }
+  if (kind === "services" && Number.isFinite(limits.services) && usage.services.used >= limits.services) {
+    fail(`تم بلوغ حد الخدمات في الخطة المجانية (${limits.services}).`, 402);
+  }
+  if (kind === "appointments" && Number.isFinite(limits.appointmentsPerMonth) && usage.appointmentsThisMonth.used >= limits.appointmentsPerMonth) {
+    fail(`تم بلوغ سقف الحجوزات الشهرية (${limits.appointmentsPerMonth}).`, 402);
+  }
+}
+
+function getActivityProfile() {
+  return {
+    mode: store.activityMode || "medical",
+    medicalDepartments: store.medicalDepartments || MEDICAL_DEPARTMENTS.map((department) => ({ ...department, enabled: true })),
+    flexibleHint: "في الوضع المرن يمكن تخصيص الحقول والخدمات لأي نشاط: تدريب، صالونات، استشارات، أو مؤسسات خدمية."
+  };
+}
+
+function applyMedicalCategories() {
+  store.serviceCategories = (store.medicalDepartments || MEDICAL_DEPARTMENTS).filter((department) => department.enabled !== false).map((department, sort) => ({
+    id: department.id,
+    name: department.name,
+    sort,
+    enabled: true
+  }));
+}
+
+function updateActivityProfile(payload = {}) {
+  const mode = payload.mode === "flexible" ? "flexible" : payload.mode === "medical" ? "medical" : store.activityMode;
+  store.activityMode = mode;
+  if (Array.isArray(payload.medicalDepartments)) {
+    store.medicalDepartments = payload.medicalDepartments.map((department) => ({
+      id: String(department.id || createId("dept")),
+      name: String(department.name || "").trim() || "قسم",
+      enabled: department.enabled !== false
+    }));
+  }
+  if (mode === "medical") applyMedicalCategories();
+  persist();
+  return getActivityProfile();
+}
+
 function createStaff(payload) {
+  assertPlanCapacity("staff");
   const name = String(payload.name || "").trim();
   if (!name) fail("اسم الموظف مطلوب");
   const person = {
@@ -239,6 +341,7 @@ function listServices(categoryId) {
 }
 
 function createService(payload) {
+  assertPlanCapacity("services");
   const name = String(payload.name || "").trim();
   const categoryId = payload.categoryId;
   if (!name || !categoryId) fail("اسم الخدمة والفئة مطلوبان");
@@ -417,6 +520,7 @@ function listAppointments({ from = "", to = "" } = {}) {
 }
 
 function createAppointment(payload) {
+  assertPlanCapacity("appointments");
   const customerName = String(payload.customerName || payload.patientName || "").trim();
   const date = String(payload.date || "");
   const time = String(payload.time || "");
@@ -483,6 +587,9 @@ function getStatsSummary(fallbackAppointments = []) {
 
 module.exports = {
   createId,
+  getActivityProfile,
+  updateActivityProfile,
+  getPlanUsage,
   listCustomers,
   createCustomer,
   listCustomerCategories,

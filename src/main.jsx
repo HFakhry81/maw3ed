@@ -417,6 +417,65 @@ function PreferencesView({ ops, reload, locale }) {
   );
 }
 
+
+function ActivityProfileBar({ ops, reload, locale }) {
+  const activity = ops?.activity || { mode: "medical", medicalDepartments: [] };
+  const usage = ops?.planUsage;
+  const setMode = async (mode) => {
+    await api.put("/api/ops/activity-profile", { mode });
+    reload();
+  };
+  const toggleDepartment = async (departmentId) => {
+    const medicalDepartments = (activity.medicalDepartments || []).map((department) => (
+      department.id === departmentId ? { ...department, enabled: !department.enabled } : department
+    ));
+    await api.put("/api/ops/activity-profile", { mode: activity.mode, medicalDepartments });
+    reload();
+  };
+  return (
+    <section className="activity-panel panel">
+      <div className="activity-head">
+        <div>
+          <h2>نوع النشاط</h2>
+          <p>{activity.mode === "medical" ? "قالب طبي للمستشفيات والعيادات" : activity.flexibleHint || "وضع مرن قابل للتخصيص"}</p>
+        </div>
+        <div className="mode-switch" role="group" aria-label="activity-mode">
+          <button type="button" className={activity.mode === "medical" ? "active" : ""} onClick={() => setMode("medical")}>طبي</button>
+          <button type="button" className={activity.mode === "flexible" ? "active" : ""} onClick={() => setMode("flexible")}>مرن</button>
+        </div>
+      </div>
+      {activity.mode === "medical" && (
+        <div className="department-strip" aria-label="medical-departments">
+          <div className="strip-title">الأقسام التي يخدمها النظام ({(activity.medicalDepartments || []).filter((d) => d.enabled !== false).length}/15)</div>
+          <div className="department-chips">
+            {(activity.medicalDepartments || []).map((department) => (
+              <button
+                key={department.id}
+                type="button"
+                className={department.enabled === false ? "dept-chip off" : "dept-chip"}
+                onClick={() => toggleDepartment(department.id)}
+              >
+                {department.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {activity.mode === "flexible" && (
+        <p className="flexible-note">الحقول والخدمات قابلة للتخصيص لأي نشاط: شركات، تدريب، صالونات، استشارات، أو مؤسسات خدمية.</p>
+      )}
+      {usage?.warnings?.length > 0 && (
+        <div className="plan-warning">
+          اقتربت من حدود الخطة المجانية:
+          {" "}
+          {usage.warnings.map((item) => `${item.key} ${item.used}/${item.limit}`).join(" · ")}
+          . الترقية تبقي الحجوزات دون انقطاع.
+        </div>
+      )}
+    </section>
+  );
+}
+
 function App() {
   const [locale, setLocale] = useState(localStorage.getItem("maw3ed.locale") || "ar");
   const [view, setView] = useState("calendar");
@@ -495,6 +554,7 @@ function App() {
         </div>
       </aside>
       <main className="ops-main">
+        <ActivityProfileBar ops={ops} reload={reload} locale={locale} />
         {error && <div className="error-banner">{error}<button type="button" onClick={reload}>إعادة</button></div>}
         <Suspense fallback={<div className="loading-state">{t(locale, "loading")}</div>}>{content}</Suspense>
         <footer className="ops-footer">{t(locale, "poweredBy")}</footer>
