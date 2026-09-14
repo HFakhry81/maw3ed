@@ -2,7 +2,7 @@
   "name": "maw3ed-dashboard",
   "version": "1.0.0",
   "private": true,
-  "description": "لوحة تحكم منصة موعد",
+  "description": "موعد Maw3ed — Arabic appointment platform by UpNexa-eg.com",
   "scripts": {
     "start": "npm run build && if [ -f .env ]; then node --env-file=.env server.js; else node server.js; fi",
     "dev": "vite --host 0.0.0.0",

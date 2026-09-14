@@ -41,8 +41,9 @@ async function sendHtmlWithGmail({ to, subject, html }) {
 
 async function sendWithGmail({ email, code, locale }) {
   const direction = locale === "ar" ? "rtl" : "ltr";
+  const brand = locale === "ar" ? "موعد" : "Maw3ed";
   const subject = locale === "ar" ? "رمز التحقق من بريدك — موعد" : "Your Maw3ed verification code";
-  const html = `<div style="font-family:Arial,sans-serif;direction:${direction}"><h2 style="color:#0b369c">Maw3ed</h2><p>${locale === "ar" ? "رمز التحقق الخاص بك هو:" : "Your verification code is:"}</p><strong style="font-size:28px;letter-spacing:6px">${code}</strong><p>${locale === "ar" ? "ينتهي الرمز خلال 10 دقائق." : "This code expires in 10 minutes."}</p><hr><small>UpNexa-eg.com</small></div>`;
+  const html = `<div style="font-family:Arial,sans-serif;direction:${direction}"><h2 style="color:#0b369c">${brand}</h2><p>${locale === "ar" ? "رمز التحقق الخاص بك هو:" : "Your verification code is:"}</p><strong style="font-size:28px;letter-spacing:6px">${code}</strong><p>${locale === "ar" ? "ينتهي الرمز خلال 10 دقائق." : "This code expires in 10 minutes."}</p><hr><small>UpNexa-eg.com · ${brand}</small></div>`;
   return sendHtmlWithGmail({ to: email, subject, html });
 }
 
@@ -59,7 +60,7 @@ async function sendVerificationEmail({ email, code, locale }) {
 async function sendSubscriptionRequestEmail({ user, workspace, plan }) {
   const direction = workspace.locale === "ar" ? "rtl" : "ltr";
   const subject = `طلب اشتراك ${plan.display_name} — ${workspace.name}`;
-  const html = `<div style="font-family:Arial,sans-serif;direction:${direction}"><h2 style="color:#0b369c">طلب اشتراك جديد في Maw3ed</h2><p><strong>المؤسسة:</strong> ${workspace.name}</p><p><strong>النشاط:</strong> ${workspace.activity_type}</p><p><strong>البريد:</strong> ${user.email}</p><p><strong>الخطة:</strong> ${plan.display_name}</p><p><strong>السعر المقترح:</strong> ${plan.price_usd} USD / ${plan.billing_period_days} يوم</p><p>الطلب معلّق وينتظر موافقة مسؤول المنصة من لوحة الإدارة.</p><hr><small>UpNexa-eg.com · Maw3ed</small></div>`;
+  const html = `<div style="font-family:Arial,sans-serif;direction:${direction}"><h2 style="color:#0b369c">طلب اشتراك جديد في موعد Maw3ed</h2><p><strong>المؤسسة:</strong> ${workspace.name}</p><p><strong>النشاط:</strong> ${workspace.activity_type}</p><p><strong>البريد:</strong> ${user.email}</p><p><strong>الخطة:</strong> ${plan.display_name}</p><p><strong>السعر المقترح:</strong> ${plan.price_usd} USD / ${plan.billing_period_days} يوم</p><p>الطلب معلّق وينتظر موافقة مسؤول المنصة من لوحة الإدارة.</p><hr><small>UpNexa-eg.com · موعد Maw3ed</small></div>`;
   if (process.env.MAW3ED_EMAIL_MODE === "outbox") {
     fs.mkdirSync(path.dirname(outboxFile), { recursive: true });
     const current = fs.existsSync(outboxFile) ? fs.readFileSync(outboxFile, "utf8") : "";
