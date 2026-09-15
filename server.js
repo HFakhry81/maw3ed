@@ -22,6 +22,9 @@ const types = {
   ".js": "text/javascript; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
   ".svg": "image/svg+xml",
   ".json": "application/json; charset=utf-8"
 };
@@ -348,6 +351,20 @@ async function getUserWorkspace(userId, workspaceId = null) {
   return result.rows[0] || null;
 }
 
+async function listUserWorkspaces(userId) {
+  const result = await query(
+    `SELECT w.id, w.name, w.slug, w.activity_type, w.status, w.created_at,
+            o.id AS organization_id, o.logo_url, o.name AS organization_name
+     FROM workspaces w
+     JOIN workspace_members ws ON ws.workspace_id = w.id AND ws.user_id = $1
+     LEFT JOIN organizations o ON o.workspace_id = w.id
+     WHERE w.status = 'active'
+     ORDER BY w.created_at ASC`,
+    [userId]
+  );
+  return result.rows;
+}
+
 async function getRequestOrganizationId(req, requestUrl) {
   if (!databaseConfigured) return organizationId;
   const workspaceId = req.headers["x-workspace-id"] || requestUrl.searchParams.get("workspace");
@@ -477,16 +494,18 @@ async function createWorkspace(user, payload) {
     error.statusCode = 400;
     throw error;
   }
-  const template = (await query("SELECT * FROM activity_templates WHERE activity_type = $1", [activityType])).rows[0];
+  const template = (await query("SELECT * FROM activity_templates WHERE activity_type = $1", [activityType])).rows[0]
+    || (await query("SELECT * FROM activity_templates WHERE activity_type = 'other'")).rows[0];
   if (!template) {
     const error = new Error("Unsupported activity type");
     error.statusCode = 400;
     throw error;
   }
+  const resolvedActivityType = template.activity_type;
   const workspace = (await query(
     `INSERT INTO workspaces (id, owner_user_id, name, slug, activity_type, locale, currency)
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [createId("workspace"), user.id, name, payload.slug, activityType, locale, currency]
+    [createId("workspace"), user.id, name, payload.slug, resolvedActivityType, locale, currency]
   )).rows[0];
   await query(
     "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
@@ -497,13 +516,13 @@ async function createWorkspace(user, payload) {
     `INSERT INTO organizations
       (id, workspace_id, name, slug, owner_company, activity_type, locale, currency, labels)
      VALUES ($1, $2, $3, $4, 'UpNexa-eg.com', $5, $6, $7, $8::jsonb)`,
-    [newOrganizationId, workspace.id, name, payload.slug, activityType, locale, currency, JSON.stringify(template.labels)]
+    [newOrganizationId, workspace.id, name, payload.slug, resolvedActivityType, locale, currency, JSON.stringify(template.labels)]
   );
   await query("INSERT INTO dashboard_metrics (organization_id) VALUES ($1)", [newOrganizationId]);
   await query(
     `INSERT INTO booking_pages (organization_id, slug, description, show_platform_branding)
      VALUES ($1, $2, $3, $4)`,
-    [newOrganizationId, payload.slug, `احجز خدمات ${name} بسهولة`, activityType === "medical"]
+    [newOrganizationId, payload.slug, `احجز خدمات ${name} بسهولة`, resolvedActivityType === "medical"]
   );
   await query(
     `INSERT INTO departments (id, organization_id, name, default_service)
@@ -709,10 +728,12 @@ const server = http.createServer(async (req, res) => {
       const user = await requireAppUser(req);
       return sendJson(res, 200, { ok: true, user: { id: user.id, email: user.email, displayName: user.display_name, isPlatformAdmin: user.is_platform_admin }, workspace: await getUserWorkspace(user.id) });
     }
+    if (requested === "/api/workspaces" && req.method === "GET") {
+      const user = await requireAppUser(req);
+      return sendJson(res, 200, { ok: true, workspaces: await listUserWorkspaces(user.id) });
+    }
     if (requested === "/api/workspaces" && req.method === "POST") {
       const user = await requireAppUser(req);
-      const existing = await getUserWorkspace(user.id);
-      if (existing) return sendJson(res, 409, { ok: false, error: "This account already has a workspace" });
       return sendJson(res, 201, { ok: true, workspace: await createWorkspace(user, await parseJsonBody(req)) });
     }
     if (requested === "/api/entitlements" && req.method === "GET") {
@@ -807,18 +828,30 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, service: "maw3ed-api", database: databaseConfigured ? "postgresql" : "local-memory" });
     }
     if (requested === "/api/activity-templates" && req.method === "GET") {
+      const localTemplates = [
+        { activity_type: "medical", display_name: "مركز طبي", description: "عيادات ومستشفيات" },
+        { activity_type: "clinic", display_name: "عيادة", description: "عيادات تخصصية" },
+        { activity_type: "dentist", display_name: "طبيب أسنان", description: "عيادات أسنان" },
+        { activity_type: "salon", display_name: "صالون الشعر", description: "قص وتصفيف" },
+        { activity_type: "barber", display_name: "صالون الحلاقة", description: "حلاقة رجالية" },
+        { activity_type: "beauty", display_name: "التجميل", description: "مراكز تجميل" },
+        { activity_type: "massage", display_name: "تدليك", description: "مساج" },
+        { activity_type: "spa", display_name: "منتجع صحي", description: "سبا" },
+        { activity_type: "consultant", display_name: "استشاري", description: "استشارات" },
+        { activity_type: "education", display_name: "مركز تعليمي", description: "تدريب ودروس" },
+        { activity_type: "school", display_name: "مدرسة", description: "تعليم" },
+        { activity_type: "fitness", display_name: "مركز رياضي", description: "جيم وحصص" },
+        { activity_type: "carwash", display_name: "غسيل سيارة", description: "غسيل سيارات" },
+        { activity_type: "events", display_name: "تنظيم الأحداث", description: "فعاليات" },
+        { activity_type: "pets", display_name: "رعاية حيوانات أليفة", description: "حيوانات أليفة" },
+        { activity_type: "billiards", display_name: "صالة بلياردو", description: "طاولات" },
+        { activity_type: "other", display_name: "صناعة مخصصة", description: "نشاط مرن" }
+      ];
       if (!databaseConfigured) {
-        return sendJson(res, 200, { ok: true, templates: [
-          { activity_type: "medical", display_name: "مركز طبي" },
-          { activity_type: "education", display_name: "مركز تعليمي" },
-          { activity_type: "billiards", display_name: "صالة بلياردو" },
-          { activity_type: "salon", display_name: "صالون" },
-          { activity_type: "fitness", display_name: "مركز رياضي" },
-          { activity_type: "other", display_name: "نشاط مخصص" }
-        ] });
+        return sendJson(res, 200, { ok: true, templates: localTemplates });
       }
       const result = await query("SELECT activity_type, display_name, description, labels, defaults FROM activity_templates ORDER BY display_name");
-      return sendJson(res, 200, { ok: true, templates: result.rows });
+      return sendJson(res, 200, { ok: true, templates: result.rows.length ? result.rows : localTemplates });
     }
     if (requested === "/api/workspace-profile" && req.method === "GET") {
       const orgId = await getRequestOrganizationId(req, requestUrl);
@@ -904,6 +937,26 @@ const server = http.createServer(async (req, res) => {
       localData
     });
     if (opsHandled) return;
+
+    if (requested.startsWith("/data/uploads/")) {
+      const uploadPath = path.resolve(root, `.${requested}`);
+      const uploadsRoot = path.resolve(root, "data", "uploads");
+      if (!uploadPath.startsWith(uploadsRoot)) {
+        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        return res.end("Forbidden");
+      }
+      return fs.readFile(uploadPath, (error, data) => {
+        if (error) {
+          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          return res.end("Not found");
+        }
+        res.writeHead(200, {
+          "Content-Type": types[path.extname(uploadPath)] || "application/octet-stream",
+          "Cache-Control": "public, max-age=86400"
+        });
+        return res.end(data);
+      });
+    }
 
     const distRoot = path.join(root, "dist");
     const hasReactDist = fs.existsSync(path.join(distRoot, "index.html"));

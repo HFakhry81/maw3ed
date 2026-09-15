@@ -92,9 +92,23 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       return true;
     }
     const serviceMatch = requested.match(/^\/api\/ops\/services\/([^/]+)$/);
+    if (serviceMatch && req.method === "PATCH") {
+      sendJson(res, 200, { ok: true, service: ops.updateService(serviceMatch[1], await parseJsonBody(req)) });
+      return true;
+    }
     if (serviceMatch && req.method === "DELETE") {
       ops.deleteService(serviceMatch[1]);
       sendJson(res, 200, { ok: true });
+      return true;
+    }
+
+    if (requested === "/api/ops/uploads/logo" && req.method === "POST") {
+      sendJson(res, 201, { ok: true, ...ops.saveUploadedLogo(await parseJsonBody(req)) });
+      return true;
+    }
+
+    if (requested === "/api/ops/activity-templates" && req.method === "GET") {
+      sendJson(res, 200, { ok: true, templates: ops.listActivityTemplates() });
       return true;
     }
 

@@ -20,6 +20,7 @@
       .hero .eyebrow { color: var(--blue); font-weight: 700; }
       .hero h1 { margin: 0; font-size: clamp(1.7rem,4vw,2.35rem); letter-spacing: -.04em; }
       .hero p, .meta { margin: 0; color: var(--muted); }
+      .hero-logo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 2px solid #dbe7ff; background: #fff; }
       .steps { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 14px; }
       .steps span { padding: 6px 10px; border-radius: 999px; background: #eaf1fb; color: var(--muted); font-size: .78rem; font-weight: 700; }
       .steps span.on { background: var(--blue); color: #fff; }
@@ -115,6 +116,7 @@
 
         root.innerHTML = `
           <section class="hero">
+            ${page.logoUrl ? `<img class="hero-logo" src="${page.logoUrl}" alt="" />` : ""}
             <div class="eyebrow">${page.industry || "حجز إلكتروني"} · موظف استقبال رقمي 24/7</div>
             <h1>${page.businessName || "موعد"}</h1>
             <p>${page.description || ""}</p>

@@ -128,10 +128,32 @@ function defaultStore() {
     expenses: [],
     appointments: [],
     activityMode: "medical",
+    activityModeLocked: false,
+    activityTemplateId: "medical",
     medicalDepartments: MEDICAL_DEPARTMENTS.map((department) => ({ ...department, enabled: true })),
     planKey: "free"
   };
 }
+
+const ACTIVITY_TEMPLATES = [
+  { id: "medical", mode: "medical", displayName: "مركز طبي", description: "عيادات ومستشفيات ومراكز رعاية صحية" },
+  { id: "clinic", mode: "flexible", displayName: "عيادة", description: "عيادات تخصصية ومراكز كشف" },
+  { id: "dentist", mode: "flexible", displayName: "طبيب أسنان", description: "عيادات طب الأسنان" },
+  { id: "salon", mode: "flexible", displayName: "صالون الشعر", description: "قص وتصفيف وعناية بالشعر" },
+  { id: "barber", mode: "flexible", displayName: "صالون الحلاقة", description: "حلاقة رجالية" },
+  { id: "beauty", mode: "flexible", displayName: "التجميل", description: "مراكز التجميل والعناية" },
+  { id: "massage", mode: "flexible", displayName: "تدليك", description: "مساج وعلاج طبيعي خفيف" },
+  { id: "spa", mode: "flexible", displayName: "منتجع صحي", description: "سبا وعافية" },
+  { id: "consultant", mode: "flexible", displayName: "استشاري", description: "استشارات مهنية" },
+  { id: "education", mode: "flexible", displayName: "مركز تعليمي", description: "دروس وتدريب" },
+  { id: "school", mode: "flexible", displayName: "مدرسة", description: "مدارس وحلقات تعليم" },
+  { id: "fitness", mode: "flexible", displayName: "مركز رياضي", description: "جيم وحصص تدريب" },
+  { id: "carwash", mode: "flexible", displayName: "غسيل سيارة", description: "غسيل وتلميع سيارات" },
+  { id: "events", mode: "flexible", displayName: "تنظيم الأحداث", description: "فعاليات وحجوزات" },
+  { id: "pets", mode: "flexible", displayName: "رعاية حيوانات أليفة", description: "عيادات وخدمات حيوانات" },
+  { id: "billiards", mode: "flexible", displayName: "صالة بلياردو", description: "طاولات وألعاب بالساعة" },
+  { id: "custom", mode: "flexible", displayName: "صناعة مخصصة", description: "نشاط مرن قابل للتخصيص بالكامل" }
+];
 
 function loadStore() {
   try {
@@ -256,11 +278,21 @@ function assertPlanCapacity(kind) {
   }
 }
 
+function listActivityTemplates() {
+  return ACTIVITY_TEMPLATES.map((item) => ({ ...item }));
+}
+
 function getActivityProfile() {
+  const templateId = store.activityTemplateId || (store.activityMode === "flexible" ? "custom" : "medical");
+  const template = ACTIVITY_TEMPLATES.find((item) => item.id === templateId) || ACTIVITY_TEMPLATES[0];
   return {
     mode: store.activityMode || "medical",
+    locked: Boolean(store.activityModeLocked),
+    templateId,
+    templateDisplayName: template.displayName,
     medicalDepartments: store.medicalDepartments || MEDICAL_DEPARTMENTS.map((department) => ({ ...department, enabled: true })),
-    flexibleHint: "في الوضع المرن يمكن تخصيص الحقول والخدمات لأي نشاط: تدريب، صالونات، استشارات، أو مؤسسات خدمية."
+    flexibleHint: "في الوضع المرن يمكن تخصيص الحقول والخدمات لأي نشاط: تدريب، صالونات، استشارات، أو مؤسسات خدمية.",
+    templates: listActivityTemplates()
   };
 }
 
@@ -274,31 +306,113 @@ function applyMedicalCategories() {
 }
 
 function updateActivityProfile(payload = {}) {
-  const mode = payload.mode === "flexible" ? "flexible" : payload.mode === "medical" ? "medical" : store.activityMode;
-  store.activityMode = mode;
+  const locked = Boolean(store.activityModeLocked);
+  const requestingModeChange =
+    payload.mode != null && payload.mode !== store.activityMode;
+  const requestingTemplateChange =
+    payload.templateId != null && payload.templateId !== store.activityTemplateId;
+  const requestingLock = payload.lock === true;
+
+  if (locked && (requestingModeChange || requestingTemplateChange)) {
+    fail("تم قفل نوع النشاط ولا يمكن تعديله بعد التأكيد.", 403);
+  }
+
+  if (!locked && payload.templateId) {
+    const template = ACTIVITY_TEMPLATES.find((item) => item.id === payload.templateId);
+    if (!template) fail("القالب غير موجود", 404);
+    store.activityTemplateId = template.id;
+    store.activityMode = template.mode;
+    if (template.mode === "flexible" && template.id !== "medical") {
+      const categoryName = template.displayName;
+      if (!store.serviceCategories.some((item) => item.name === categoryName)) {
+        store.serviceCategories.unshift({
+          id: createId("svc-cat"),
+          name: `فئة ${categoryName}`,
+          sort: 0,
+          enabled: true
+        });
+      }
+      if (store.bookingPage) {
+        store.bookingPage.industry = template.id;
+        if (!store.bookingPage.businessName || store.bookingPage.businessName.includes("تجريب")) {
+          store.bookingPage.businessName = template.displayName;
+        }
+      }
+    }
+  }
+
+  if (!locked && payload.mode != null) {
+    const mode = payload.mode === "flexible" ? "flexible" : payload.mode === "medical" ? "medical" : store.activityMode;
+    store.activityMode = mode;
+    if (mode === "medical") store.activityTemplateId = store.activityTemplateId || "medical";
+    if (mode === "flexible" && store.activityTemplateId === "medical") store.activityTemplateId = "custom";
+  }
+
   if (Array.isArray(payload.medicalDepartments)) {
+    if (locked) fail("تم قفل نوع النشاط ولا يمكن تعديل الأقسام.", 403);
     store.medicalDepartments = payload.medicalDepartments.map((department) => ({
       id: String(department.id || createId("dept")),
       name: String(department.name || "").trim() || "قسم",
       enabled: department.enabled !== false
     }));
   }
-  if (mode === "medical") applyMedicalCategories();
+
+  if (requestingLock) {
+    store.activityModeLocked = true;
+  }
+
+  if (store.activityMode === "medical") applyMedicalCategories();
   persist();
   return getActivityProfile();
 }
 
+function saveUploadedLogo(payload = {}) {
+  const uploadsDir = path.join(__dirname, "data", "uploads");
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  if (payload.url) {
+    const logoUrl = String(payload.url).trim();
+    store.bookingPage.logoUrl = logoUrl;
+    persist();
+    return { logoUrl };
+  }
+  const dataUrl = String(payload.dataUrl || "");
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+  if (!match) fail("صورة الشعار غير صالحة");
+  const ext = match[1].includes("png") ? "png" : match[1].includes("webp") ? "webp" : match[1].includes("gif") ? "gif" : "jpg";
+  const fileName = `logo-${Date.now()}.${ext}`;
+  const filePath = path.join(uploadsDir, fileName);
+  fs.writeFileSync(filePath, Buffer.from(match[2], "base64"));
+  const logoUrl = `/data/uploads/${fileName}`;
+  store.bookingPage.logoUrl = logoUrl;
+  persist();
+  return { logoUrl };
+}
+
 function createStaff(payload) {
   assertPlanCapacity("staff");
-  const name = String(payload.name || "").trim();
+  const firstName = String(payload.firstName || payload.name || "").trim();
+  const lastName = String(payload.lastName || "").trim();
+  const name = String(payload.name || `${firstName} ${lastName}`.trim()).trim();
   if (!name) fail("اسم الموظف مطلوب");
   const person = {
     id: createId("staff"),
     name,
+    firstName: firstName || name.split(/\s+/)[0] || name,
+    lastName,
+    phone: String(payload.phone || "").trim(),
     title: String(payload.title || "").trim() || "موظف",
-    active: true
+    avatarUrl: String(payload.avatarUrl || ""),
+    serviceIds: Array.isArray(payload.serviceIds) ? payload.serviceIds.map(String) : [],
+    active: payload.active !== false
   };
   store.staff.unshift(person);
+  if (person.serviceIds.length) {
+    store.services.forEach((service) => {
+      if (person.serviceIds.includes(service.id) && !(service.providerIds || []).includes(person.id)) {
+        service.providerIds = [...(service.providerIds || []), person.id];
+      }
+    });
+  }
   persist();
   return person;
 }
@@ -306,9 +420,26 @@ function createStaff(payload) {
 function updateStaff(id, payload) {
   const person = store.staff.find((item) => item.id === id);
   if (!person) fail("الموظف غير موجود", 404);
-  if (payload.name != null) person.name = String(payload.name).trim();
+  if (payload.firstName != null || payload.lastName != null || payload.name != null) {
+    const firstName = payload.firstName != null ? String(payload.firstName).trim() : person.firstName || "";
+    const lastName = payload.lastName != null ? String(payload.lastName).trim() : person.lastName || "";
+    person.firstName = firstName;
+    person.lastName = lastName;
+    person.name = String(payload.name || `${firstName} ${lastName}`.trim() || person.name).trim();
+  }
   if (payload.title != null) person.title = String(payload.title).trim();
+  if (payload.phone != null) person.phone = String(payload.phone).trim();
+  if (payload.avatarUrl != null) person.avatarUrl = String(payload.avatarUrl).trim();
   if (payload.active != null) person.active = Boolean(payload.active);
+  if (Array.isArray(payload.serviceIds)) {
+    person.serviceIds = payload.serviceIds.map(String);
+    store.services.forEach((service) => {
+      const ids = new Set(service.providerIds || []);
+      if (person.serviceIds.includes(service.id)) ids.add(person.id);
+      else ids.delete(person.id);
+      service.providerIds = [...ids];
+    });
+  }
   persist();
   return person;
 }
@@ -365,6 +496,26 @@ function createService(payload) {
     description: String(payload.description || "")
   };
   store.services.unshift(service);
+  persist();
+  return service;
+}
+
+function updateService(id, payload) {
+  const service = store.services.find((item) => item.id === id);
+  if (!service) fail("الخدمة غير موجودة", 404);
+  if (payload.name != null) service.name = String(payload.name).trim();
+  if (payload.categoryId != null) service.categoryId = payload.categoryId;
+  if (payload.durationMinutes != null) service.durationMinutes = Number(payload.durationMinutes) || 30;
+  if (payload.bufferMinutes != null) service.bufferMinutes = Number(payload.bufferMinutes) || 0;
+  if (payload.pricingType != null) service.pricingType = payload.pricingType || "fixed";
+  if (payload.price != null) service.price = Number(payload.price) || 0;
+  if (payload.color != null) service.color = String(payload.color || "#1967e8");
+  if (payload.description != null) service.description = String(payload.description || "");
+  if (payload.publicBooking != null) service.publicBooking = Boolean(payload.publicBooking);
+  if (payload.autoAccept != null) service.autoAccept = Boolean(payload.autoAccept);
+  if (payload.autoComplete != null) service.autoComplete = Boolean(payload.autoComplete);
+  if (Array.isArray(payload.providerIds)) service.providerIds = payload.providerIds;
+  else if (payload.providerId != null) service.providerIds = payload.providerId ? [payload.providerId] : [];
   persist();
   return service;
 }
@@ -819,8 +970,10 @@ function resetOpsData() {
 
 module.exports = {
   createId,
+  listActivityTemplates,
   getActivityProfile,
   updateActivityProfile,
+  saveUploadedLogo,
   getPlanUsage,
   listCustomers,
   createCustomer,
@@ -834,6 +987,7 @@ module.exports = {
   createServiceCategory,
   listServices,
   createService,
+  updateService,
   deleteService,
   getWorkingSchedule,
   saveWorkingHours,

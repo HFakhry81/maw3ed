@@ -14,6 +14,7 @@ const NAV = [
   { id: "schedule", mark: "جد" },
   { id: "services", mark: "خد" },
   { id: "bookingPage", mark: "حجز" },
+  { id: "industry", mark: "قالب" },
   { id: "stats", mark: "إحص" },
   { id: "payments", mark: "دفع", growth: true },
   { id: "expenses", mark: "مص" },
@@ -24,6 +25,33 @@ const NAV = [
 ];
 
 const MOBILE_NAV = ["overview", "calendar", "customers", "services", "more"];
+
+const SERVICE_COLORS = ["#111827", "#7f1d1d", "#92400e", "#9f1239", "#6b21a8", "#a78bfa", "#db2777", "#f9a8d4", "#fb7185", "#3B82F6"];
+
+async function logoutUser() {
+  try {
+    const config = await api.get("/api/config");
+    if (config.clerkPublishableKey) {
+      if (!window.Clerk) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js";
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+      const clerk = new window.Clerk(config.clerkPublishableKey);
+      await clerk.load();
+      await clerk.signOut();
+    }
+  } catch {
+    // Local mode without Clerk still clears session keys.
+  }
+  ["maw3ed.role", "maw3ed.workspaceId"].forEach((key) => localStorage.removeItem(key));
+  api.setWorkspaceId("");
+  window.location.href = "/auth.html";
+}
 
 class ModuleBoundary extends Component {
   constructor(props) {
@@ -150,35 +178,78 @@ function CustomersView({ ops, reload, locale }) {
 }
 
 function StaffView({ ops, reload, locale }) {
+  const emptyForm = { firstName: "", lastName: "", phone: "", title: "", avatarUrl: "", serviceIds: [], active: true };
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", title: "" });
+  const [editingId, setEditingId] = useState("");
+  const [form, setForm] = useState(emptyForm);
+  const openCreate = () => {
+    setEditingId("");
+    setForm(emptyForm);
+    setOpen(true);
+  };
+  const openEdit = (person) => {
+    setEditingId(person.id);
+    setForm({
+      firstName: person.firstName || person.name?.split(/\s+/)[0] || "",
+      lastName: person.lastName || person.name?.split(/\s+/).slice(1).join(" ") || "",
+      phone: person.phone || "",
+      title: person.title || "",
+      avatarUrl: person.avatarUrl || "",
+      serviceIds: person.serviceIds || (ops?.services || []).filter((s) => (s.providerIds || []).includes(person.id)).map((s) => s.id),
+      active: person.active !== false
+    });
+    setOpen(true);
+  };
   const submit = async (event) => {
     event.preventDefault();
-    await api.post("/api/ops/staff", form);
+    const payload = {
+      ...form,
+      name: `${form.firstName} ${form.lastName}`.trim()
+    };
+    if (editingId) await api.patch(`/api/ops/staff/${editingId}`, payload);
+    else await api.post("/api/ops/staff", payload);
     setOpen(false);
-    setForm({ name: "", title: "" });
+    setForm(emptyForm);
+    setEditingId("");
     reload();
   };
   return (
     <section className="ops-page">
       <div className="ops-header">
         <div><h1>{t(locale, "staff")}</h1><p>الموظفون ومقدمو الخدمات</p></div>
-        <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ إضافة موظف</button>
+        <button className="primary-button" type="button" onClick={openCreate}>+ إضافة موظف</button>
       </div>
       <div className="data-table panel">
         {(ops?.staff || []).map((person) => (
           <div className="table-row" key={person.id}>
-            <div className="avatar">{person.name.charAt(0)}</div>
-            <div><b>{person.name}</b><small>{person.title}</small></div>
+            <div className="avatar" style={person.avatarUrl ? { backgroundImage: `url(${person.avatarUrl})`, backgroundSize: "cover" } : undefined}>
+              {!person.avatarUrl && person.name.charAt(0)}
+            </div>
+            <div>
+              <b>{person.name}</b>
+              <small>{person.title}{person.phone ? ` · ${person.phone}` : ""}</small>
+            </div>
             <span>{person.servicesCount || 0} خدمات</span>
+            <button type="button" onClick={() => openEdit(person)}>تعديل</button>
             <button type="button" className="danger-button" onClick={async () => { await api.del(`/api/ops/staff/${person.id}`); reload(); }}>حذف</button>
           </div>
         ))}
       </div>
-      <Drawer title="إضافة موظف" open={open} onClose={() => setOpen(false)}>
+      <Drawer title={editingId ? "تعديل موظف" : "موظف جديد"} open={open} onClose={() => setOpen(false)}>
         <form className="stack-form" onSubmit={submit}>
-          <label>الاسم<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+          <div className="form-row">
+            <label>الاسم الأول<input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></label>
+            <label>اسم العائلة<input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></label>
+          </div>
+          <label>الهاتف (+20)<input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="01xxxxxxxxx" /></label>
           <label>المهنة<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+          <label>رابط الصورة<input value={form.avatarUrl} onChange={(e) => setForm({ ...form, avatarUrl: e.target.value })} placeholder="https://..." /></label>
+          <label>الخدمات
+            <select multiple value={form.serviceIds} onChange={(e) => setForm({ ...form, serviceIds: [...e.target.selectedOptions].map((o) => o.value) })} style={{ minHeight: 96 }}>
+              {(ops?.services || []).map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+            </select>
+          </label>
+          <label className="check"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> نشط</label>
           <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
         </form>
       </Drawer>
@@ -187,24 +258,55 @@ function StaffView({ ops, reload, locale }) {
 }
 
 function ServicesView({ ops, reload, locale }) {
+  const emptyForm = {
+    name: "", categoryId: "", durationMinutes: 30, bufferMinutes: 0, price: 0, pricingType: "fixed",
+    providerId: "", publicBooking: true, autoAccept: true, autoComplete: true, color: "#3B82F6", description: ""
+  };
   const [categoryId, setCategoryId] = useState(ops?.serviceCategories?.[0]?.id || "");
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", categoryId: "", durationMinutes: 30, bufferMinutes: 0, price: 0, providerId: "", publicBooking: true, autoAccept: true });
+  const [editingId, setEditingId] = useState("");
+  const [form, setForm] = useState(emptyForm);
   useEffect(() => {
     if (!categoryId && ops?.serviceCategories?.[0]) setCategoryId(ops.serviceCategories[0].id);
   }, [ops, categoryId]);
   const services = (ops?.services || []).filter((service) => !categoryId || service.categoryId === categoryId);
+  const openCreate = () => {
+    setEditingId("");
+    setForm({ ...emptyForm, categoryId });
+    setOpen(true);
+  };
+  const openEdit = (service) => {
+    setEditingId(service.id);
+    setForm({
+      name: service.name || "",
+      categoryId: service.categoryId || categoryId,
+      durationMinutes: service.durationMinutes || 30,
+      bufferMinutes: service.bufferMinutes || 0,
+      price: service.price || 0,
+      pricingType: service.pricingType || "fixed",
+      providerId: (service.providerIds || [])[0] || "",
+      publicBooking: service.publicBooking !== false,
+      autoAccept: Boolean(service.autoAccept),
+      autoComplete: Boolean(service.autoComplete),
+      color: service.color || "#3B82F6",
+      description: service.description || ""
+    });
+    setOpen(true);
+  };
   const submit = async (event) => {
     event.preventDefault();
-    await api.post("/api/ops/services", { ...form, categoryId: form.categoryId || categoryId });
+    const payload = { ...form, categoryId: form.categoryId || categoryId };
+    if (editingId) await api.patch(`/api/ops/services/${editingId}`, payload);
+    else await api.post("/api/ops/services", payload);
     setOpen(false);
+    setEditingId("");
     reload();
   };
   return (
     <section className="ops-page">
       <div className="ops-header">
         <div><h1>{t(locale, "services")}</h1><p>فئات الخدمات والتسعير والمدة</p></div>
-        <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ إضافة خدمة</button>
+        <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
       </div>
       <div className="split-panels">
         <aside className="panel category-list">
@@ -219,15 +321,17 @@ function ServicesView({ ops, reload, locale }) {
         <div className="panel service-list">
           {services.map((service) => (
             <div className="table-row" key={service.id}>
-              <div><b>{service.name}</b><small>{service.durationMinutes} د · تأخير {service.bufferMinutes} د</small></div>
-              <span>E£{service.price}</span>
+              <span className="color-dot" style={{ background: service.color || "#3B82F6" }} />
+              <div><b>{service.name}</b><small>{service.durationMinutes} د · انتظار {service.bufferMinutes} د</small></div>
+              <span>{Number(service.price) === 0 ? "مجاني" : `E£${service.price}`}</span>
+              <button type="button" onClick={() => openEdit(service)}>تعديل</button>
               <button type="button" className="danger-button" onClick={async () => { await api.del(`/api/ops/services/${service.id}`); reload(); }}>حذف</button>
             </div>
           ))}
           {!services.length && <div className="empty-state">{t(locale, "empty")}</div>}
         </div>
       </div>
-      <Drawer title="إضافة خدمة" open={open} onClose={() => setOpen(false)}>
+      <Drawer title={editingId ? "تعديل خدمة" : "خدمة جديدة"} open={open} onClose={() => setOpen(false)}>
         <form className="stack-form" onSubmit={submit}>
           <label>الاسم<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label>الفئة<select value={form.categoryId || categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
@@ -238,12 +342,28 @@ function ServicesView({ ops, reload, locale }) {
             {(ops?.staff || []).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
           </select></label>
           <div className="form-row">
-            <label>المدة (د)<input type="number" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })} /></label>
-            <label>وقت التأخير<input type="number" value={form.bufferMinutes} onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })} /></label>
+            <label>نوع التسعير<select value={form.pricingType} onChange={(e) => setForm({ ...form, pricingType: e.target.value })}>
+              <option value="fixed">ثابت</option>
+              <option value="from">يبدأ من</option>
+            </select></label>
+            <label>السعر<input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></label>
           </div>
-          <label>السعر<input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></label>
+          <div className="form-row">
+            <label>المدة (د)<input type="number" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })} /></label>
+            <label>وقت الانتظار<input type="number" value={form.bufferMinutes} onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })} /></label>
+          </div>
+          <label>لون الخدمة
+            <div className="color-swatches">
+              {SERVICE_COLORS.map((color) => (
+                <button key={color} type="button" className={form.color === color ? "swatch on" : "swatch"} style={{ background: color }} onClick={() => setForm({ ...form, color })} aria-label={color} />
+              ))}
+            </div>
+            <input value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+          </label>
+          <label>وصف مختصر<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
           <label className="check"><input type="checkbox" checked={form.publicBooking} onChange={(e) => setForm({ ...form, publicBooking: e.target.checked })} /> عرض على صفحة الحجز</label>
           <label className="check"><input type="checkbox" checked={form.autoAccept} onChange={(e) => setForm({ ...form, autoAccept: e.target.checked })} /> قبول تلقائي</label>
+          <label className="check"><input type="checkbox" checked={form.autoComplete} onChange={(e) => setForm({ ...form, autoComplete: e.target.checked })} /> إنهاء تلقائي</label>
           <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
         </form>
       </Drawer>
@@ -310,27 +430,116 @@ function ScheduleView({ ops, reload, locale }) {
 function BookingPageView({ ops, reload, locale }) {
   const page = ops?.bookingPage || {};
   const [draft, setDraft] = useState(page);
+  const [uploading, setUploading] = useState(false);
   useEffect(() => setDraft(page), [ops]);
   const save = async (event) => {
     event.preventDefault();
     await api.put("/api/ops/booking-page", draft);
     reload();
   };
+  const onLogoFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await api.post("/api/ops/uploads/logo", { dataUrl });
+      setDraft((current) => ({ ...current, logoUrl: result.logoUrl }));
+      reload();
+    } finally {
+      setUploading(false);
+    }
+  };
   return (
     <section className="ops-page">
-      <div className="ops-header"><div><h1>{t(locale, "bookingPage")}</h1><p>هوية صفحة الحجز العامة</p></div></div>
+      <div className="ops-header"><div><h1>المنشأة وصفحة الحجز</h1><p>الهوية العامة وبيانات الحجز للعملاء</p></div></div>
       <form className="panel booking-form" onSubmit={save}>
+        <div className="facility-logo-row">
+          <div className="facility-logo-preview" style={draft.logoUrl ? { backgroundImage: `url(${draft.logoUrl})` } : undefined}>
+            {!draft.logoUrl && <span>شعار العلامة</span>}
+          </div>
+          <div className="stack-form" style={{ flex: 1 }}>
+            <label>رفع شعار<input type="file" accept="image/*" onChange={onLogoFile} disabled={uploading} /></label>
+            <label>أو رابط الشعار<input value={draft.logoUrl || ""} onChange={(e) => setDraft({ ...draft, logoUrl: e.target.value })} placeholder="/data/uploads/..." /></label>
+          </div>
+        </div>
         <label className="switch-line"><span>تفعيل الحجز عبر الإنترنت</span><input type="checkbox" checked={!!draft.onlineBookingEnabled} onChange={(e) => setDraft({ ...draft, onlineBookingEnabled: e.target.checked })} /></label>
-        <label>اسم العمل<input value={draft.businessName || ""} onChange={(e) => setDraft({ ...draft, businessName: e.target.value })} /></label>
+        <label>اسم المنشأة<input value={draft.businessName || ""} onChange={(e) => setDraft({ ...draft, businessName: e.target.value })} /></label>
         <label>الرابط /slug<input value={draft.slug || ""} onChange={(e) => setDraft({ ...draft, slug: e.target.value })} /></label>
         <div className="form-row">
           <label>البريد<input value={draft.email || ""} onChange={(e) => setDraft({ ...draft, email: e.target.value })} /></label>
           <label>الهاتف<input value={draft.phone || ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} /></label>
         </div>
         <label>الوصف<textarea value={draft.description || ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></label>
+        <div className="form-row">
+          <label>الدولة<input value={draft.country || ""} onChange={(e) => setDraft({ ...draft, country: e.target.value })} /></label>
+          <label>المدينة<input value={draft.city || ""} onChange={(e) => setDraft({ ...draft, city: e.target.value })} /></label>
+        </div>
+        <label>العنوان<input value={draft.street || ""} onChange={(e) => setDraft({ ...draft, street: e.target.value })} /></label>
+        <label>المنطقة الزمنية<input value={draft.timezone || "Africa/Cairo"} onChange={(e) => setDraft({ ...draft, timezone: e.target.value })} /></label>
+        <div className="form-row">
+          <label>فيسبوك<input value={draft.socialLinks?.facebook || ""} onChange={(e) => setDraft({ ...draft, socialLinks: { ...(draft.socialLinks || {}), facebook: e.target.value } })} /></label>
+          <label>إنستغرام<input value={draft.socialLinks?.instagram || ""} onChange={(e) => setDraft({ ...draft, socialLinks: { ...(draft.socialLinks || {}), instagram: e.target.value } })} /></label>
+        </div>
+        <label>الموقع<input value={draft.socialLinks?.website || ""} onChange={(e) => setDraft({ ...draft, socialLinks: { ...(draft.socialLinks || {}), website: e.target.value } })} /></label>
         <p className="muted">الرابط العام: <a href={`/book.html?slug=${draft.slug}`} target="_blank" rel="noreferrer">/book.html?slug={draft.slug}</a></p>
         <button className="primary-button" type="submit">{t(locale, "save")}</button>
       </form>
+    </section>
+  );
+}
+
+function IndustryTemplatesView({ ops, reload, locale }) {
+  const activity = ops?.activity || {};
+  const templates = activity.templates || [];
+  const locked = Boolean(activity.locked);
+  const [query, setQuery] = useState("");
+  const filtered = templates.filter((item) => {
+    const hay = `${item.displayName} ${item.description} ${item.id}`.toLowerCase();
+    return !query.trim() || hay.includes(query.trim().toLowerCase());
+  });
+  const choose = async (template) => {
+    if (locked) {
+      window.alert("تم قفل نوع النشاط ولا يمكن تغييره.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `تأكيد اختيار «${template.displayName}»؟\nبعد التأكيد لن يمكن تغيير نوع النشاط أو الوضع المرن.`
+    );
+    if (!confirmed) return;
+    await api.put("/api/ops/activity-profile", { templateId: template.id, mode: template.mode, lock: true });
+    reload();
+  };
+  return (
+    <section className="ops-page">
+      <div className="ops-header">
+        <div>
+          <h1>اختر الصناعة</h1>
+          <p>{locked ? `القالب الحالي مقفول: ${activity.templateDisplayName || activity.mode}` : "اختر قالباً جاهزاً ثم أكّد لقفل نوع النشاط"}</p>
+        </div>
+      </div>
+      <div className="panel">
+        <input className="search-input" placeholder="بحث" value={query} onChange={(e) => setQuery(e.target.value)} disabled={locked} />
+        <div className="template-list">
+          {filtered.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              className={activity.templateId === template.id ? "template-row on" : "template-row"}
+              disabled={locked}
+              onClick={() => choose(template)}
+            >
+              <b>{template.displayName}</b>
+              <small>{template.description}</small>
+            </button>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }
@@ -510,30 +719,54 @@ function PreferencesView({ ops, reload, locale }) {
 function ActivityProfileBar({ ops, reload, locale }) {
   const activity = ops?.activity || { mode: "medical", medicalDepartments: [] };
   const usage = ops?.planUsage;
+  const locked = Boolean(activity.locked);
+
   const setMode = async (mode) => {
-    await api.put("/api/ops/activity-profile", { mode });
+    if (locked) return;
+    if (mode === "flexible" || mode !== activity.mode) {
+      const confirmed = window.confirm(
+        "بعد التأكيد لن يمكن تغيير نوع النشاط (طبي / مرن). هل تريد المتابعة؟"
+      );
+      if (!confirmed) return;
+      await api.put("/api/ops/activity-profile", { mode, lock: true });
+    } else {
+      await api.put("/api/ops/activity-profile", { mode });
+    }
     reload();
   };
+
   const toggleDepartment = async (departmentId) => {
+    if (locked) return;
     const medicalDepartments = (activity.medicalDepartments || []).map((department) => (
       department.id === departmentId ? { ...department, enabled: !department.enabled } : department
     ));
     await api.put("/api/ops/activity-profile", { mode: activity.mode, medicalDepartments });
     reload();
   };
+
   return (
     <section className="activity-panel panel">
       <div className="activity-head">
         <div>
           <h2>نوع النشاط</h2>
-          <p>{activity.mode === "medical" ? "قالب طبي للمستشفيات والعيادات" : activity.flexibleHint || "وضع مرن قابل للتخصيص"}</p>
+          <p>
+            {locked
+              ? `مقفول · ${activity.templateDisplayName || (activity.mode === "medical" ? "طبي" : "مرن")}`
+              : activity.mode === "medical"
+                ? "قالب طبي للمستشفيات والعيادات"
+                : activity.flexibleHint || "وضع مرن قابل للتخصيص"}
+          </p>
         </div>
-        <div className="mode-switch" role="group" aria-label="activity-mode">
-          <button type="button" className={activity.mode === "medical" ? "active" : ""} onClick={() => setMode("medical")}>طبي</button>
-          <button type="button" className={activity.mode === "flexible" ? "active" : ""} onClick={() => setMode("flexible")}>مرن</button>
-        </div>
+        {!locked ? (
+          <div className="mode-switch" role="group" aria-label="activity-mode">
+            <button type="button" className={activity.mode === "medical" ? "active" : ""} onClick={() => setMode("medical")}>طبي</button>
+            <button type="button" className={activity.mode === "flexible" ? "active" : ""} onClick={() => setMode("flexible")}>مرن</button>
+          </div>
+        ) : (
+          <span className="locked-pill">مقفل</span>
+        )}
       </div>
-      {activity.mode === "medical" && (
+      {activity.mode === "medical" && !locked && (
         <div className="department-strip" aria-label="medical-departments">
           <div className="strip-title">الأقسام التي يخدمها النظام ({(activity.medicalDepartments || []).filter((d) => d.enabled !== false).length}/15)</div>
           <div className="department-chips">
@@ -573,6 +806,8 @@ function App() {
   const { ops, error, isPending, reload } = useOpsBootstrap();
   const { appointments, reload: reloadAppointments } = useAppointments();
   const [profile, setProfile] = useState(null);
+  const [workspaces, setWorkspaces] = useState([]);
+  const [workspaceId, setWorkspaceId] = useState(localStorage.getItem("maw3ed.workspaceId") || "");
 
   useEffect(() => {
     applyDocumentLocale(locale);
@@ -581,7 +816,17 @@ function App() {
 
   useEffect(() => {
     api.get("/api/workspace-profile").then((result) => setProfile(result.profile)).catch(() => {});
-  }, []);
+    api.get("/api/workspaces")
+      .then((result) => setWorkspaces(result.workspaces || []))
+      .catch(() => setWorkspaces([]));
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (ops && !ops.activity?.locked && !localStorage.getItem("maw3ed.industrySeen")) {
+      setView("industry");
+      localStorage.setItem("maw3ed.industrySeen", "1");
+    }
+  }, [ops]);
 
   const navigate = (id) => {
     if (id === "more") {
@@ -592,6 +837,34 @@ function App() {
     setMoreOpen(false);
   };
 
+  const switchWorkspace = (id) => {
+    setWorkspaceId(id);
+    api.setWorkspaceId(id);
+    reload();
+  };
+
+  const createWorkspace = async () => {
+    const name = window.prompt("اسم مساحة العمل الجديدة");
+    if (!name) return;
+    const activityType = ops?.activity?.templateId || "other";
+    try {
+      const result = await api.post("/api/workspaces", {
+        name,
+        slug: name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || `ws-${Date.now()}`,
+        activityType: ["medical", "education", "billiards", "salon", "fitness", "other"].includes(activityType)
+          ? activityType
+          : "other"
+      });
+      const id = result.workspace?.id;
+      if (id) switchWorkspace(id);
+      const list = await api.get("/api/workspaces");
+      setWorkspaces(list.workspaces || []);
+    } catch (err) {
+      window.alert(err.message || "تعذر إنشاء مساحة العمل (يتطلب تسجيل دخول Clerk + Postgres)");
+    }
+  };
+
+  const logoUrl = ops?.bookingPage?.logoUrl || profile?.logoUrl || "";
   const content = (() => {
     if (!ops && isPending) return <div className="loading-state">{t(locale, "loading")}</div>;
     switch (view) {
@@ -602,6 +875,7 @@ function App() {
       case "services": return <ServicesView ops={ops} reload={reload} locale={locale} />;
       case "schedule": return <ScheduleView ops={ops} reload={reload} locale={locale} />;
       case "bookingPage": return <BookingPageView ops={ops} reload={reload} locale={locale} />;
+      case "industry": return <IndustryTemplatesView ops={ops} reload={reload} locale={locale} />;
       case "stats": return role === "reception" ? <PlaceholderView title={t(locale, "stats")} body="التقارير المالية للمدير العام فقط — صلاحيات الاستقبال محدودة" /> : <StatsView ops={ops} locale={locale} />;
       case "expenses": return role === "provider" ? <PlaceholderView title={t(locale, "expenses")} body="المصروفات ظاهرة للمدير فقط في هذه المرحلة" /> : <ExpensesView ops={ops} reload={reload} locale={locale} />;
       case "notifications": return <NotificationsView ops={ops} reload={reload} locale={locale} />;
@@ -617,18 +891,27 @@ function App() {
     <div className={`ops-shell ${isPending ? "is-pending" : ""}`}>
       <aside className="ops-sidebar">
         <div className="ops-brand">
-          <img src="/assets/maw3ed-icon.svg" alt="" />
+          <img src={logoUrl || "/assets/maw3ed-icon.svg"} alt="" />
           <div><strong>{t(locale, "brand")}</strong><span>{t(locale, "tagline")}</span></div>
         </div>
         <div className="workspace-pill">
           <b>{profile?.name || ops?.bookingPage?.businessName || "مساحة موعد"}</b>
-          <span>{profile?.activityDisplayName || "مساحة عمل"}</span>
+          <span>{ops?.activity?.templateDisplayName || profile?.activityDisplayName || "مساحة عمل"}</span>
+          {(workspaces.length > 0 || true) && (
+            <div className="workspace-switch">
+              <select value={workspaceId} onChange={(e) => switchWorkspace(e.target.value)}>
+                <option value="">المساحة المحلية</option>
+                {workspaces.map((ws) => <option key={ws.id} value={ws.id}>{ws.name}</option>)}
+              </select>
+              <button type="button" onClick={createWorkspace}>+ مساحة</button>
+            </div>
+          )}
         </div>
         <nav className="ops-nav">
           {NAV.map((item) => (
             <button key={item.id} type="button" className={view === item.id ? "nav-item active" : "nav-item"} onClick={() => navigate(item.id)}>
               <span className="nav-ico" aria-hidden="true">{item.mark}</span>
-              <span>{t(locale, item.id)}</span>
+              <span>{item.id === "industry" ? "القوالب" : item.id === "bookingPage" ? "المنشأة والحجز" : t(locale, item.id)}</span>
               {item.badge && <i className="new-badge">{item.badge}</i>}
               {item.growth && <i className="lock-dot" title="Growth" />}
             </button>
@@ -650,6 +933,7 @@ function App() {
             </select>
           </label>
           <div className="user-chip"><b>مستخدم موعد</b><span>{t(locale, "free")} · {role === "owner" ? "مدير" : role === "reception" ? "استقبال" : "مقدّم"}</span></div>
+          <button type="button" className="logout-button" onClick={logoutUser}>تسجيل الخروج</button>
         </div>
       </aside>
       <main className="ops-main">
@@ -670,9 +954,21 @@ function App() {
       </nav>
       {moreOpen && (
         <div className="more-sheet">
+          <div className="more-facility">
+            <div className="facility-logo-preview sm" style={logoUrl ? { backgroundImage: `url(${logoUrl})` } : undefined}>
+              {!logoUrl && <span>شعار</span>}
+            </div>
+            <div>
+              <b>{ops?.bookingPage?.businessName || "منشأة موعد"}</b>
+              <small>{ops?.activity?.templateDisplayName || "مساحة عمل"}</small>
+            </div>
+          </div>
           {NAV.filter((item) => !MOBILE_NAV.includes(item.id)).map((item) => (
-            <button key={item.id} type="button" onClick={() => navigate(item.id)}>{t(locale, item.id)}</button>
+            <button key={item.id} type="button" onClick={() => navigate(item.id)}>
+              {item.id === "industry" ? "القوالب" : item.id === "bookingPage" ? "المنشأة والحجز" : t(locale, item.id)}
+            </button>
           ))}
+          <button type="button" className="logout-button" onClick={logoutUser}>تسجيل الخروج</button>
         </div>
       )}
     </div>

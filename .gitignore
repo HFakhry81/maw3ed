@@ -9,3 +9,5 @@ data/development-events.jsonl
 data/last-refresh-report.json
 data/last-update-report.json
 data/last-release-prepare.json
+data/uploads/*
+!data/uploads/.gitkeep

@@ -122,7 +122,12 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
                       <article key={item.id} className={`week-event status-${item.status}`}>
                         <strong>{item.time}</strong>
                         <span>{item.customerName || item.patientName}</span>
-                        <small>{item.serviceName} · {item.staffName || item.doctorName}</small>
+                        <small>
+                          {item.serviceName || "خدمة"}
+                          {item.staffName || item.doctorName ? ` · ${item.staffName || item.doctorName}` : ""}
+                          {item.amount != null ? ` · ${Number(item.amount) === 0 ? "مجاني" : `E£${item.amount}`}` : ""}
+                          {item.status ? ` · ${item.status}` : ""}
+                        </small>
                       </article>
                     ))}
                   </div>
