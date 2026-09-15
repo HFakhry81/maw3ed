@@ -43,6 +43,11 @@ On confirm: match by **phone** (preferred) else name → update; else create wit
 - Google Calendar sync for staff  
 - Optimistic multi-node locks  
 
+## Hosting, domain, and product gaps
+
+Full portal + VPS + DNS/SSL + notification/persistence gaps:  
+[`BOOKING_PORTAL_HOSTING_DOMAIN.md`](BOOKING_PORTAL_HOSTING_DOMAIN.md) · [`DEPLOY_VPS.md`](DEPLOY_VPS.md)
+
 ## Related
 
 - [`build-plan.md`](build-plan.md) · [`platform-capabilities.md`](platform-capabilities.md) · [`architecture-spec.md`](architecture-spec.md)

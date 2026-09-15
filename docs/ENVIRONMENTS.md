@@ -38,5 +38,11 @@ npm run env:production
 
 ## الفروع
 
-الفرع التشغيلي: `replit-agent` (ومزامن مع `main` بعد الدمج).  
+الفرع الوحيد للمشروع: **`main`**.  
 كل التعديلات تتم محلياً ثم تُرفع إلى GitHub ثم تُسحب على الـ VPS.
+
+## مراجع
+
+- [`DEPLOY_VPS.md`](DEPLOY_VPS.md) — نشر + Nginx + SSL + دومين  
+- [`BOOKING_PORTAL_HOSTING_DOMAIN.md`](BOOKING_PORTAL_HOSTING_DOMAIN.md) — بوابة الحجز والفجوات  
+- [`LOCAL_CURSOR_WORKFLOW.md`](LOCAL_CURSOR_WORKFLOW.md) — يوم العمل المحلي
