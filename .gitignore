@@ -6,3 +6,4 @@ data/email-outbox.jsonl
 data/development-events.jsonl
 *.log
 .DS_Store
+data/last-refresh-report.json

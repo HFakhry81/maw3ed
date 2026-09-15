@@ -797,6 +797,26 @@ function getStatsSummary(fallbackAppointments = []) {
   };
 }
 
+function resetOpsData() {
+  store = defaultStore();
+  store.workingHours = store.workingHours.map((day) => ({
+    ...day,
+    breakEnabled: true,
+    breakStartsAt: day.breakStartsAt || "13:00",
+    breakEndsAt: day.breakEndsAt || "14:00"
+  }));
+  slotHolds.clear();
+  persist();
+  return {
+    ok: true,
+    slug: store.bookingPage.slug,
+    services: store.services.length,
+    staff: store.staff.length,
+    customers: store.customers.length,
+    appointments: store.appointments.length
+  };
+}
+
 module.exports = {
   createId,
   getActivityProfile,
@@ -834,5 +854,6 @@ module.exports = {
   createExpense,
   listAppointments,
   createAppointment,
-  getStatsSummary
+  getStatsSummary,
+  resetOpsData
 };
