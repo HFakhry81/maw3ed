@@ -1,25 +1,31 @@
 @echo off
-title Maw3ed - Master Build Control Center
-color 0D
+chcp 65001 >nul
+title Maw3ed - Master Build (Local)
+cd /d "%~dp0"
+set "MAW3ED_ENV=local"
+if not exist .env.mode echo local>.env.mode
 
 :menu
 cls
 echo ====================================================
-echo             MAW3ED MASTER BUILD SYSTEM
+echo   MAW3ED MASTER BUILD  ^|  Local → Git → VPS
 echo ====================================================
 echo  [1] Update Database (Migrate + Seed)
-echo  [2] Build API & Web Frontend
-echo  [3] Build Mobile APK (Android)
-echo  [4] Execute Full Setup / Build All
-echo  [5] Exit
+echo  [2] Build API ^& Web Frontend
+echo  [3] Mobile install (Expo shell)
+echo  [4] Full update:all + smoke
+echo  [5] Open Toolbox
+echo  [6] Exit
 echo ====================================================
-set /p choice="Choose an option (1-5): "
+set /p choice="Choose (1-6): "
 
 if "%choice%"=="1" goto db
 if "%choice%"=="2" goto webapi
 if "%choice%"=="3" goto apk
 if "%choice%"=="4" goto full
-if "%choice%"=="5" exit
+if "%choice%"=="5" goto toolbox
+if "%choice%"=="6" exit /b 0
+goto menu
 
 :db
 call update-db.bat
@@ -34,10 +40,9 @@ call build-apk.bat
 goto menu
 
 :full
-echo Running Full Project Setup...
-call pnpm update:all
-call pnpm build:all
-call pnpm build:apk
-echo All Components Built Successfully!
-pause
+call MAW3ED-UPDATE-ALL.bat
+goto menu
+
+:toolbox
+call MAW3ED-TOOLBOX.bat
 goto menu
