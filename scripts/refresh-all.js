@@ -43,16 +43,27 @@ function nodeBin() {
   return process.execPath;
 }
 
+function commandExists(command) {
+  const probe = process.platform === "win32" ? "where" : "which";
+  const result = spawnSync(probe, [command], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    shell: process.platform === "win32"
+  });
+  return result.status === 0;
+}
+
 function npmOrYarnInstall() {
   const hasYarnLock = fs.existsSync(path.join(root, "yarn.lock"));
   const hasNodeModules = fs.existsSync(path.join(root, "node_modules", "vite"));
   if (hasNodeModules && process.env.REFRESH_SKIP_INSTALL === "1") {
     return { label: "install", ok: true, status: 0, ms: 0, skipped: true };
   }
-  if (hasYarnLock) {
-    return run("install", "yarn", ["install", "--frozen-lockfile"], { soft: false });
+  if (hasYarnLock && commandExists("yarn")) {
+    return run("install", "yarn", ["install", "--frozen-lockfile"], { soft: false, shell: true });
   }
-  return run("install", "npm", ["install"], { soft: false });
+  const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+  return run("install", npmBin, ["install"], { soft: false, shell: true });
 }
 
 function main() {

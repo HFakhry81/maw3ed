@@ -60,7 +60,11 @@ function runGit(command, fallback = "") {
 function snapshot() {
   const status = runGit(["status", "--short"]);
   const diff = runGit(["diff", "--stat"]);
-  const files = status.split("\n").filter(Boolean).map((line) => line.slice(3).trim()).filter(Boolean);
+  const files = status
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.replace(/^[ MADRCU?!]{1,2}\s+/, "").replace(/^"/, "").replace(/"$/, "").trim())
+    .filter(Boolean);
   return {
     branch: runGit(["branch", "--show-current"], "unknown"),
     files,
