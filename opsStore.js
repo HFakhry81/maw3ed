@@ -466,6 +466,30 @@ function getPublicBooking(slug) {
   };
 }
 
+function createPublicAppointment(slug, payload = {}) {
+  if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
+    fail("صفحة الحجز غير متاحة", 404);
+  }
+  const serviceId = String(payload.serviceId || "");
+  const service = store.services.find((item) => item.id === serviceId);
+  if (!service || !service.publicBooking) fail("الخدمة غير متاحة للحجز العام", 400);
+  let staffId = String(payload.staffId || "");
+  const providers = service.providerIds || [];
+  if (staffId && providers.length && !providers.includes(staffId)) {
+    fail("هذا الموظف غير مرتبط بالخدمة", 400);
+  }
+  if (!staffId) {
+    staffId = providers[0] || store.staff.find((person) => person.active)?.id || "";
+  }
+  return createAppointment({
+    ...payload,
+    serviceId,
+    staffId,
+    customerName: payload.customerName || payload.patientName,
+    paymentMethod: payload.paymentMethod || "cash"
+  });
+}
+
 function getCalendarPreferences() {
   return store.calendarPreferences;
 }
@@ -610,6 +634,7 @@ module.exports = {
   getBookingPage,
   updateBookingPage,
   getPublicBooking,
+  createPublicAppointment,
   getCalendarPreferences,
   updateCalendarPreferences,
   getNotificationSettings,

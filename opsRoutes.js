@@ -130,6 +130,14 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       sendJson(res, 200, { ok: true, ...ops.getPublicBooking(publicBookingMatch[1]) });
       return true;
     }
+    const publicBookMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/appointments$/);
+    if (publicBookMatch && req.method === "POST") {
+      sendJson(res, 201, {
+        ok: true,
+        appointment: ops.createPublicAppointment(publicBookMatch[1], await parseJsonBody(req))
+      });
+      return true;
+    }
 
     if (requested === "/api/ops/calendar-preferences" && req.method === "GET") {
       sendJson(res, 200, { ok: true, preferences: ops.getCalendarPreferences() });

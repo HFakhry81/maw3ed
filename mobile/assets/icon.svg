@@ -1,0 +1,52 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="night" x1="24" y1="16" x2="232" y2="244" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1769E8"/>
+      <stop offset=".42" stop-color="#0B369C"/>
+      <stop offset="1" stop-color="#041637"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="45" y1="30" x2="211" y2="218" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2E8EFF" stop-opacity=".42"/>
+      <stop offset="1" stop-color="#071D5D" stop-opacity=".1"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="78" y1="53" x2="199" y2="213" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF3A0"/>
+      <stop offset=".38" stop-color="#FFD33D"/>
+      <stop offset="1" stop-color="#F28A00"/>
+    </linearGradient>
+    <linearGradient id="clock" x1="133" y1="80" x2="212" y2="183" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1677F6"/>
+      <stop offset="1" stop-color="#061B5A"/>
+    </linearGradient>
+    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="7"/>
+    </filter>
+    <filter id="depth" x="-30%" y="-30%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="13" stdDeviation="11" flood-color="#010B2A" flood-opacity=".48"/>
+    </filter>
+  </defs>
+
+  <rect x="10" y="10" width="236" height="236" rx="66" fill="url(#night)"/>
+  <path d="M27 83C32 41 66 20 108 19H188C217 19 237 39 237 68" stroke="#57E6FF" stroke-opacity=".8" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="193" cy="46" r="17" fill="#5AE7FF" opacity=".16" filter="url(#softGlow)"/>
+  <path d="M42 201C73 218 116 231 171 226C198 224 218 211 228 196" stroke="#174ECA" stroke-width="18" stroke-linecap="round" opacity=".55"/>
+
+  <g filter="url(#depth)">
+    <rect x="43" y="56" width="137" height="125" rx="20" fill="#F9FCFF"/>
+    <path d="M43 78C43 65.85 52.85 56 65 56H158C170.15 56 180 65.85 180 78V94H43V78Z" fill="url(#sun)"/>
+    <rect x="68" y="44" width="15" height="35" rx="7.5" fill="url(#sun)" stroke="#D67E08" stroke-width="4"/>
+    <rect x="139" y="44" width="15" height="35" rx="7.5" fill="url(#sun)" stroke="#D67E08" stroke-width="4"/>
+    <path d="M64 114H78M91 114H105M118 114H132M145 114H159M64 138H78M91 138H105M118 138H132M145 138H159M64 162H78M91 162H105M118 162H132" stroke="#2378E9" stroke-width="11" stroke-linecap="round"/>
+    <path d="M91 138H105" stroke="#FFC21C" stroke-width="11" stroke-linecap="round"/>
+  </g>
+
+  <path d="M128 87C148 75 176 78 194 92C212 106 219 130 213 151C207 174 189 189 166 192C145 194 125 185 113 168C101 151 99 128 108 109" fill="url(#clock)" stroke="url(#sun)" stroke-width="7"/>
+  <path d="M163 101V133L181 144" stroke="#FFE777" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="163" cy="133" r="7" fill="#FFC423"/>
+  <path d="M124 155L134 155L141 145L149 163L157 150L165 159L176 159" stroke="#5EE9FF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="193" cy="189" r="31" fill="url(#sun)" stroke="#FFF1A6" stroke-width="3"/>
+  <path d="M177 189L188 200L210 176" stroke="#082A82" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M39 218C74 204 111 207 145 218" stroke="#FFC11E" stroke-width="6" stroke-linecap="round"/>
+  <path d="M39 218L52 214" stroke="#5EE9FF" stroke-width="3" stroke-linecap="round"/>
+</svg>

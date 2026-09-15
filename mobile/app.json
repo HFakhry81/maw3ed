@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "موعد",
+    "slug": "maw3ed",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1a6deb"
+    },
+    "android": {
+      "package": "com.upnexa.maw3ed",
+      "adaptiveIcon": {
+        "backgroundColor": "#1a6deb"
+      }
+    },
+    "extra": {
+      "apiBaseUrl": "http://10.0.2.2:7000",
+      "bookingPath": "/book.html?slug=maw3ed-demo"
+    }
+  }
+}

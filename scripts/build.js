@@ -9,8 +9,9 @@ execFileSync(process.execPath, [path.join(root, "node_modules", "vite", "bin", "
   stdio: "inherit"
 });
 
-for (const file of ["auth.html", "auth.js", "plans.html", "plans.js", "admin.html", "admin.js", "book.html"]) {
-  fs.copyFileSync(path.join(root, file), path.join(dist, file));
+for (const file of ["auth.html", "auth.js", "plans.html", "plans.js", "admin.html", "admin.js", "book.html", "manifest.webmanifest", "sw.js"]) {
+  const sourceFile = path.join(root, file);
+  if (fs.existsSync(sourceFile)) fs.copyFileSync(sourceFile, path.join(dist, file));
 }
 for (const directory of ["assets"]) {
   const source = path.join(root, directory);
@@ -20,6 +21,6 @@ fs.writeFileSync(path.join(dist, "build-manifest.json"), `${JSON.stringify({
   name: "Maw3ed",
   company: "UpNexa-eg.com",
   builtAt: new Date().toISOString(),
-  files: ["index.html", "assets"]
+  files: ["index.html", "book.html", "manifest.webmanifest", "sw.js", "assets"]
 }, null, 2)}\n`);
 console.log("Web dist built in ./dist");

@@ -7,10 +7,14 @@
     <meta name="author" content="UpNexa-eg.com" />
     <meta name="description" content="موعد — منصة مواعيد عربية للأعمال القائمة على الخدمات. منتج من UpNexa-eg.com" />
     <link rel="icon" type="image/svg+xml" href="/assets/maw3ed-icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <title>موعد Maw3ed — إدارة المواعيد</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+    </script>
   </body>
 </html>
