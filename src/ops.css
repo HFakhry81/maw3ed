@@ -619,3 +619,66 @@
 @media (max-width: 860px) {
   .activity-panel { margin-inline: 0; }
 }
+
+.command-center .kpi b {
+  display: block;
+  font-size: 1.6rem;
+  letter-spacing: -0.03em;
+  margin-top: 6px;
+}
+
+.quick-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-actions button {
+  border: 1px solid var(--ops-line);
+  background: #f8fbff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ops-ink);
+}
+
+.quick-actions button:hover {
+  border-color: var(--ops-blue);
+  background: #eef5ff;
+}
+
+.upgrade-card {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed #9bb7e8;
+  background: linear-gradient(180deg, #f3f8ff, #eaf2ff);
+}
+
+.upgrade-card a {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--ops-blue);
+  font-weight: 700;
+}
+
+.status-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: #eaf1fb;
+  color: #35507a;
+}
+
+.status-pill.status-confirmed,
+.status-pill.status-completed { background: #e7f8ef; color: #0f7a45; }
+.status-pill.status-pending { background: #fff4d6; color: #9a6b00; }
+.status-pill.status-cancelled { background: #fdecec; color: #b42318; }
+
+.growth-note a.primary-button {
+  display: inline-flex;
+  margin-top: 12px;
+  text-decoration: none;
+}

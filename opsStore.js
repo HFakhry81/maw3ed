@@ -90,7 +90,7 @@ function defaultStore() {
       isOpen: true,
       opensAt: "09:00",
       closesAt: "21:00",
-      breakEnabled: false,
+      breakEnabled: true,
       breakStartsAt: "13:00",
       breakEndsAt: "14:00"
     })),
@@ -466,6 +466,136 @@ function getPublicBooking(slug) {
   };
 }
 
+
+const slotHolds = new Map();
+
+function toMinutes(hhmm) {
+  const [hours, minutes] = String(hhmm || "00:00").split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function fromMinutes(total) {
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function purgeExpiredHolds(now = Date.now()) {
+  for (const [key, expiresAt] of slotHolds.entries()) {
+    if (expiresAt <= now) slotHolds.delete(key);
+  }
+}
+
+function holdKey(staffId, date, time) {
+  return `${staffId}|${date}|${time}`;
+}
+
+function rangesOverlap(startA, endA, startB, endB) {
+  return startA < endB && startB < endA;
+}
+
+function appointmentBlockMinutes(appointment) {
+  const service = store.services.find((item) => item.id === appointment.serviceId);
+  const duration = Number(appointment.durationMinutes || service?.durationMinutes || 30);
+  const buffer = Number(service?.bufferMinutes || 0);
+  return duration + buffer;
+}
+
+function listStaffSlotsForDay({ staffId, date, blockMinutes, ignoreHolds = false }) {
+  purgeExpiredHolds();
+  const day = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(day.getTime())) fail("تاريخ غير صالح");
+  if ((store.closedDays || []).some((item) => item.date === date)) return [];
+  const weekday = day.getDay();
+  const hours = store.workingHours.find((item) => item.weekday === weekday);
+  if (!hours || hours.isOpen === false) return [];
+
+  const open = toMinutes(hours.opensAt);
+  const close = toMinutes(hours.closesAt);
+  const blocked = [];
+  if (hours.breakEnabled && hours.breakStartsAt && hours.breakEndsAt) {
+    blocked.push([toMinutes(hours.breakStartsAt), toMinutes(hours.breakEndsAt)]);
+  }
+  store.appointments
+    .filter((item) => item.date === date && item.staffId === staffId && item.status !== "cancelled")
+    .forEach((item) => {
+      const start = toMinutes(item.time);
+      blocked.push([start, start + appointmentBlockMinutes(item)]);
+    });
+  if (!ignoreHolds) {
+    for (const [key, expiresAt] of slotHolds.entries()) {
+      if (expiresAt <= Date.now()) continue;
+      const [holdStaff, holdDate, holdTime] = key.split("|");
+      if (holdStaff === staffId && holdDate === date) {
+        const start = toMinutes(holdTime);
+        blocked.push([start, start + blockMinutes]);
+      }
+    }
+  }
+
+  const slots = [];
+  for (let cursor = open; cursor + blockMinutes <= close; cursor += blockMinutes) {
+    const end = cursor + blockMinutes;
+    const hitsBlock = blocked.some(([start, stop]) => rangesOverlap(cursor, end, start, stop));
+    if (!hitsBlock) slots.push(fromMinutes(cursor));
+  }
+  return slots;
+}
+
+function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreHolds = false } = {}) {
+  if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
+    fail("صفحة الحجز غير متاحة", 404);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) fail("التاريخ مطلوب");
+  const service = store.services.find((item) => item.id === serviceId);
+  if (!service || !service.publicBooking) fail("الخدمة غير متاحة للحجز العام", 400);
+  const blockMinutes = Number(service.durationMinutes || 30) + Number(service.bufferMinutes || 0);
+  const providers = (service.providerIds || [])
+    .map((id) => store.staff.find((person) => person.id === id && person.active))
+    .filter(Boolean);
+  const pool = providers.length ? providers : store.staff.filter((person) => person.active);
+  if (!pool.length) return { date, serviceId, blockMinutes, staffId, slots: [] };
+
+  if (staffId && staffId !== "any") {
+    const person = pool.find((item) => item.id === staffId);
+    if (!person) fail("هذا الموظف غير مرتبط بالخدمة", 400);
+    return {
+      date,
+      serviceId,
+      staffId: person.id,
+      blockMinutes,
+      slots: listStaffSlotsForDay({ staffId: person.id, date, blockMinutes, ignoreHolds }).map((time) => ({
+        time,
+        staffId: person.id,
+        staffName: person.name
+      }))
+    };
+  }
+
+  const merged = new Map();
+  pool.forEach((person) => {
+    listStaffSlotsForDay({ staffId: person.id, date, blockMinutes, ignoreHolds }).forEach((time) => {
+      if (!merged.has(time)) merged.set(time, { time, staffId: person.id, staffName: person.name });
+    });
+  });
+  return {
+    date,
+    serviceId,
+    staffId: "any",
+    blockMinutes,
+    slots: [...merged.values()].sort((a, b) => a.time.localeCompare(b.time))
+  };
+}
+
+function holdPublicSlot(slug, payload = {}) {
+  const listed = listPublicSlots(slug, payload);
+  const time = String(payload.time || "");
+  const match = listed.slots.find((slot) => slot.time === time);
+  if (!match) fail("هذا الوقت لم يعد متاحاً", 409);
+  slotHolds.set(holdKey(match.staffId, listed.date, time), Date.now() + 3 * 60 * 1000);
+  return { ok: true, holdSeconds: 180, staffId: match.staffId, date: listed.date, time };
+}
+
 function createPublicAppointment(slug, payload = {}) {
   if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
     fail("صفحة الحجز غير متاحة", 404);
@@ -473,21 +603,50 @@ function createPublicAppointment(slug, payload = {}) {
   const serviceId = String(payload.serviceId || "");
   const service = store.services.find((item) => item.id === serviceId);
   if (!service || !service.publicBooking) fail("الخدمة غير متاحة للحجز العام", 400);
+  const date = String(payload.date || "");
+  const time = String(payload.time || "");
   let staffId = String(payload.staffId || "");
-  const providers = service.providerIds || [];
-  if (staffId && providers.length && !providers.includes(staffId)) {
-    fail("هذا الموظف غير مرتبط بالخدمة", 400);
+  // Drop the booker's soft hold before availability re-check so they are not blocked by themselves.
+  if (staffId && staffId !== "any") {
+    slotHolds.delete(holdKey(staffId, date, time));
+  } else {
+    purgeExpiredHolds();
+    for (const key of [...slotHolds.keys()]) {
+      const [, holdDate, holdTime] = key.split("|");
+      if (holdDate === date && holdTime === time) slotHolds.delete(key);
+    }
   }
-  if (!staffId) {
-    staffId = providers[0] || store.staff.find((person) => person.active)?.id || "";
+  if (!staffId || staffId === "any") {
+    const available = listPublicSlots(slug, { date, serviceId, staffId: "any", ignoreHolds: true });
+    const match = available.slots.find((slot) => slot.time === time);
+    if (!match) fail("لا يوجد موظف متاح في هذا الوقت", 409);
+    staffId = match.staffId;
+  } else {
+    const available = listPublicSlots(slug, { date, serviceId, staffId, ignoreHolds: true });
+    if (!available.slots.some((slot) => slot.time === time)) fail("هذا الوقت لم يعد متاحاً", 409);
   }
   return createAppointment({
     ...payload,
     serviceId,
     staffId,
+    date,
+    time,
     customerName: payload.customerName || payload.patientName,
+    phone: payload.phone,
+    email: payload.email,
     paymentMethod: payload.paymentMethod || "cash"
   });
+}
+
+function updateAppointmentStatus(id, status) {
+  const allowed = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
+  if (!allowed.has(String(status || ""))) fail("حالة الموعد غير صالحة");
+  const appointment = store.appointments.find((item) => item.id === id);
+  if (!appointment) fail("الموعد غير موجود", 404);
+  appointment.status = status;
+  appointment.updatedAt = new Date().toISOString();
+  persist();
+  return appointment;
 }
 
 function getCalendarPreferences() {
@@ -556,17 +715,38 @@ function createAppointment(payload) {
   const staff = store.staff.find((person) => person.id === staffId);
   if (!staff) fail("الموظف غير موجود", 404);
   const service = store.services.find((item) => item.id === serviceId) || null;
-  const collision = store.appointments.find(
-    (item) => item.date === date && item.time === time && item.staffId === staffId && item.status !== "cancelled"
-  );
+  const phone = String(payload.phone || "").trim();
+  const email = String(payload.email || "").trim();
+  const blockMinutes = Number(service?.durationMinutes || 30) + Number(service?.bufferMinutes || 0);
+  const start = toMinutes(time);
+  const end = start + blockMinutes;
+  const collision = store.appointments.find((item) => {
+    if (item.date !== date || item.staffId !== staffId || item.status === "cancelled") return false;
+    const otherStart = toMinutes(item.time);
+    const otherEnd = otherStart + appointmentBlockMinutes(item);
+    return rangesOverlap(start, end, otherStart, otherEnd);
+  });
   if (collision) fail("هذا الموظف محجوز في نفس الوقت", 409);
 
-  let customer = store.customers.find(
-    (item) => `${item.firstName} ${item.lastName}`.trim().toLowerCase() === customerName.toLowerCase()
-  );
+  let customer = null;
+  if (phone) {
+    customer = store.customers.find((item) => String(item.phone || "").replace(/\s+/g, "") === phone.replace(/\s+/g, ""));
+  }
   if (!customer) {
+    customer = store.customers.find(
+      (item) => `${item.firstName} ${item.lastName}`.trim().toLowerCase() === customerName.toLowerCase()
+    );
+  }
+  if (customer) {
     const [firstName, ...rest] = customerName.split(/\s+/);
-    customer = createCustomer({ firstName, lastName: rest.join(" "), categoryId: "cat-new" });
+    customer.firstName = firstName || customer.firstName;
+    customer.lastName = rest.join(" ") || customer.lastName;
+    if (phone) customer.phone = phone;
+    if (email) customer.email = email;
+    persist();
+  } else {
+    const [firstName, ...rest] = customerName.split(/\s+/);
+    customer = createCustomer({ firstName, lastName: rest.join(" "), phone, email, categoryId: "cat-new" });
   }
 
   const appointment = {
@@ -594,14 +774,22 @@ function createAppointment(payload) {
 
 function getStatsSummary(fallbackAppointments = []) {
   const appointments = store.appointments.length ? store.appointments : fallbackAppointments;
+  const today = new Date().toISOString().slice(0, 10);
   const completed = appointments.filter((item) => item.status === "completed" || item.status === "confirmed");
   const cancelled = appointments.filter((item) => item.status === "cancelled" || item.status === "canceled");
+  const todayItems = appointments.filter((item) => item.date === today && item.status !== "cancelled" && item.status !== "canceled");
+  const revenueTotal = completed.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const attendanceRate = appointments.length ? Math.round((completed.length / appointments.length) * 100) : 0;
   return {
     appointments: {
       completedCount: completed.length,
       cancelledCount: cancelled.length,
-      totalCount: appointments.length
+      totalCount: appointments.length,
+      todayCount: todayItems.length,
+      pendingCount: appointments.filter((item) => item.status === "pending").length
     },
+    revenueTotal,
+    attendanceRate,
     expensesTotal: store.expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0),
     servicesCount: store.services.length,
     staffCount: store.staff.length,
@@ -634,7 +822,10 @@ module.exports = {
   getBookingPage,
   updateBookingPage,
   getPublicBooking,
+  listPublicSlots,
+  holdPublicSlot,
   createPublicAppointment,
+  updateAppointmentStatus,
   getCalendarPreferences,
   updateCalendarPreferences,
   getNotificationSettings,

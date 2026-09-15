@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import React, { Component, Suspense, useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import "./ops.css";
@@ -7,6 +7,7 @@ import { LOCALES, applyDocumentLocale, t } from "./i18n";
 import { CalendarView } from "./CalendarView.jsx";
 
 const NAV = [
+  { id: "overview", mark: "غرفة" },
   { id: "calendar", mark: "تق" },
   { id: "customers", mark: "عم" },
   { id: "staff", mark: "مو" },
@@ -22,7 +23,27 @@ const NAV = [
   { id: "integrations", mark: "ربط", growth: true }
 ];
 
-const MOBILE_NAV = ["calendar", "customers", "services", "staff", "more"];
+const MOBILE_NAV = ["overview", "calendar", "customers", "services", "more"];
+
+class ModuleBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <section className="ops-page">
+          <div className="panel empty-state">تعذّر عرض هذا القسم. باقي غرفة العمليات يعمل بشكل طبيعي.</div>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function useOpsBootstrap() {
   const [ops, setOps] = useState(null);
@@ -314,17 +335,76 @@ function BookingPageView({ ops, reload, locale }) {
   );
 }
 
+function OverviewView({ ops, appointments, locale, onNavigate }) {
+  const stats = ops?.stats || {};
+  const today = new Date().toISOString().slice(0, 10);
+  const todayItems = (appointments || []).filter((item) => item.date === today && item.status !== "cancelled").slice(0, 6);
+  const usage = ops?.planUsage;
+  return (
+    <section className="ops-page command-center">
+      <div className="ops-header">
+        <div>
+          <h1>{t(locale, "overview")}</h1>
+          <p>غرفة العمليات المركزية — شفافية لحظية عبر الحجوزات والعملاء والمال</p>
+        </div>
+        <a className="primary-button" href="/plans.html">ترقية الخطة</a>
+      </div>
+      <div className="stats-cards">
+        <article className="panel kpi"><span>مواعيد اليوم</span><b>{stats.appointments?.todayCount || todayItems.length}</b></article>
+        <article className="panel kpi"><span>نسبة الحضور</span><b>{stats.attendanceRate || 0}%</b></article>
+        <article className="panel kpi"><span>إيراد مؤكد</span><b>E£{stats.revenueTotal || 0}</b></article>
+        <article className="panel kpi"><span>قيد الانتظار</span><b>{stats.appointments?.pendingCount || 0}</b></article>
+      </div>
+      <div className="split-panels">
+        <div className="panel">
+          <div className="panel-head"><b>مواعيد اليوم</b><button type="button" onClick={() => onNavigate("calendar")}>التقويم</button></div>
+          {todayItems.map((item) => (
+            <div className="table-row" key={item.id}>
+              <b>{item.time}</b>
+              <span>{item.customerName}</span>
+              <span>{item.serviceName}</span>
+              <span className={`status-pill status-${item.status}`}>{item.status}</span>
+            </div>
+          ))}
+          {!todayItems.length && <div className="empty-state">لا مواعيد اليوم بعد — صفحة الحجز العامة جاهزة لاستقبال العملاء.</div>}
+        </div>
+        <div className="panel">
+          <div className="panel-head"><b>اختصارات تشغيلية</b></div>
+          <div className="quick-actions">
+            <button type="button" onClick={() => onNavigate("customers")}>CRM العملاء</button>
+            <button type="button" onClick={() => onNavigate("services")}>الخدمات والأقسام</button>
+            <button type="button" onClick={() => onNavigate("bookingPage")}>صفحة الحجز العامة</button>
+            <button type="button" onClick={() => onNavigate("stats")}>التقارير</button>
+          </div>
+          {usage?.warnings?.length > 0 && (
+            <div className="plan-warning">
+              اقتربت من حدود الخطة المجانية: {usage.warnings.map((item) => `${item.key} ${item.used}/${item.limit}`).join(" · ")}
+            </div>
+          )}
+          <div className="upgrade-card">
+            <b>بوابة الترقية</b>
+            <p>التقارير التفصيلية، أكواد الخصم، وواتساب تفتح مع Pro — الواجهة موجودة كـ Teaser.</p>
+            <a href="/plans.html">عرض الخطط</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function StatsView({ ops, locale }) {
   const stats = ops?.stats || {};
   return (
     <section className="ops-page">
-      <div className="ops-header"><div><h1>{t(locale, "stats")}</h1><p>ملخص الأداء الأساسي</p></div></div>
+      <div className="ops-header"><div><h1>{t(locale, "stats")}</h1><p>مؤشرات الأداء والملخص المالي</p></div></div>
       <div className="stats-cards">
         <article className="panel"><span>مكتمل / مؤكد</span><b>{stats.appointments?.completedCount || 0}</b></article>
         <article className="panel"><span>ملغى</span><b>{stats.appointments?.cancelledCount || 0}</b></article>
         <article className="panel"><span>إجمالي المواعيد</span><b>{stats.appointments?.totalCount || 0}</b></article>
+        <article className="panel"><span>مواعيد اليوم</span><b>{stats.appointments?.todayCount || 0}</b></article>
+        <article className="panel"><span>نسبة الحضور</span><b>{stats.attendanceRate || 0}%</b></article>
+        <article className="panel"><span>إيراد مؤكد</span><b>E£{stats.revenueTotal || 0}</b></article>
         <article className="panel"><span>العملاء</span><b>{stats.customersCount || 0}</b></article>
-        <article className="panel"><span>الخدمات</span><b>{stats.servicesCount || 0}</b></article>
         <article className="panel"><span>المصروفات</span><b>E£{stats.expensesTotal || 0}</b></article>
       </div>
     </section>
@@ -364,7 +444,16 @@ function ExpensesView({ ops, reload, locale }) {
 }
 
 function PlaceholderView({ title, body }) {
-  return <section className="ops-page"><div className="ops-header"><div><h1>{title}</h1><p>{body}</p></div></div><div className="panel empty-state growth-note">متاح في مرحلة النمو — الواجهة جاهزة والقفل مفعّل للخطة المجانية.</div></section>;
+  return (
+    <section className="ops-page">
+      <div className="ops-header"><div><h1>{title}</h1><p>{body}</p></div></div>
+      <div className="panel locked growth-note">
+        <b>ميزة مقفلة — Teaser للترقية</b>
+        <p>متاح في مرحلة النمو / Pro. الواجهة جاهزة والقفل مفعّل للخطة المجانية لتحفيز الترقية عند الحاجة.</p>
+        <a className="primary-button" href="/plans.html">الترقية الآن</a>
+      </div>
+    </section>
+  );
 }
 
 function NotificationsView({ ops, reload, locale }) {
@@ -478,8 +567,9 @@ function ActivityProfileBar({ ops, reload, locale }) {
 
 function App() {
   const [locale, setLocale] = useState(localStorage.getItem("maw3ed.locale") || "ar");
-  const [view, setView] = useState("calendar");
+  const [view, setView] = useState("overview");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [role, setRole] = useState(localStorage.getItem("maw3ed.role") || "owner");
   const { ops, error, isPending, reload } = useOpsBootstrap();
   const { appointments, reload: reloadAppointments } = useAppointments();
   const [profile, setProfile] = useState(null);
@@ -505,20 +595,21 @@ function App() {
   const content = (() => {
     if (!ops && isPending) return <div className="loading-state">{t(locale, "loading")}</div>;
     switch (view) {
+      case "overview": return <OverviewView ops={ops} appointments={appointments} locale={locale} onNavigate={navigate} />;
       case "calendar": return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={() => { reloadAppointments(); reload(); }} />;
       case "customers": return <CustomersView ops={ops} reload={reload} locale={locale} />;
       case "staff": return <StaffView ops={ops} reload={reload} locale={locale} />;
       case "services": return <ServicesView ops={ops} reload={reload} locale={locale} />;
       case "schedule": return <ScheduleView ops={ops} reload={reload} locale={locale} />;
       case "bookingPage": return <BookingPageView ops={ops} reload={reload} locale={locale} />;
-      case "stats": return <StatsView ops={ops} locale={locale} />;
-      case "expenses": return <ExpensesView ops={ops} reload={reload} locale={locale} />;
+      case "stats": return role === "reception" ? <PlaceholderView title={t(locale, "stats")} body="التقارير المالية للمدير العام فقط — صلاحيات الاستقبال محدودة" /> : <StatsView ops={ops} locale={locale} />;
+      case "expenses": return role === "provider" ? <PlaceholderView title={t(locale, "expenses")} body="المصروفات ظاهرة للمدير فقط في هذه المرحلة" /> : <ExpensesView ops={ops} reload={reload} locale={locale} />;
       case "notifications": return <NotificationsView ops={ops} reload={reload} locale={locale} />;
       case "preferences": return <PreferencesView ops={ops} reload={reload} locale={locale} />;
       case "payments": return <PlaceholderView title={t(locale, "payments")} body="بوابة الدفع الإلكتروني (Stripe) — مرحلة النمو" />;
       case "marketing": return <PlaceholderView title={t(locale, "marketing")} body="الخصومات والولاء — مرحلة النمو / Pro" />;
       case "integrations": return <PlaceholderView title={t(locale, "integrations")} body="Google Calendar و Stripe — مرحلة النمو" />;
-      default: return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={reloadAppointments} />;
+      default: return <OverviewView ops={ops} appointments={appointments} locale={locale} onNavigate={navigate} />;
     }
   })();
 
@@ -550,13 +641,23 @@ function App() {
               {LOCALES.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
             </select>
           </label>
-          <div className="user-chip"><b>مستخدم موعد</b><span>{t(locale, "free")}</span></div>
+          <label className="locale-select">
+            <span>الدور</span>
+            <select value={role} onChange={(e) => { setRole(e.target.value); localStorage.setItem("maw3ed.role", e.target.value); }}>
+              <option value="owner">مدير عام</option>
+              <option value="reception">استقبال</option>
+              <option value="provider">مقدّم خدمة</option>
+            </select>
+          </label>
+          <div className="user-chip"><b>مستخدم موعد</b><span>{t(locale, "free")} · {role === "owner" ? "مدير" : role === "reception" ? "استقبال" : "مقدّم"}</span></div>
         </div>
       </aside>
       <main className="ops-main">
         <ActivityProfileBar ops={ops} reload={reload} locale={locale} />
         {error && <div className="error-banner">{error}<button type="button" onClick={reload}>إعادة</button></div>}
-        <Suspense fallback={<div className="loading-state">{t(locale, "loading")}</div>}>{content}</Suspense>
+        <ModuleBoundary key={view}>
+          <Suspense fallback={<div className="loading-state">{t(locale, "loading")}</div>}>{content}</Suspense>
+        </ModuleBoundary>
         <footer className="ops-footer">{t(locale, "poweredBy")}</footer>
       </main>
       <nav className="mobile-bottom-nav" aria-label="mobile">
