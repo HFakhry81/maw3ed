@@ -1,27 +1,20 @@
 const fs = require("fs");
 const path = require("path");
-
-// Load .env automatically BEFORE importing db module
-const envPath = path.join(__dirname, "../.env");
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, "utf8");
-  envContent.split("\n").forEach((line) => {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith("#")) {
-      const [key, ...val] = trimmed.split("=");
-      if (key && val.length > 0) {
-        process.env[key.trim()] = val.join("=").trim();
-      }
-    }
-  });
-}
-
+const { loaded } = require("./load-env");
 const { pool } = require("../db");
 
 const organizationId = "org-maw3ed";
 const dataPath = path.join(__dirname, "..", "data", "maw3ed-data.json");
 
 async function main() {
+  if (loaded.mode === "local" && process.env.MAW3ED_STORAGE !== "postgres") {
+    console.log("[INFO] Local mode without Postgres — seed skipped.");
+    process.exit(0);
+  }
+  if (!pool) {
+    console.error("[ERROR] Database pool is not configured (set MAW3ED_STORAGE=postgres and DATABASE_URL).");
+    process.exit(1);
+  }
   if (!fs.existsSync(dataPath)) {
     console.error(`[ERROR] Data file not found: ${dataPath}`);
     process.exit(1);

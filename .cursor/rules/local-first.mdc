@@ -6,7 +6,8 @@ alwaysApply: true
 # Maw3ed Local-first
 
 - Develop only against the local workspace at `E:\UpNexa.com\maw3ed` (or the opened local clone). Do not treat Cursor Cloud Agents as the primary development environment.
-- Preferred flow: local changes → `npm run update:*` / `npm run refresh` → commit and push to GitHub → deploy to VPS from Git.
+- Preferred flow: local changes (`MAW3ED_ENV=local`) → `npm run update:*` / `npm run refresh` → commit and push to GitHub → deploy to VPS (`MAW3ED_ENV=production`) from Git.
+- Only two environments: `local` and `production` (see `docs/ENVIRONMENTS.md`). Do not introduce staging/replit/preview as official modes.
 - Keep Maw3ed on ports `7000` (API/web) and `7100` (Vite). Never bind to `5000` (UpNexa).
 - Default runtime is local in-memory data unless `MAW3ED_STORAGE=postgres` and `DATABASE_URL` are set explicitly.
 - After successful local verification, use `npm run release:prepare` before pushing and deploying.

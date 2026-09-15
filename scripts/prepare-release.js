@@ -78,13 +78,15 @@ function main() {
   console.log("# Replace placeholders with your real paths/service names:");
   console.log("cd /path/to/maw3ed");
   console.log("git pull origin " + branch);
+  console.log("echo production > .env.mode");
+  console.log("# Ensure .env.production has DATABASE_URL + SESSION_SECRET + Clerk keys");
   console.log("npm ci   # or: npm install");
   console.log("npm run build");
   console.log("# Restart the Node process that serves PORT=7000, for example:");
   console.log("#   sudo systemctl restart maw3ed");
   console.log("#   # or: pm2 restart maw3ed");
   console.log("");
-  console.log("Docs: docs/DEPLOY_VPS.md | docs/LOCAL_CURSOR_WORKFLOW.md | docs/nginx/maw3ed.conf");
+  console.log("Docs: docs/DEPLOY_VPS.md | docs/ENVIRONMENTS.md | docs/LOCAL_CURSOR_WORKFLOW.md");
   console.log("Local checks: http://127.0.0.1:7000/  |  book.html?slug=maw3ed-demo");
   console.log("");
 

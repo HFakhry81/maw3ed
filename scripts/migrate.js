@@ -1,27 +1,18 @@
 const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
-
-// Load .env automatically
-const envPath = path.join(__dirname, "../.env");
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, "utf8");
-  envContent.split("\n").forEach((line) => {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith("#")) {
-      const [key, ...val] = trimmed.split("=");
-      if (key && val.length > 0) {
-        process.env[key.trim()] = val.join("=").trim();
-      }
-    }
-  });
-}
+const { loaded } = require("./load-env");
 
 async function main() {
   const connectionString = process.env.DATABASE_URL;
 
+  if (loaded.mode === "local" && process.env.MAW3ED_STORAGE !== "postgres") {
+    console.log("[INFO] Local mode without Postgres — migrate skipped.");
+    process.exit(0);
+  }
+
   if (!connectionString || connectionString.includes("CHANGE_ME")) {
-    console.error("\n[ERROR] DATABASE_URL is missing or invalid in .env file.\n");
+    console.error("\n[ERROR] DATABASE_URL is missing or invalid for this environment.\n");
     process.exit(1);
   }
 

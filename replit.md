@@ -3,7 +3,8 @@
 ## مسار التطوير (Local → Git → VPS)
 
 - بيئة التطوير الأساسية هي **Cursor Desktop على المجلد المحلي** (`E:\UpNexa.com\maw3ed`)، وليس Cloud Agent.
-- بعد نجاح التحقق المحلي: ارفع إلى GitHub ثم انشر على الـ VPS من Git.
+- وضعان فقط: `local` و `production` — راجع `docs/ENVIRONMENTS.md`.
+- بعد نجاح التحقق المحلي: ارفع إلى GitHub ثم انشر على الـ VPS من Git بـ `MAW3ED_ENV=production`.
 - الدليل: `docs/LOCAL_CURSOR_WORKFLOW.md` · النشر: `docs/DEPLOY_VPS.md` · التحديث: `docs/refresh-and-test.md`
 
 ## التشغيل

@@ -1,6 +1,9 @@
 node_modules/
 .yarn/
 .env
+.env.local
+.env.production
+.env.mode
 data/maw3ed-ops.json
 data/email-outbox.jsonl
 data/development-events.jsonl

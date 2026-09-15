@@ -15,30 +15,17 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { loaded } = require("./load-env");
 
 const root = path.join(__dirname, "..");
 const reportPath = path.join(root, "data", "last-update-report.json");
-
-loadDotEnv();
 
 const rawTarget = String(process.argv[2] || "").trim().toLowerCase();
 const target = rawTarget === "api" ? "backend" : rawTarget;
 
 const TARGETS = new Set(["backend", "frontend", "web", "mobile", "all"]);
 
-function loadDotEnv() {
-  const envPath = path.join(root, ".env");
-  if (!fs.existsSync(envPath)) return;
-  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq <= 0) continue;
-    const key = trimmed.slice(0, eq).trim();
-    const val = trimmed.slice(eq + 1).trim();
-    if (key && process.env[key] === undefined) process.env[key] = val;
-  }
-}
+console.log(`[INFO] Maw3ed update mode=${loaded.mode} storage=${loaded.storage}`);
 
 function nodeBin() {
   return process.execPath;

@@ -1,29 +1,12 @@
 const fs = require("fs");
 const path = require("path");
+require("./load-env");
 
 const root = path.join(__dirname, "..");
-
-// Load .env safely
-const envPath = path.join(root, ".env");
-if (fs.existsSync(envPath)) {
-  try {
-    const envContent = fs.readFileSync(envPath, "utf8");
-    envContent.split("\n").forEach((line) => {
-      const trimmed = line.trim();
-      if (trimmed && !trimmed.startsWith("#")) {
-        const [key, ...val] = trimmed.split("=");
-        if (key && val.length > 0) {
-          process.env[key.trim()] = val.join("=").trim();
-        }
-      }
-    });
-  } catch (e) {}
-}
 
 async function main() {
   console.log("[INFO] Resetting operational data and state files...");
 
-  // 1. Safe file cleanup
   const dataDir = path.join(root, "data");
   if (fs.existsSync(dataDir)) {
     const filesToReset = [
@@ -45,9 +28,15 @@ async function main() {
     }
   }
 
-  // 2. Dynamic require for PG to avoid script crashes
+  try {
+    require("../opsStore").resetOpsData();
+    console.log("[SUCCESS] Local ops store reset.");
+  } catch (err) {
+    console.warn(`[WARN] Ops store reset skipped: ${err.message}`);
+  }
+
   const connectionString = process.env.DATABASE_URL;
-  if (connectionString && !connectionString.includes("CHANGE_ME")) {
+  if (process.env.MAW3ED_STORAGE === "postgres" && connectionString && !connectionString.includes("CHANGE_ME")) {
     try {
       const { Pool } = require("pg");
       const isLocal = connectionString.includes("localhost") || connectionString.includes("127.0.0.1");
@@ -71,7 +60,7 @@ async function main() {
       console.warn(`[WARN] DB ops cleanup skipped gracefully: ${dbErr.message}`);
     }
   } else {
-    console.log("[INFO] No valid DATABASE_URL found. Skipped DB ops cleanup.");
+    console.log("[INFO] Postgres cleanup skipped (local storage or no DATABASE_URL).");
   }
 
   console.log("[SUCCESS] Operational data reset completed.");

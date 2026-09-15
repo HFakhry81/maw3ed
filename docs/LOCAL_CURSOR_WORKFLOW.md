@@ -25,6 +25,12 @@ Cursor Desktop (Local)  →  GitHub  →  VPS (:7000)
 
 ## 3) تحديث الأجزاء تلقائياً
 
+فعّل البيئة المحلية أولاً:
+
+```bash
+npm run env:local
+```
+
 | الأمر | الوظيفة |
 | --- | --- |
 | `npm run update:backend` أو `update:api` | اعتماديات + migrate/seed اختياري + فحص العزل |
@@ -34,6 +40,8 @@ Cursor Desktop (Local)  →  GitHub  →  VPS (:7000)
 | `npm run update:all` أو `npm run refresh` | تحديث كامل + اختبارات smoke + mobile |
 | `MAW3ED-UPDATE-ALL.bat` أو `scripts\update-all.cmd` | نفس المسار الكامل من Windows |
 | `MAW3ED-TOOLBOX.bat` | قائمة تفاعلية لكل العمليات |
+
+البيئات: [`ENVIRONMENTS.md`](ENVIRONMENTS.md) — `local` للتطوير و`production` للـ VPS فقط.
 
 تخطّي التثبيت عند التكرار السريع:
 

@@ -9,24 +9,12 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { loaded } = require("./load-env");
 
 const root = path.join(__dirname, "..");
 const reportPath = path.join(root, "data", "last-refresh-report.json");
 
-// Automatically load .env file
-const envPath = path.join(root, ".env");
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, "utf8");
-  envContent.split("\n").forEach((line) => {
-    const trimmed = line.trim();
-    if (trimmed && !trimmed.startsWith("#")) {
-      const [key, ...val] = trimmed.split("=");
-      if (key && val.length > 0) {
-        process.env[key.trim()] = val.join("=").trim();
-      }
-    }
-  });
-}
+console.log(`[INFO] Maw3ed refresh mode=${loaded.mode} storage=${loaded.storage} port=${loaded.port}`);
 
 function run(label, command, args, options = {}) {
   const started = Date.now();

@@ -2,6 +2,7 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+require("./scripts/load-env");
 const { query, pool, databaseConfigured } = require("./db");
 const { sendVerificationEmail, sendSubscriptionRequestEmail } = require("./email");
 const { createClerkClient, verifyToken } = require("@clerk/backend");
@@ -1008,5 +1009,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, "0.0.0.0", () => {
   const ui = fs.existsSync(path.join(root, "dist", "index.html")) ? "react-dist" : "dev-fallback";
   console.log(`Maw3ed React dashboard on port ${port} (${ui})`);
+  console.log(`Environment: ${process.env.MAW3ED_ENV || "local"} · storage=${process.env.MAW3ED_STORAGE || "local"}`);
   console.log("Side-by-side ports: web/API 7000, Vite 7100, Postgres 5433/maw3ed");
 });

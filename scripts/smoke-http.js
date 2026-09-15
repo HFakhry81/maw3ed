@@ -3,6 +3,7 @@
  * Live HTTP smoke against a temporary Maw3ed server.
  * Usage: node scripts/smoke-http.js
  */
+require("./load-env");
 const { spawn } = require("child_process");
 const http = require("http");
 const path = require("path");
