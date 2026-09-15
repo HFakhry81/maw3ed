@@ -1,0 +1,20 @@
+{
+  "name": "موعد Maw3ed",
+  "short_name": "موعد",
+  "description": "منصة مواعيد عربية للأعمال القائمة على الخدمات — UpNexa-eg.com",
+  "start_url": "/book.html?slug=maw3ed-demo",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#eaf2ff",
+  "theme_color": "#1a6deb",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/assets/maw3ed-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

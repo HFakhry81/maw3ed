@@ -532,3 +532,153 @@
   .header-actions { width: 100%; }
   .header-actions .primary-button { flex: 1; }
 }
+
+
+.activity-panel {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.activity-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.activity-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.activity-head p,
+.flexible-note,
+.strip-title {
+  margin: 4px 0 0;
+  color: var(--ops-muted);
+  font-size: 0.9rem;
+}
+
+.mode-switch {
+  display: inline-flex;
+  padding: 4px;
+  border-radius: 999px;
+  background: #eaf1fb;
+  gap: 4px;
+}
+
+.mode-switch button {
+  border: 0;
+  background: transparent;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  color: var(--ops-muted);
+  cursor: pointer;
+}
+
+.mode-switch button.active {
+  background: var(--ops-blue);
+  color: #fff;
+}
+
+.department-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dept-chip {
+  border: 1px solid var(--ops-line);
+  background: #fff;
+  color: var(--ops-ink);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.dept-chip.off {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.plan-warning {
+  background: #fff7e8;
+  border: 1px solid #f0d7a0;
+  color: #8a5a00;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 860px) {
+  .activity-panel { margin-inline: 0; }
+}
+
+.command-center .kpi b {
+  display: block;
+  font-size: 1.6rem;
+  letter-spacing: -0.03em;
+  margin-top: 6px;
+}
+
+.quick-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-actions button {
+  border: 1px solid var(--ops-line);
+  background: #f8fbff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ops-ink);
+}
+
+.quick-actions button:hover {
+  border-color: var(--ops-blue);
+  background: #eef5ff;
+}
+
+.upgrade-card {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed #9bb7e8;
+  background: linear-gradient(180deg, #f3f8ff, #eaf2ff);
+}
+
+.upgrade-card a {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--ops-blue);
+  font-weight: 700;
+}
+
+.status-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  background: #eaf1fb;
+  color: #35507a;
+}
+
+.status-pill.status-confirmed,
+.status-pill.status-completed { background: #e7f8ef; color: #0f7a45; }
+.status-pill.status-pending { background: #fff4d6; color: #9a6b00; }
+.status-pill.status-cancelled { background: #fdecec; color: #b42318; }
+
+.growth-note a.primary-button {
+  display: inline-flex;
+  margin-top: 12px;
+  text-decoration: none;
+}

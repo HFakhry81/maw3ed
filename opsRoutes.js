@@ -21,7 +21,9 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         notifications: ops.getNotificationSettings(),
         expenses: ops.listExpenses(),
         appointments: ops.listAppointments(),
-        stats: ops.getStatsSummary(localData?.appointments || [])
+        stats: ops.getStatsSummary(localData?.appointments || []),
+        activity: ops.getActivityProfile(),
+        planUsage: ops.getPlanUsage()
       });
       return true;
     }
@@ -128,6 +130,31 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       sendJson(res, 200, { ok: true, ...ops.getPublicBooking(publicBookingMatch[1]) });
       return true;
     }
+    const publicSlotsMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/slots$/);
+    if (publicSlotsMatch && req.method === "GET") {
+      sendJson(res, 200, {
+        ok: true,
+        ...ops.listPublicSlots(publicSlotsMatch[1], {
+          date: requestUrl.searchParams.get("date") || "",
+          serviceId: requestUrl.searchParams.get("serviceId") || "",
+          staffId: requestUrl.searchParams.get("staffId") || "any"
+        })
+      });
+      return true;
+    }
+    const publicHoldMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/hold$/);
+    if (publicHoldMatch && req.method === "POST") {
+      sendJson(res, 200, { ok: true, ...ops.holdPublicSlot(publicHoldMatch[1], await parseJsonBody(req)) });
+      return true;
+    }
+    const publicBookMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/appointments$/);
+    if (publicBookMatch && req.method === "POST") {
+      sendJson(res, 201, {
+        ok: true,
+        appointment: ops.createPublicAppointment(publicBookMatch[1], await parseJsonBody(req))
+      });
+      return true;
+    }
 
     if (requested === "/api/ops/calendar-preferences" && req.method === "GET") {
       sendJson(res, 200, { ok: true, preferences: ops.getCalendarPreferences() });
@@ -168,6 +195,19 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     }
     if (requested === "/api/ops/appointments" && req.method === "POST") {
       sendJson(res, 201, { ok: true, appointment: ops.createAppointment(await parseJsonBody(req)) });
+      return true;
+    }
+
+    const appointmentStatusMatch = requested.match(/^\/api\/ops\/appointments\/([^/]+)\/status$/);
+    if (appointmentStatusMatch && req.method === "PATCH") {
+      const payload = await parseJsonBody(req);
+      sendJson(res, 200, { ok: true, appointment: ops.updateAppointmentStatus(appointmentStatusMatch[1], payload.status) });
+      return true;
+    }
+
+
+    if (requested === "/api/ops/activity-profile" && req.method === "PUT") {
+      sendJson(res, 200, { ok: true, activity: ops.updateActivityProfile(await parseJsonBody(req)) });
       return true;
     }
 

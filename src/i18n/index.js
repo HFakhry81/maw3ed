@@ -20,6 +20,7 @@ const messages = {
   ar: {
     brand: "موعد",
     tagline: "إدارة المواعيد بوضوح",
+    overview: "غرفة العمليات",
     calendar: "التقويم",
     customers: "العملاء",
     staff: "الموظفون",
@@ -48,6 +49,7 @@ const messages = {
   en: {
     brand: "Maw3ed",
     tagline: "Appointments, clearly managed",
+    overview: "Command center",
     calendar: "Calendar",
     customers: "Customers",
     staff: "Staff",
