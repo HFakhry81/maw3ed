@@ -14,7 +14,7 @@
     "seed": "node scripts/seed.js",
     "check:isolation": "node scripts/check-isolation.js",
     "ops:reset": "node scripts/reset-ops-data.js",
-    "test:smoke": "node scripts/smoke-public-booking.js",
+    "test:smoke": "node scripts/smoke-public-booking.js && node scripts/smoke-booking-governance.js",
     "test:http": "node scripts/smoke-http.js",
     "test:all": "npm run test:smoke && npm run test:http",
     "refresh": "node scripts/refresh-all.js",

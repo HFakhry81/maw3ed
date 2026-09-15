@@ -178,10 +178,14 @@ function CustomersView({ ops, reload, locale }) {
 }
 
 function StaffView({ ops, reload, locale }) {
-  const emptyForm = { firstName: "", lastName: "", phone: "", title: "", avatarUrl: "", serviceIds: [], active: true };
+  const emptyForm = {
+    firstName: "", lastName: "", phone: "", title: "", avatarUrl: "", serviceIds: [], active: true,
+    useBusinessHours: true
+  };
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
   const openCreate = () => {
     setEditingId("");
     setForm(emptyForm);
@@ -196,7 +200,9 @@ function StaffView({ ops, reload, locale }) {
       title: person.title || "",
       avatarUrl: person.avatarUrl || "",
       serviceIds: person.serviceIds || (ops?.services || []).filter((s) => (s.providerIds || []).includes(person.id)).map((s) => s.id),
-      active: person.active !== false
+      active: person.active !== false,
+      useBusinessHours: person.useBusinessHours !== false,
+      workingHours: person.workingHours || (ops?.schedule?.general || []).map((day) => ({ ...day }))
     });
     setOpen(true);
   };
@@ -216,7 +222,7 @@ function StaffView({ ops, reload, locale }) {
   return (
     <section className="ops-page">
       <div className="ops-header">
-        <div><h1>{t(locale, "staff")}</h1><p>الموظفون ومقدمو الخدمات</p></div>
+        <div><h1>{t(locale, "staff")}</h1><p>الموظفون ومقدمو الخدمات وساعات العمل</p></div>
         <button className="primary-button" type="button" onClick={openCreate}>+ إضافة موظف</button>
       </div>
       <div className="data-table panel">
@@ -227,11 +233,18 @@ function StaffView({ ops, reload, locale }) {
             </div>
             <div>
               <b>{person.name}</b>
-              <small>{person.title}{person.phone ? ` · ${person.phone}` : ""}</small>
+              <small>{person.title}{person.phone ? ` · ${person.phone}` : ""} · {person.useBusinessHours === false ? "ساعات خاصة" : "ساعات المنشأة"}</small>
             </div>
             <span>{person.servicesCount || 0} خدمات</span>
             <button type="button" onClick={() => openEdit(person)}>تعديل</button>
-            <button type="button" className="danger-button" onClick={async () => { await api.del(`/api/ops/staff/${person.id}`); reload(); }}>حذف</button>
+            <button type="button" className="danger-button" onClick={async () => {
+              try {
+                await api.del(`/api/ops/staff/${person.id}`);
+                reload();
+              } catch (error) {
+                window.alert(error.message || "تعذر الحذف");
+              }
+            }}>حذف</button>
           </div>
         ))}
       </div>
@@ -250,6 +263,54 @@ function StaffView({ ops, reload, locale }) {
             </select>
           </label>
           <label className="check"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> نشط</label>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={form.useBusinessHours !== false}
+              onChange={(e) => setForm({
+                ...form,
+                useBusinessHours: e.target.checked,
+                workingHours: e.target.checked ? form.workingHours : (form.workingHours || (ops?.schedule?.general || []).map((day) => ({ ...day })))
+              })}
+            /> استخدام ساعات عمل المنشأة
+          </label>
+          {form.useBusinessHours === false && (
+            <div className="panel schedule-table" style={{ marginTop: 8 }}>
+              {(form.workingHours || []).map((day, index) => (
+                <div className="schedule-row" key={day.weekday ?? index}>
+                  <b>{dayNames[index]}</b>
+                  <label className="switch">
+                    <input
+                      type="checkbox"
+                      checked={day.isOpen !== false}
+                      onChange={(e) => setForm((current) => ({
+                        ...current,
+                        workingHours: current.workingHours.map((item, i) => i === index ? { ...item, isOpen: e.target.checked } : item)
+                      }))}
+                    /><i />
+                  </label>
+                  <input
+                    type="time"
+                    value={day.opensAt || "09:00"}
+                    disabled={day.isOpen === false}
+                    onChange={(e) => setForm((current) => ({
+                      ...current,
+                      workingHours: current.workingHours.map((item, i) => i === index ? { ...item, opensAt: e.target.value } : item)
+                    }))}
+                  />
+                  <input
+                    type="time"
+                    value={day.closesAt || "21:00"}
+                    disabled={day.isOpen === false}
+                    onChange={(e) => setForm((current) => ({
+                      ...current,
+                      workingHours: current.workingHours.map((item, i) => i === index ? { ...item, closesAt: e.target.value } : item)
+                    }))}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
         </form>
       </Drawer>
@@ -325,7 +386,14 @@ function ServicesView({ ops, reload, locale }) {
               <div><b>{service.name}</b><small>{service.durationMinutes} د · انتظار {service.bufferMinutes} د</small></div>
               <span>{Number(service.price) === 0 ? "مجاني" : `E£${service.price}`}</span>
               <button type="button" onClick={() => openEdit(service)}>تعديل</button>
-              <button type="button" className="danger-button" onClick={async () => { await api.del(`/api/ops/services/${service.id}`); reload(); }}>حذف</button>
+              <button type="button" className="danger-button" onClick={async () => {
+                try {
+                  await api.del(`/api/ops/services/${service.id}`);
+                  reload();
+                } catch (error) {
+                  window.alert(error.message || "تعذر الحذف");
+                }
+              }}>حذف</button>
             </div>
           ))}
           {!services.length && <div className="empty-state">{t(locale, "empty")}</div>}
@@ -337,8 +405,8 @@ function ServicesView({ ops, reload, locale }) {
           <label>الفئة<select value={form.categoryId || categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
             {(ops?.serviceCategories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
-          <label>مقدم الخدمة<select value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })}>
-            <option value="">—</option>
+          <label>مقدم الخدمة<select required value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })}>
+            <option value="">— اختر موظفاً —</option>
             {(ops?.staff || []).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
           </select></label>
           <div className="form-row">
@@ -382,7 +450,7 @@ function ScheduleView({ ops, reload, locale }) {
   };
   return (
     <section className="ops-page">
-      <div className="ops-header"><div><h1>{t(locale, "schedule")}</h1><p>ساعات العمل والأيام المغلقة</p></div>{tab === "general" && <button className="primary-button" type="button" onClick={save}>{t(locale, "save")}</button>}</div>
+      <div className="ops-header"><div><h1>{t(locale, "schedule")}</h1><p>ساعات المنشأة · أيام مغلقة · أيام محددة (تُطبَّق على الحجز العام)</p></div>{tab === "general" && <button className="primary-button" type="button" onClick={save}>{t(locale, "save")}</button>}</div>
       <div className="tabs">
         {[["general", "عام"], ["closed", "الأيام المغلقة"], ["specific", "أيام محددة"]].map(([id, label]) => (
           <button key={id} type="button" className={tab === id ? "tab active" : "tab"} onClick={() => setTab(id)}>{label}</button>

@@ -17,7 +17,7 @@ function assert(condition, message) {
   }
 }
 
-function main() {
+async function main() {
   const reset = ops.resetOpsData();
   const slug = reset.slug;
   const date = new Date().toISOString().slice(0, 10);
@@ -27,7 +27,7 @@ function main() {
   const serviceId = service.id;
   const blockMinutes = Number(service.durationMinutes || 30) + Number(service.bufferMinutes || 0);
 
-  const slots = ops.listPublicSlots(slug, { date, serviceId, staffId: "any" });
+  const slots = await ops.listPublicSlots(slug, { date, serviceId, staffId: "any" });
   assert(slots.slots.length > 0, "expected free slots");
   assert(slots.blockMinutes === blockMinutes, `blockMinutes expected ${blockMinutes}, got ${slots.blockMinutes}`);
 
@@ -39,12 +39,12 @@ function main() {
   assert(lunchHits.length === 0, `lunch break leaked slots: ${lunchHits.map((s) => s.time).join(",")}`);
 
   const first = slots.slots[0];
-  const hold = ops.holdPublicSlot(slug, { date, serviceId, staffId: "any", time: first.time });
+  const hold = await ops.holdPublicSlot(slug, { date, serviceId, staffId: "any", time: first.time });
   assert(hold.staffId, "hold must return staffId");
-  const afterHold = ops.listPublicSlots(slug, { date, serviceId, staffId: hold.staffId });
+  const afterHold = await ops.listPublicSlots(slug, { date, serviceId, staffId: hold.staffId });
   assert(!afterHold.slots.some((slot) => slot.time === first.time), "held slot must disappear for others");
 
-  const appointment = ops.createPublicAppointment(slug, {
+  const appointment = await ops.createPublicAppointment(slug, {
     serviceId,
     staffId: hold.staffId,
     date,
@@ -58,7 +58,7 @@ function main() {
 
   let collision = null;
   try {
-    ops.createPublicAppointment(slug, {
+    await ops.createPublicAppointment(slug, {
       serviceId,
       staffId: hold.staffId,
       date,
@@ -71,10 +71,10 @@ function main() {
   }
   assert(collision && collision.statusCode === 409, "expected 409 collision");
 
-  const remaining = ops.listPublicSlots(slug, { date, serviceId, staffId: hold.staffId });
+  const remaining = await ops.listPublicSlots(slug, { date, serviceId, staffId: hold.staffId });
   assert(remaining.slots.length > 0, "need another free slot for upsert");
   const next = remaining.slots[0];
-  const upserted = ops.createPublicAppointment(slug, {
+  const upserted = await ops.createPublicAppointment(slug, {
     serviceId,
     staffId: hold.staffId,
     date,
@@ -112,9 +112,7 @@ function main() {
   );
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   console.error(JSON.stringify({ ok: false, suite: "smoke-public-booking", error: error.message }, null, 2));
   process.exit(1);
-}
+});

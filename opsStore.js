@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const opsPg = require("./opsPg");
 
 const storePath = path.join(__dirname, "data", "maw3ed-ops.json");
 
@@ -236,6 +237,89 @@ function listStaff({ search = "" } = {}) {
 }
 
 
+function normalizeWeekHours(days, fallback = store.workingHours) {
+  const source = Array.isArray(days) && days.length ? days : fallback;
+  return [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
+    const day = source.find((item) => Number(item.weekday) === weekday) || fallback.find((item) => item.weekday === weekday) || {};
+    return {
+      weekday,
+      isOpen: day.isOpen !== false,
+      opensAt: day.opensAt || "09:00",
+      closesAt: day.closesAt || "21:00",
+      breakEnabled: Boolean(day.breakEnabled),
+      breakStartsAt: day.breakStartsAt || "13:00",
+      breakEndsAt: day.breakEndsAt || "14:00"
+    };
+  });
+}
+
+function dateInRange(date, startDate, endDate) {
+  const start = String(startDate || "");
+  const end = String(endDate || startDate || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return false;
+  return date >= start && date <= (end || start);
+}
+
+function isClosedCalendarDay(date) {
+  return (store.closedDays || []).some((item) =>
+    dateInRange(date, item.startDate || item.date, item.endDate || item.startDate || item.date)
+  );
+}
+
+function findSpecificDayOverride(date) {
+  return (store.specificDays || []).find((item) =>
+    dateInRange(date, item.startDate, item.endDate || item.startDate)
+  );
+}
+
+function resolveHoursForStaff(staffId, date) {
+  if (isClosedCalendarDay(date)) return null;
+  const specific = findSpecificDayOverride(date);
+  if (specific) {
+    return {
+      isOpen: true,
+      opensAt: specific.opensAt || "08:00",
+      closesAt: specific.closesAt || "16:00",
+      breakEnabled: Boolean(specific.breakStartsAt && specific.breakEndsAt),
+      breakStartsAt: specific.breakStartsAt || "",
+      breakEndsAt: specific.breakEndsAt || ""
+    };
+  }
+  const weekday = new Date(`${date}T12:00:00`).getDay();
+  const staff = store.staff.find((person) => person.id === staffId);
+  if (staff?.useBusinessHours === false && Array.isArray(staff.workingHours) && staff.workingHours.length) {
+    const custom = staff.workingHours.find((item) => Number(item.weekday) === weekday);
+    if (custom) return custom;
+  }
+  return store.workingHours.find((item) => item.weekday === weekday) || null;
+}
+
+function futureAppointmentsFor({ staffId = "", serviceId = "" } = {}) {
+  const today = new Date().toISOString().slice(0, 10);
+  return store.appointments.filter((item) => {
+    if (item.status === "cancelled" || item.status === "canceled") return false;
+    if (item.date < today) return false;
+    if (staffId && item.staffId !== staffId) return false;
+    if (serviceId && item.serviceId !== serviceId) return false;
+    return true;
+  });
+}
+
+function assertServiceProviders(service) {
+  if (service.publicBooking && !(service.providerIds || []).length) {
+    fail("الخدمة العامة تتطلب موظفاً واحداً على الأقل", 400);
+  }
+}
+
+function normalizeServiceTiming(payload, current = {}) {
+  const durationMinutes = Number(payload.durationMinutes != null ? payload.durationMinutes : current.durationMinutes ?? 30);
+  const bufferMinutes = Number(payload.bufferMinutes != null ? payload.bufferMinutes : current.bufferMinutes ?? 0);
+  if (!Number.isFinite(durationMinutes) || durationMinutes < 5) fail("مدة الخدمة يجب ألا تقل عن 5 دقائق", 400);
+  if (!Number.isFinite(bufferMinutes) || bufferMinutes < 0) fail("وقت الانتظار غير صالح", 400);
+  if (durationMinutes > 24 * 60) fail("مدة الخدمة طويلة جداً", 400);
+  return { durationMinutes: Math.round(durationMinutes), bufferMinutes: Math.round(bufferMinutes) };
+}
+
 function getPlanLimits() {
   return PLAN_LIMITS[store.planKey] || PLAN_LIMITS.free;
 }
@@ -394,6 +478,7 @@ function createStaff(payload) {
   const lastName = String(payload.lastName || "").trim();
   const name = String(payload.name || `${firstName} ${lastName}`.trim()).trim();
   if (!name) fail("اسم الموظف مطلوب");
+  const useBusinessHours = payload.useBusinessHours !== false;
   const person = {
     id: createId("staff"),
     name,
@@ -403,7 +488,9 @@ function createStaff(payload) {
     title: String(payload.title || "").trim() || "موظف",
     avatarUrl: String(payload.avatarUrl || ""),
     serviceIds: Array.isArray(payload.serviceIds) ? payload.serviceIds.map(String) : [],
-    active: payload.active !== false
+    active: payload.active !== false,
+    useBusinessHours,
+    workingHours: useBusinessHours ? null : normalizeWeekHours(payload.workingHours)
   };
   store.staff.unshift(person);
   if (person.serviceIds.length) {
@@ -431,6 +518,12 @@ function updateStaff(id, payload) {
   if (payload.phone != null) person.phone = String(payload.phone).trim();
   if (payload.avatarUrl != null) person.avatarUrl = String(payload.avatarUrl).trim();
   if (payload.active != null) person.active = Boolean(payload.active);
+  if (payload.useBusinessHours != null) person.useBusinessHours = Boolean(payload.useBusinessHours);
+  if (Array.isArray(payload.workingHours)) {
+    person.workingHours = normalizeWeekHours(payload.workingHours);
+    if (payload.useBusinessHours == null) person.useBusinessHours = false;
+  }
+  if (person.useBusinessHours) person.workingHours = null;
   if (Array.isArray(payload.serviceIds)) {
     person.serviceIds = payload.serviceIds.map(String);
     store.services.forEach((service) => {
@@ -447,6 +540,16 @@ function updateStaff(id, payload) {
 function deleteStaff(id) {
   const index = store.staff.findIndex((item) => item.id === id);
   if (index < 0) fail("الموظف غير موجود", 404);
+  const blocked = futureAppointmentsFor({ staffId: id });
+  if (blocked.length) {
+    fail(`لا يمكن حذف الموظف لوجود ${blocked.length} مواعيد قادمة. ألغِ المواعيد أو أعد تعيينها أولاً.`, 409);
+  }
+  const publicOrphans = store.services.filter(
+    (service) => service.publicBooking && (service.providerIds || []).includes(id) && (service.providerIds || []).filter((providerId) => providerId !== id).length === 0
+  );
+  if (publicOrphans.length) {
+    fail("لا يمكن حذف آخر موظف مرتبط بخدمة عامة. عطّل الحجز العام أو أضف موظفاً بديلاً.", 409);
+  }
   store.staff.splice(index, 1);
   store.services.forEach((service) => {
     service.providerIds = (service.providerIds || []).filter((providerId) => providerId !== id);
@@ -476,25 +579,27 @@ function createService(payload) {
   const name = String(payload.name || "").trim();
   const categoryId = payload.categoryId;
   if (!name || !categoryId) fail("اسم الخدمة والفئة مطلوبان");
+  const timing = normalizeServiceTiming(payload);
   const service = {
     id: createId("svc"),
     categoryId,
     name,
-    durationMinutes: Number(payload.durationMinutes) || 30,
-    bufferMinutes: Number(payload.bufferMinutes) || 0,
+    durationMinutes: timing.durationMinutes,
+    bufferMinutes: timing.bufferMinutes,
     pricingType: payload.pricingType || "fixed",
     price: Number(payload.price) || 0,
     color: payload.color || "#1967e8",
     providerIds: Array.isArray(payload.providerIds)
-      ? payload.providerIds
+      ? payload.providerIds.map(String).filter(Boolean)
       : payload.providerId
-        ? [payload.providerId]
+        ? [String(payload.providerId)]
         : [],
     publicBooking: payload.publicBooking !== false,
     autoAccept: Boolean(payload.autoAccept),
     autoComplete: Boolean(payload.autoComplete),
     description: String(payload.description || "")
   };
+  assertServiceProviders(service);
   store.services.unshift(service);
   persist();
   return service;
@@ -505,8 +610,11 @@ function updateService(id, payload) {
   if (!service) fail("الخدمة غير موجودة", 404);
   if (payload.name != null) service.name = String(payload.name).trim();
   if (payload.categoryId != null) service.categoryId = payload.categoryId;
-  if (payload.durationMinutes != null) service.durationMinutes = Number(payload.durationMinutes) || 30;
-  if (payload.bufferMinutes != null) service.bufferMinutes = Number(payload.bufferMinutes) || 0;
+  if (payload.durationMinutes != null || payload.bufferMinutes != null) {
+    const timing = normalizeServiceTiming(payload, service);
+    service.durationMinutes = timing.durationMinutes;
+    service.bufferMinutes = timing.bufferMinutes;
+  }
   if (payload.pricingType != null) service.pricingType = payload.pricingType || "fixed";
   if (payload.price != null) service.price = Number(payload.price) || 0;
   if (payload.color != null) service.color = String(payload.color || "#1967e8");
@@ -514,8 +622,9 @@ function updateService(id, payload) {
   if (payload.publicBooking != null) service.publicBooking = Boolean(payload.publicBooking);
   if (payload.autoAccept != null) service.autoAccept = Boolean(payload.autoAccept);
   if (payload.autoComplete != null) service.autoComplete = Boolean(payload.autoComplete);
-  if (Array.isArray(payload.providerIds)) service.providerIds = payload.providerIds;
-  else if (payload.providerId != null) service.providerIds = payload.providerId ? [payload.providerId] : [];
+  if (Array.isArray(payload.providerIds)) service.providerIds = payload.providerIds.map(String).filter(Boolean);
+  else if (payload.providerId != null) service.providerIds = payload.providerId ? [String(payload.providerId)] : [];
+  assertServiceProviders(service);
   persist();
   return service;
 }
@@ -523,6 +632,10 @@ function updateService(id, payload) {
 function deleteService(id) {
   const index = store.services.findIndex((item) => item.id === id);
   if (index < 0) fail("الخدمة غير موجودة", 404);
+  const blocked = futureAppointmentsFor({ serviceId: id });
+  if (blocked.length) {
+    fail(`لا يمكن حذف الخدمة لوجود ${blocked.length} مواعيد قادمة مرتبطة بها.`, 409);
+  }
   store.services.splice(index, 1);
   persist();
 }
@@ -619,6 +732,36 @@ function getPublicBooking(slug) {
 
 
 const slotHolds = new Map();
+const holdsPath = path.join(__dirname, "data", "maw3ed-holds.json");
+
+function loadHoldsFromDisk() {
+  try {
+    if (!fs.existsSync(holdsPath)) return;
+    const rows = JSON.parse(fs.readFileSync(holdsPath, "utf8"));
+    if (!Array.isArray(rows)) return;
+    const now = Date.now();
+    for (const row of rows) {
+      if (row?.key && Number(row.expiresAt) > now) slotHolds.set(row.key, Number(row.expiresAt));
+    }
+  } catch (error) {
+    console.warn("[ops] failed to load holds:", error.message);
+  }
+}
+
+function persistHolds() {
+  try {
+    const now = Date.now();
+    const rows = [...slotHolds.entries()]
+      .filter(([, expiresAt]) => expiresAt > now)
+      .map(([key, expiresAt]) => ({ key, expiresAt }));
+    fs.mkdirSync(path.dirname(holdsPath), { recursive: true });
+    fs.writeFileSync(holdsPath, JSON.stringify(rows, null, 2), "utf8");
+  } catch (error) {
+    console.warn("[ops] failed to persist holds:", error.message);
+  }
+}
+
+loadHoldsFromDisk();
 
 function toMinutes(hhmm) {
   const [hours, minutes] = String(hhmm || "00:00").split(":").map(Number);
@@ -632,9 +775,14 @@ function fromMinutes(total) {
 }
 
 function purgeExpiredHolds(now = Date.now()) {
+  let changed = false;
   for (const [key, expiresAt] of slotHolds.entries()) {
-    if (expiresAt <= now) slotHolds.delete(key);
+    if (expiresAt <= now) {
+      slotHolds.delete(key);
+      changed = true;
+    }
   }
+  if (changed) persistHolds();
 }
 
 function holdKey(staffId, date, time) {
@@ -652,17 +800,16 @@ function appointmentBlockMinutes(appointment) {
   return duration + buffer;
 }
 
-function listStaffSlotsForDay({ staffId, date, blockMinutes, ignoreHolds = false }) {
+function listStaffSlotsForDay({ staffId, date, blockMinutes, ignoreHolds = false, extraBlocked = [] }) {
   purgeExpiredHolds();
   const day = new Date(`${date}T12:00:00`);
   if (Number.isNaN(day.getTime())) fail("تاريخ غير صالح");
-  if ((store.closedDays || []).some((item) => item.date === date)) return [];
-  const weekday = day.getDay();
-  const hours = store.workingHours.find((item) => item.weekday === weekday);
+  const hours = resolveHoursForStaff(staffId, date);
   if (!hours || hours.isOpen === false) return [];
 
   const open = toMinutes(hours.opensAt);
   const close = toMinutes(hours.closesAt);
+  if (!(close > open)) return [];
   const blocked = [];
   if (hours.breakEnabled && hours.breakStartsAt && hours.breakEndsAt) {
     blocked.push([toMinutes(hours.breakStartsAt), toMinutes(hours.breakEndsAt)]);
@@ -673,6 +820,9 @@ function listStaffSlotsForDay({ staffId, date, blockMinutes, ignoreHolds = false
       const start = toMinutes(item.time);
       blocked.push([start, start + appointmentBlockMinutes(item)]);
     });
+  for (const range of extraBlocked) {
+    if (Array.isArray(range) && range.length >= 2) blocked.push([Number(range[0]), Number(range[1])]);
+  }
   if (!ignoreHolds) {
     for (const [key, expiresAt] of slotHolds.entries()) {
       if (expiresAt <= Date.now()) continue;
@@ -693,7 +843,7 @@ function listStaffSlotsForDay({ staffId, date, blockMinutes, ignoreHolds = false
   return slots;
 }
 
-function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreHolds = false } = {}) {
+async function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreHolds = false } = {}) {
   if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
     fail("صفحة الحجز غير متاحة", 404);
   }
@@ -707,6 +857,42 @@ function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreHolds =
   const pool = providers.length ? providers : store.staff.filter((person) => person.active);
   if (!pool.length) return { date, serviceId, blockMinutes, staffId, slots: [] };
 
+  async function slotsForPerson(person) {
+    let extraBlocked = [];
+    if (opsPg.isOpsPgEnabled()) {
+      try {
+        const [pgAppointments, pgHolds] = await Promise.all([
+          opsPg.listPgBlockedRanges({
+            slug,
+            staffId: person.id,
+            date,
+            durationFallback: Number(service.durationMinutes || 30)
+          }),
+          opsPg.listPgHoldRanges({
+            slug,
+            staffId: person.id,
+            date,
+            blockMinutes
+          })
+        ]);
+        extraBlocked = [...pgAppointments, ...pgHolds];
+      } catch (error) {
+        console.warn("[ops] postgres slot merge failed:", error.message);
+      }
+    }
+    return listStaffSlotsForDay({
+      staffId: person.id,
+      date,
+      blockMinutes,
+      ignoreHolds,
+      extraBlocked
+    }).map((time) => ({
+      time,
+      staffId: person.id,
+      staffName: person.name
+    }));
+  }
+
   if (staffId && staffId !== "any") {
     const person = pool.find((item) => item.id === staffId);
     if (!person) fail("هذا الموظف غير مرتبط بالخدمة", 400);
@@ -715,20 +901,17 @@ function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreHolds =
       serviceId,
       staffId: person.id,
       blockMinutes,
-      slots: listStaffSlotsForDay({ staffId: person.id, date, blockMinutes, ignoreHolds }).map((time) => ({
-        time,
-        staffId: person.id,
-        staffName: person.name
-      }))
+      slots: await slotsForPerson(person)
     };
   }
 
   const merged = new Map();
-  pool.forEach((person) => {
-    listStaffSlotsForDay({ staffId: person.id, date, blockMinutes, ignoreHolds }).forEach((time) => {
-      if (!merged.has(time)) merged.set(time, { time, staffId: person.id, staffName: person.name });
-    });
-  });
+  for (const person of pool) {
+    const personSlots = await slotsForPerson(person);
+    for (const slot of personSlots) {
+      if (!merged.has(slot.time)) merged.set(slot.time, slot);
+    }
+  }
   return {
     date,
     serviceId,
@@ -738,16 +921,30 @@ function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreHolds =
   };
 }
 
-function holdPublicSlot(slug, payload = {}) {
-  const listed = listPublicSlots(slug, payload);
+async function holdPublicSlot(slug, payload = {}) {
+  const listed = await listPublicSlots(slug, payload);
   const time = String(payload.time || "");
   const match = listed.slots.find((slot) => slot.time === time);
   if (!match) fail("هذا الوقت لم يعد متاحاً", 409);
   slotHolds.set(holdKey(match.staffId, listed.date, time), Date.now() + 3 * 60 * 1000);
+  persistHolds();
+  if (opsPg.isOpsPgEnabled()) {
+    try {
+      await opsPg.upsertSlotHold({
+        staffId: match.staffId,
+        date: listed.date,
+        time,
+        expiresAt: new Date(Date.now() + 3 * 60 * 1000).toISOString(),
+        slug
+      });
+    } catch (error) {
+      console.warn("[ops] postgres hold upsert failed:", error.message);
+    }
+  }
   return { ok: true, holdSeconds: 180, staffId: match.staffId, date: listed.date, time };
 }
 
-function createPublicAppointment(slug, payload = {}) {
+async function createPublicAppointment(slug, payload = {}) {
   if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
     fail("صفحة الحجز غير متاحة", 404);
   }
@@ -760,23 +957,25 @@ function createPublicAppointment(slug, payload = {}) {
   // Drop the booker's soft hold before availability re-check so they are not blocked by themselves.
   if (staffId && staffId !== "any") {
     slotHolds.delete(holdKey(staffId, date, time));
+    persistHolds();
   } else {
     purgeExpiredHolds();
     for (const key of [...slotHolds.keys()]) {
       const [, holdDate, holdTime] = key.split("|");
       if (holdDate === date && holdTime === time) slotHolds.delete(key);
     }
+    persistHolds();
   }
   if (!staffId || staffId === "any") {
-    const available = listPublicSlots(slug, { date, serviceId, staffId: "any", ignoreHolds: true });
+    const available = await listPublicSlots(slug, { date, serviceId, staffId: "any", ignoreHolds: true });
     const match = available.slots.find((slot) => slot.time === time);
     if (!match) fail("لا يوجد موظف متاح في هذا الوقت", 409);
     staffId = match.staffId;
   } else {
-    const available = listPublicSlots(slug, { date, serviceId, staffId, ignoreHolds: true });
+    const available = await listPublicSlots(slug, { date, serviceId, staffId, ignoreHolds: true });
     if (!available.slots.some((slot) => slot.time === time)) fail("هذا الوقت لم يعد متاحاً", 409);
   }
-  return createAppointment({
+  const appointment = createAppointment({
     ...payload,
     serviceId,
     staffId,
@@ -787,6 +986,28 @@ function createPublicAppointment(slug, payload = {}) {
     email: payload.email,
     paymentMethod: payload.paymentMethod || "cash"
   });
+
+  if (opsPg.isOpsPgEnabled()) {
+    const staff = store.staff.find((person) => person.id === appointment.staffId);
+    const category = store.serviceCategories.find((item) => item.id === service.categoryId);
+    try {
+      await opsPg.persistPublicAppointment({
+        slug,
+        appointment,
+        service,
+        staff,
+        phone: payload.phone,
+        email: payload.email,
+        categoryName: category?.name || service.categoryId
+      });
+    } catch (error) {
+      store.appointments = store.appointments.filter((item) => item.id !== appointment.id);
+      persist();
+      throw error;
+    }
+  }
+
+  return appointment;
 }
 
 function updateAppointmentStatus(id, status) {
@@ -957,6 +1178,7 @@ function resetOpsData() {
     breakEndsAt: day.breakEndsAt || "14:00"
   }));
   slotHolds.clear();
+  persistHolds();
   persist();
   return {
     ok: true,

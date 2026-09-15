@@ -5,6 +5,7 @@ node_modules/
 .env.production
 .env.mode
 data/maw3ed-ops.json
+data/maw3ed-holds.json
 data/email-outbox.jsonl
 data/development-events.jsonl
 *.log

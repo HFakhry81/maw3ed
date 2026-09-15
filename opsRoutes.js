@@ -1,5 +1,30 @@
 const ops = require("./opsStore");
 
+const rateBuckets = new Map();
+
+function clientKey(req) {
+  return String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "local")
+    .split(",")[0]
+    .trim();
+}
+
+function assertPublicRateLimit(req, action, limit = 30, windowMs = 60_000) {
+  const key = `${action}:${clientKey(req)}`;
+  const now = Date.now();
+  const bucket = rateBuckets.get(key) || { count: 0, resetAt: now + windowMs };
+  if (now > bucket.resetAt) {
+    bucket.count = 0;
+    bucket.resetAt = now + windowMs;
+  }
+  bucket.count += 1;
+  rateBuckets.set(key, bucket);
+  if (bucket.count > limit) {
+    const error = new Error("تم تجاوز حد الطلبات. حاول بعد دقيقة.");
+    error.statusCode = 429;
+    throw error;
+  }
+}
+
 function handleOpsError(res, sendJson, error) {
   const status = error.statusCode || 500;
   return sendJson(res, status, { ok: false, error: error.message || "Ops error" });
@@ -148,7 +173,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     if (publicSlotsMatch && req.method === "GET") {
       sendJson(res, 200, {
         ok: true,
-        ...ops.listPublicSlots(publicSlotsMatch[1], {
+        ...await ops.listPublicSlots(publicSlotsMatch[1], {
           date: requestUrl.searchParams.get("date") || "",
           serviceId: requestUrl.searchParams.get("serviceId") || "",
           staffId: requestUrl.searchParams.get("staffId") || "any"
@@ -158,15 +183,32 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     }
     const publicHoldMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/hold$/);
     if (publicHoldMatch && req.method === "POST") {
-      sendJson(res, 200, { ok: true, ...ops.holdPublicSlot(publicHoldMatch[1], await parseJsonBody(req)) });
+      assertPublicRateLimit(req, "hold", 40);
+      sendJson(res, 200, { ok: true, ...await ops.holdPublicSlot(publicHoldMatch[1], await parseJsonBody(req)) });
       return true;
     }
     const publicBookMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/appointments$/);
     if (publicBookMatch && req.method === "POST") {
-      sendJson(res, 201, {
-        ok: true,
-        appointment: ops.createPublicAppointment(publicBookMatch[1], await parseJsonBody(req))
-      });
+      assertPublicRateLimit(req, "book", 20);
+      const body = await parseJsonBody(req);
+      const appointment = await ops.createPublicAppointment(publicBookMatch[1], body);
+      const notifications = ops.getNotificationSettings();
+      const page = ops.getBookingPage();
+      if (notifications?.email?.confirmation !== false) {
+        try {
+          const { sendBookingConfirmationEmail } = require("./email");
+          await sendBookingConfirmationEmail({
+            to: String(body.email || "").trim(),
+            businessTo: String(page.email || "").trim(),
+            appointment,
+            page,
+            locale: "ar"
+          });
+        } catch (error) {
+          console.warn("[ops] booking confirmation email failed:", error.message);
+        }
+      }
+      sendJson(res, 201, { ok: true, appointment });
       return true;
     }
 
