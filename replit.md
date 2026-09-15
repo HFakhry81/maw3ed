@@ -19,8 +19,9 @@
 
 ## سكربتات التحديث
 
-- `npm run update:backend` · `update:frontend` · `update:web` · `update:mobile`
-- `npm run update:all` أو `npm run refresh` — تحديث كامل + smoke
+- `npm run update:backend` / `update:api` · `update:frontend` · `update:web` · `update:mobile`
+- `npm run update:all` أو `npm run refresh` — تحديث كامل + smoke + mobile
+- `MAW3ED-UPDATE-ALL.bat` · `MAW3ED-TOOLBOX.bat` — مسارات Windows جاهزة
 - `npm run release:prepare` — تجهيز الرفع إلى Git ثم أوامر VPS
 
 ## بنية الواجهة

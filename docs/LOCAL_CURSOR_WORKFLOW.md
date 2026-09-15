@@ -27,12 +27,13 @@ Cursor Desktop (Local)  →  GitHub  →  VPS (:7000)
 
 | الأمر | الوظيفة |
 | --- | --- |
-| `npm run update:backend` | اعتماديات + migrate/seed اختياري + فحص العزل |
+| `npm run update:backend` أو `update:api` | اعتماديات + migrate/seed اختياري + فحص العزل |
 | `npm run update:frontend` | اعتماديات + بناء React |
 | `npm run update:web` | بناء `dist` + smoke HTTP |
 | `npm run update:mobile` | تثبيت اعتماديات مجلد `mobile/` |
-| `npm run update:all` أو `npm run refresh` | تحديث كامل + اختبارات smoke |
-| `scripts\update-all.cmd` | نفس المسار الكامل من Windows |
+| `npm run update:all` أو `npm run refresh` | تحديث كامل + اختبارات smoke + mobile |
+| `MAW3ED-UPDATE-ALL.bat` أو `scripts\update-all.cmd` | نفس المسار الكامل من Windows |
+| `MAW3ED-TOOLBOX.bat` | قائمة تفاعلية لكل العمليات |
 
 تخطّي التثبيت عند التكرار السريع:
 

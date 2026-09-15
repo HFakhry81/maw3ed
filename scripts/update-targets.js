@@ -3,14 +3,14 @@
  * Targeted Maw3ed updates for local-first Cursor Desktop workflow.
  *
  * Usage:
- *   node scripts/update-targets.js backend
+ *   node scripts/update-targets.js backend|api
  *   node scripts/update-targets.js frontend
  *   node scripts/update-targets.js web
  *   node scripts/update-targets.js mobile
  *   node scripts/update-targets.js all
  *
  * npm:
- *   npm run update:backend|frontend|web|mobile|all
+ *   npm run update:backend|api|frontend|web|mobile|all
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
@@ -18,9 +18,27 @@ const path = require("path");
 
 const root = path.join(__dirname, "..");
 const reportPath = path.join(root, "data", "last-update-report.json");
-const target = String(process.argv[2] || "").trim().toLowerCase();
+
+loadDotEnv();
+
+const rawTarget = String(process.argv[2] || "").trim().toLowerCase();
+const target = rawTarget === "api" ? "backend" : rawTarget;
 
 const TARGETS = new Set(["backend", "frontend", "web", "mobile", "all"]);
+
+function loadDotEnv() {
+  const envPath = path.join(root, ".env");
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const val = trimmed.slice(eq + 1).trim();
+    if (key && process.env[key] === undefined) process.env[key] = val;
+  }
+}
 
 function nodeBin() {
   return process.execPath;
@@ -32,12 +50,16 @@ function npmCmd() {
 
 function run(label, command, args, options = {}) {
   const started = Date.now();
+  const useShell =
+    options.shell !== undefined
+      ? options.shell
+      : process.platform === "win32" && /\.(cmd|bat)$/i.test(String(command));
   const result = spawnSync(command, args, {
     cwd: options.cwd || root,
     encoding: "utf8",
     env: { ...process.env, ...(options.env || {}) },
     stdio: options.capture ? "pipe" : "inherit",
-    shell: Boolean(options.shell)
+    shell: useShell
   });
   const entry = {
     label,
@@ -52,7 +74,7 @@ function run(label, command, args, options = {}) {
     entry.stderr = (result.stderr || "").trim().slice(0, 2000);
   }
   if (!entry.ok && !options.soft) {
-    entry.error = (result.stderr || result.stdout || `exit ${result.status}`).toString().slice(0, 2000);
+    entry.error = (result.stderr || result.stdout || result.error || `exit ${result.status}`).toString().slice(0, 2000);
   }
   return entry;
 }
@@ -62,7 +84,7 @@ function commandExists(command) {
   const result = spawnSync(probe, [command], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
-    shell: process.platform === "win32"
+    shell: true
   });
   return result.status === 0;
 }
@@ -73,10 +95,27 @@ function ensureInstall(steps) {
     steps.push({ label: "install", ok: true, status: 0, ms: 0, skipped: true });
     return true;
   }
-  const preferYarn = fs.existsSync(path.join(root, "yarn.lock")) && commandExists("yarn");
-  const entry = preferYarn
-    ? run("install", "yarn", ["install", "--frozen-lockfile"], { soft: false, shell: true })
-    : run("install", npmCmd(), ["install"], { soft: false, shell: true });
+
+  if (fs.existsSync(path.join(root, "pnpm-lock.yaml")) && commandExists("pnpm")) {
+    const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const pnpmRes = run("install", pnpmBin, ["install", "--no-frozen-lockfile"], { soft: true, shell: true });
+    if (pnpmRes.ok) {
+      steps.push(pnpmRes);
+      return true;
+    }
+    steps.push(pnpmRes);
+  }
+
+  if (fs.existsSync(path.join(root, "yarn.lock")) && commandExists("yarn")) {
+    const yarnRes = run("install", "yarn", ["install", "--frozen-lockfile"], { soft: true, shell: true });
+    if (yarnRes.ok) {
+      steps.push(yarnRes);
+      return true;
+    }
+    steps.push(yarnRes);
+  }
+
+  const entry = run("install", npmCmd(), ["install", "--legacy-peer-deps"], { soft: false, shell: true });
   steps.push(entry);
   return entry.ok;
 }
@@ -84,7 +123,7 @@ function ensureInstall(steps) {
 function fail(steps, startedAt, reason) {
   const report = {
     ok: false,
-    target,
+    target: rawTarget || target,
     reason,
     startedAt,
     finishedAt: new Date().toISOString(),
@@ -92,12 +131,12 @@ function fail(steps, startedAt, reason) {
   };
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
-  console.error(`\n❌ Maw3ed update:${target} failed: ${reason}`);
+  console.error(`\n❌ Maw3ed update:${rawTarget || target} failed: ${reason}`);
   console.error(
     JSON.stringify(
       {
         ok: false,
-        target,
+        target: rawTarget || target,
         reason,
         steps: steps.map((step) => ({ label: step.label, ok: step.ok, soft: step.soft || false }))
       },
@@ -111,14 +150,16 @@ function fail(steps, startedAt, reason) {
 function succeed(steps, startedAt) {
   const report = {
     ok: true,
-    target,
+    target: rawTarget || target,
     startedAt,
     finishedAt: new Date().toISOString(),
     brand: "موعد / Maw3ed",
     company: "UpNexa-eg.com",
+    ports: { api: 7000, vite: 7100 },
     steps,
     howToTest: {
       backend: "npm start  # http://127.0.0.1:7000/",
+      api: "http://127.0.0.1:7000/api",
       frontend: "npm run dev  # http://127.0.0.1:7100/",
       web: "http://127.0.0.1:7000/book.html?slug=maw3ed-demo",
       mobile: "cd mobile && npm start",
@@ -127,12 +168,12 @@ function succeed(steps, startedAt) {
   };
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
-  console.log(`\n✅ Maw3ed update:${target} complete → ${path.relative(root, reportPath)}`);
+  console.log(`\n✅ Maw3ed update:${rawTarget || target} complete → ${path.relative(root, reportPath)}`);
   console.log(
     JSON.stringify(
       {
         ok: true,
-        target,
+        target: rawTarget || target,
         steps: steps.map((step) => ({
           label: step.label,
           ok: step.ok,
@@ -192,22 +233,47 @@ function updateMobile(steps) {
     steps.push({ label: "mobile-install", ok: true, status: 0, ms: 0, skipped: true });
     return;
   }
-  steps.push(run("mobile-install", npmCmd(), ["install"], { cwd: mobileDir, shell: true }));
+  steps.push(run("mobile-install", npmCmd(), ["install", "--legacy-peer-deps"], { cwd: mobileDir, soft: false }));
   if (!steps[steps.length - 1].ok) fail(steps, steps.startedAt, "mobile install failed");
 }
 
-function updateAllViaRefresh(steps) {
+function updateAll(steps) {
   const entry = run("refresh-all", nodeBin(), ["scripts/refresh-all.js"]);
   steps.push(entry);
   if (!entry.ok) fail(steps, steps.startedAt, "refresh-all failed");
+
+  const mobileDir = path.join(root, "mobile");
+  if (fs.existsSync(path.join(mobileDir, "package.json"))) {
+    const hasModules = fs.existsSync(path.join(mobileDir, "node_modules"));
+    if (hasModules && process.env.REFRESH_SKIP_INSTALL === "1") {
+      steps.push({ label: "mobile-install", ok: true, status: 0, ms: 0, skipped: true, soft: true });
+    } else {
+      steps.push(
+        run("mobile-install", npmCmd(), ["install", "--legacy-peer-deps"], {
+          cwd: mobileDir,
+          soft: true,
+          capture: true
+        })
+      );
+    }
+  }
+}
+
+function printUsage() {
+  console.error(`Usage: node scripts/update-targets.js <backend|api|frontend|web|mobile|all>
+Or:    npm run update:backend|api|frontend|web|mobile|all
+
+Targets:
+  backend|api  install + ops reset + migrate/seed (soft) + isolation check
+  frontend     install + React/Vite build → dist/
+  web          install + build + HTTP smoke (API + pages)
+  mobile       npm install in mobile/
+  all          full refresh + smoke tests + mobile install (soft)`);
 }
 
 function main() {
   if (!TARGETS.has(target)) {
-    console.error(
-      `Usage: node scripts/update-targets.js <${[...TARGETS].join("|")}>\n` +
-        "Or: npm run update:backend|frontend|web|mobile|all"
-    );
+    printUsage();
     process.exit(1);
   }
 
@@ -215,8 +281,10 @@ function main() {
   const startedAt = new Date().toISOString();
   steps.startedAt = startedAt;
 
+  console.log(`\n=== Maw3ed update:${rawTarget || target} (ports API/web 7000, Vite 7100) ===\n`);
+
   if (target === "all") {
-    updateAllViaRefresh(steps);
+    updateAll(steps);
   } else if (target === "backend") {
     updateBackend(steps);
   } else if (target === "frontend") {

@@ -1,20 +1,48 @@
 const fs = require("fs");
 const path = require("path");
+
+// Load .env automatically BEFORE importing db module
+const envPath = path.join(__dirname, "../.env");
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, "utf8");
+  envContent.split("\n").forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("#")) {
+      const [key, ...val] = trimmed.split("=");
+      if (key && val.length > 0) {
+        process.env[key.trim()] = val.join("=").trim();
+      }
+    }
+  });
+}
+
 const { pool } = require("../db");
 
 const organizationId = "org-maw3ed";
-const source = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "data", "maw3ed-data.json"), "utf8"));
+const dataPath = path.join(__dirname, "..", "data", "maw3ed-data.json");
 
 async function main() {
+  if (!fs.existsSync(dataPath)) {
+    console.error(`[ERROR] Data file not found: ${dataPath}`);
+    process.exit(1);
+  }
+
+  const source = JSON.parse(fs.readFileSync(dataPath, "utf8"));
   const client = await pool.connect();
+
   try {
+    console.log("[INFO] Starting Maw3ed database seed...");
     await client.query("BEGIN");
+
+    // Organization
     await client.query(
       `INSERT INTO organizations (id, name, slug, website, owner_company)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, website = EXCLUDED.website, owner_company = EXCLUDED.owner_company`,
       [organizationId, "مستشفى الشفاء", "al-shifa", "https://upnexa-eg.com", "UpNexa-eg.com"]
     );
+
+    // Departments & Services
     for (const department of source.departments) {
       await client.query(
         `INSERT INTO departments (id, organization_id, name, default_service)
@@ -36,6 +64,8 @@ async function main() {
         [`service-${department.id}`, organizationId, `category-${department.id}`, department.defaultService]
       );
     }
+
+    // Doctors
     for (const doctor of source.doctors) {
       await client.query(
         `INSERT INTO doctors (id, organization_id, name, specialty)
@@ -44,6 +74,8 @@ async function main() {
         [doctor.id, organizationId, doctor.name, doctor.specialty]
       );
     }
+
+    // Patients
     for (const patient of source.patients) {
       await client.query(
         `INSERT INTO patients (id, organization_id, name, joined_at, last_visit)
@@ -52,6 +84,8 @@ async function main() {
         [patient.id, organizationId, patient.name, patient.joinedAt, patient.lastVisit]
       );
     }
+
+    // Customer Categories
     await client.query(
       `INSERT INTO customer_categories (id, organization_id, name, color)
        VALUES ($1, $2, $3, $4)
@@ -62,6 +96,8 @@ async function main() {
       `UPDATE patients SET category_id = $1 WHERE organization_id = $2 AND category_id IS NULL`,
       ["customer-category-standard", organizationId]
     );
+
+    // Appointments
     for (const appointment of source.appointments) {
       await client.query(
         `INSERT INTO appointments
@@ -74,6 +110,8 @@ async function main() {
         [appointment.id, organizationId, appointment.date, appointment.time, appointment.patientId, appointment.departmentId, appointment.doctorId, `service-${appointment.departmentId}`, appointment.serviceName, appointment.status]
       );
     }
+
+    // Booking Pages
     await client.query(
       `INSERT INTO booking_pages (organization_id, slug, description, phone, email, address)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -81,6 +119,8 @@ async function main() {
          phone = EXCLUDED.phone, email = EXCLUDED.email, address = EXCLUDED.address, updated_at = NOW()`,
       [organizationId, "al-shifa", "احجز موعدك بسهولة مع مستشفى الشفاء", null, null, null]
     );
+
+    // Working Hours
     for (let weekday = 0; weekday <= 6; weekday += 1) {
       await client.query(
         `INSERT INTO working_hours (organization_id, weekday, opens_at, closes_at, is_closed)
@@ -90,25 +130,27 @@ async function main() {
         [organizationId, weekday, "09:00", "17:00", weekday === 5]
       );
     }
+
+    // Dashboard Metrics
     await client.query(
       `INSERT INTO dashboard_metrics (organization_id, completed_exams, attendance_rate)
        VALUES ($1, $2, $3)
        ON CONFLICT (organization_id) DO UPDATE SET completed_exams = EXCLUDED.completed_exams, attendance_rate = EXCLUDED.attendance_rate, updated_at = NOW()`,
       [organizationId, source.stats.completedExams, source.stats.attendanceRate]
     );
+
     await client.query("COMMIT");
-    console.log(`Maw3ed seed complete: ${source.departments.length} departments, ${source.doctors.length} doctors, ${source.patients.length} patients, ${source.appointments.length} appointments.`);
+    console.log(`[SUCCESS] Seed complete: ${source.departments.length} departments, ${source.doctors.length} doctors, ${source.patients.length} patients, ${source.appointments.length} appointments.`);
   } catch (error) {
     await client.query("ROLLBACK");
-    throw error;
+    console.error("[ERROR] Seed process failed:", error.message);
   } finally {
     client.release();
     await pool.end();
   }
 }
 
-main().catch(async (error) => {
-  console.error(error);
-  await pool.end();
+main().catch((err) => {
+  console.error("[FATAL ERROR]", err.message);
   process.exit(1);
 });

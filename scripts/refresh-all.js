@@ -13,13 +13,33 @@ const path = require("path");
 const root = path.join(__dirname, "..");
 const reportPath = path.join(root, "data", "last-refresh-report.json");
 
+// Automatically load .env file
+const envPath = path.join(root, ".env");
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, "utf8");
+  envContent.split("\n").forEach((line) => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith("#")) {
+      const [key, ...val] = trimmed.split("=");
+      if (key && val.length > 0) {
+        process.env[key.trim()] = val.join("=").trim();
+      }
+    }
+  });
+}
+
 function run(label, command, args, options = {}) {
   const started = Date.now();
+  const useShell =
+    options.shell !== undefined
+      ? options.shell
+      : process.platform === "win32" && /\.(cmd|bat)$/i.test(String(command));
   const result = spawnSync(command, args, {
-    cwd: root,
+    cwd: options.cwd || root,
     encoding: "utf8",
     env: { ...process.env, ...(options.env || {}) },
-    stdio: options.capture ? "pipe" : "inherit"
+    stdio: options.capture ? "pipe" : "inherit",
+    shell: useShell
   });
   const entry = {
     label,
@@ -34,7 +54,7 @@ function run(label, command, args, options = {}) {
     entry.stderr = (result.stderr || "").trim().slice(0, 2000);
   }
   if (!entry.ok && !options.soft) {
-    entry.error = (result.stderr || result.stdout || `exit ${result.status}`).toString().slice(0, 2000);
+    entry.error = (result.stderr || result.stdout || result.error || `exit ${result.status}`).toString().slice(0, 2000);
   }
   return entry;
 }
@@ -48,22 +68,36 @@ function commandExists(command) {
   const result = spawnSync(probe, [command], {
     encoding: "utf8",
     stdio: ["ignore", "pipe", "ignore"],
-    shell: process.platform === "win32"
+    shell: true
   });
   return result.status === 0;
 }
 
 function npmOrYarnInstall() {
+  const hasPnpmLock = fs.existsSync(path.join(root, "pnpm-lock.yaml"));
   const hasYarnLock = fs.existsSync(path.join(root, "yarn.lock"));
   const hasNodeModules = fs.existsSync(path.join(root, "node_modules", "vite"));
+
   if (hasNodeModules && process.env.REFRESH_SKIP_INSTALL === "1") {
     return { label: "install", ok: true, status: 0, ms: 0, skipped: true };
   }
-  if (hasYarnLock && commandExists("yarn")) {
-    return run("install", "yarn", ["install", "--frozen-lockfile"], { soft: false, shell: true });
+
+  // 1. Try PNPM first if pnpm-lock.yaml exists
+  if (hasPnpmLock) {
+    const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+    const pnpmRes = run("install", pnpmBin, ["install", "--no-frozen-lockfile"], { soft: true, shell: true });
+    if (pnpmRes.ok) return pnpmRes;
   }
+
+  // 2. Try Yarn if yarn.lock exists
+  if (hasYarnLock && commandExists("yarn")) {
+    const yarnRes = run("install", "yarn", ["install", "--frozen-lockfile"], { soft: true, shell: true });
+    if (yarnRes.ok) return yarnRes;
+  }
+
+  // 3. Fallback to NPM
   const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
-  return run("install", npmBin, ["install"], { soft: false, shell: true });
+  return run("install", npmBin, ["install", "--legacy-peer-deps"], { soft: false, shell: true });
 }
 
 function main() {
@@ -75,10 +109,9 @@ function main() {
     fail(steps, startedAt, "install failed");
   }
 
-  steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js"], { capture: true }));
-  if (!steps[steps.length - 1].ok) fail(steps, startedAt, "reset-ops-data failed");
+  steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js"], { soft: true, capture: true }));
 
-  // Postgres is optional in local/demo mode.
+  // Run Postgres migrations & seeding with environment variables loaded
   steps.push(
     run("migrate", nodeBin(), ["scripts/migrate.js"], {
       soft: true,
@@ -104,12 +137,30 @@ function main() {
   steps.push(run("smoke-http", nodeBin(), ["scripts/smoke-http.js"], { capture: true }));
   if (!steps[steps.length - 1].ok) fail(steps, startedAt, "smoke-http failed");
 
+  const mobileDir = path.join(root, "mobile");
+  if (fs.existsSync(path.join(mobileDir, "package.json"))) {
+    const hasModules = fs.existsSync(path.join(mobileDir, "node_modules"));
+    const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+    if (hasModules && process.env.REFRESH_SKIP_INSTALL === "1") {
+      steps.push({ label: "mobile-install", ok: true, status: 0, ms: 0, skipped: true, soft: true });
+    } else {
+      steps.push(
+        run("mobile-install", npmBin, ["install", "--legacy-peer-deps"], {
+          cwd: mobileDir,
+          soft: true,
+          capture: true
+        })
+      );
+    }
+  }
+
   const report = {
     ok: true,
     startedAt,
     finishedAt: new Date().toISOString(),
     brand: "موعد / Maw3ed",
     company: "UpNexa-eg.com",
+    ports: { api: 7000, vite: 7100 },
     steps,
     howToTest: {
       start: "npm start",

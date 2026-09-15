@@ -9,8 +9,9 @@
 
 - اعتماد التطوير الأساسي على المجلد المحلي في Cursor Desktop، وليس Cloud Agent.
 - إضافة قاعدة مشروع `.cursor/rules/local-first.mdc` ودليل `docs/LOCAL_CURSOR_WORKFLOW.md`.
-- سكربتات تحديث منفصلة: `update:backend` · `update:frontend` · `update:web` · `update:mobile` · `update:all`.
-- سكربتات Windows: `scripts/update-all.cmd` · `update-all.ps1` · `run-backend.cmd` · `run-frontend.cmd` · `run-all.cmd`.
+- سكربتات تحديث منفصلة: `update:backend` / `update:api` · `update:frontend` · `update:web` · `update:mobile` · `update:all`.
+- ملفات Windows: `MAW3ED-UPDATE-ALL.bat` · `MAW3ED-TOOLBOX.bat` · `MAW3ED-QA-SUITE.bat` · `MAW3ED-PREPARE-RELEASE.bat`.
+- سكربتات تشغيل: `scripts/run-backend.cmd` · `run-frontend.cmd` · `run-all.cmd` · `update-all.cmd` / `.ps1` / `.sh`.
 - تجهيز الإصدار: `npm run release:prepare` مع توثيق النشر في `docs/DEPLOY_VPS.md` (Git pull على السيرفر ثم build وإعادة تشغيل `:7000`).
 - المنافذ تبقى معزولة: API/web `7000`، Vite `7100`، Postgres اختياري `5433/maw3ed`.
 

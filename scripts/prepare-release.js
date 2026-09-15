@@ -36,11 +36,12 @@ function main() {
   console.log("\n=== Maw3ed release prepare (Local → Git → VPS) ===\n");
 
   if (!skipRefresh) {
-    console.log("Running full local refresh (update:all)...\n");
-    const refresh = spawnSync(nodeBin(), ["scripts/refresh-all.js"], {
+    console.log("Running full local refresh (update:all → backend/API + frontend/web + mobile)...\n");
+    const refresh = spawnSync(nodeBin(), ["scripts/update-targets.js", "all"], {
       cwd: root,
       env: process.env,
-      stdio: "inherit"
+      stdio: "inherit",
+      shell: true
     });
     if (refresh.status !== 0) {
       console.error("\n❌ Refresh failed. Fix local issues before pushing or deploying.");
