@@ -17,12 +17,12 @@
 | الخدمات العامة | يجب ≥1 موظف؛ مدة ≥5 د | `assertServiceProviders` / `normalizeServiceTiming` |
 | الحذف | ممنوع حذف موظف/خدمة عليهما مواعيد قادمة؛ ممنوع حذف آخر موظف لخدمة عامة | `deleteStaff` / `deleteService` |
 | تأكيد الحجز | Email (outbox/SendGrid) | `sendBookingConfirmationEmail` |
-| بقاء الحجوزات | كتابة مزدوجة Postgres عند الإنتاج | `opsPg.persistPublicAppointment` |
+| عزل مساحة العمل | كل workspace له `data/workspaces/{id}/maw3ed-ops.json` + holds؛ الهيدر `x-workspace-id`؛ الحجز العام يُحل عبر slug عالمي فريد | `opsWorkspace.js` / `opsRoutes.js` |
 
 ## اقتراحات المرحلة التالية (حسب الصور المرجعية)
 
 ### 1) حسابات ومساحات العمل (حرج للـ SaaS)
-- عزل `maw3ed-ops.json` **لكل workspace** بدل ملف واحد مشترك.
+- ~~عزل `maw3ed-ops.json` لكل workspace.~~ (`data/workspaces/{id}/` + `x-workspace-id`)
 - ربط `/api/ops/*` بـ Clerk + دور العضوية (`owner|admin|manager|staff|viewer`) بدل دور UI في localStorage فقط.
 - مزامنة حدود الخطة من `plan_catalog` / اشتراك Postgres بدل `PLAN_LIMITS` المحلي فقط.
 

@@ -2,8 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const opsPg = require("./opsPg");
-
-const storePath = path.join(__dirname, "data", "maw3ed-ops.json");
+const opsWorkspace = require("./opsWorkspace");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -157,28 +156,67 @@ const ACTIVITY_TEMPLATES = [
 ];
 
 function loadStore() {
-  try {
-    if (!fs.existsSync(storePath)) {
-      const seed = defaultStore();
-      fs.mkdirSync(path.dirname(storePath), { recursive: true });
-      fs.writeFileSync(storePath, JSON.stringify(seed, null, 2));
-      return seed;
+  return opsWorkspace.getContext(defaultStore).data;
+}
+
+function ctx() {
+  return opsWorkspace.getContext(defaultStore);
+}
+
+const store = new Proxy(
+  {},
+  {
+    get(_target, prop) {
+      if (prop === "toJSON") return () => ctx().data;
+      return ctx().data[prop];
+    },
+    set(_target, prop, value) {
+      ctx().data[prop] = value;
+      return true;
+    },
+    ownKeys() {
+      return Reflect.ownKeys(ctx().data);
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      return Object.getOwnPropertyDescriptor(ctx().data, prop);
+    },
+    has(_target, prop) {
+      return prop in ctx().data;
     }
-    return { ...defaultStore(), ...JSON.parse(fs.readFileSync(storePath, "utf8")) };
-  } catch {
-    return defaultStore();
   }
-}
-
-function saveStore(data) {
-  fs.mkdirSync(path.dirname(storePath), { recursive: true });
-  fs.writeFileSync(storePath, JSON.stringify(data, null, 2));
-}
-
-let store = loadStore();
+);
 
 function persist() {
-  saveStore(store);
+  opsWorkspace.persistContext(ctx());
+}
+
+const slotHolds = {
+  get(key) {
+    return ctx().holds.get(key);
+  },
+  set(key, value) {
+    ctx().holds.set(key, value);
+    return this;
+  },
+  delete(key) {
+    return ctx().holds.delete(key);
+  },
+  clear() {
+    ctx().holds.clear();
+  },
+  entries() {
+    return ctx().holds.entries();
+  },
+  keys() {
+    return ctx().holds.keys();
+  },
+  get size() {
+    return ctx().holds.size;
+  }
+};
+
+function persistHolds() {
+  opsWorkspace.persistHoldsContext(ctx());
 }
 
 function fail(message, statusCode = 400) {
@@ -451,7 +489,8 @@ function updateActivityProfile(payload = {}) {
 }
 
 function saveUploadedLogo(payload = {}) {
-  const uploadsDir = path.join(__dirname, "data", "uploads");
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  const uploadsDir = opsWorkspace.uploadsDir(workspaceId);
   fs.mkdirSync(uploadsDir, { recursive: true });
   if (payload.url) {
     const logoUrl = String(payload.url).trim();
@@ -466,7 +505,7 @@ function saveUploadedLogo(payload = {}) {
   const fileName = `logo-${Date.now()}.${ext}`;
   const filePath = path.join(uploadsDir, fileName);
   fs.writeFileSync(filePath, Buffer.from(match[2], "base64"));
-  const logoUrl = `/data/uploads/${fileName}`;
+  const logoUrl = `/data/uploads/workspaces/${workspaceId}/${fileName}`;
   store.bookingPage.logoUrl = logoUrl;
   persist();
   return { logoUrl };
@@ -703,14 +742,20 @@ function getBookingPage() {
 }
 
 function updateBookingPage(payload) {
+  const previousSlug = store.bookingPage.slug;
   const nextSlug = String(payload.slug || store.bookingPage.slug)
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-");
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  const registered = opsWorkspace.registerSlug(nextSlug, workspaceId);
+  if (previousSlug && previousSlug !== registered) {
+    opsWorkspace.unregisterSlug(previousSlug, workspaceId);
+  }
   store.bookingPage = {
     ...store.bookingPage,
     ...payload,
-    slug: nextSlug,
+    slug: registered || nextSlug,
     socialLinks: { ...store.bookingPage.socialLinks, ...(payload.socialLinks || {}) }
   };
   persist();
@@ -729,39 +774,6 @@ function getPublicBooking(slug) {
     workingHours: store.workingHours
   };
 }
-
-
-const slotHolds = new Map();
-const holdsPath = path.join(__dirname, "data", "maw3ed-holds.json");
-
-function loadHoldsFromDisk() {
-  try {
-    if (!fs.existsSync(holdsPath)) return;
-    const rows = JSON.parse(fs.readFileSync(holdsPath, "utf8"));
-    if (!Array.isArray(rows)) return;
-    const now = Date.now();
-    for (const row of rows) {
-      if (row?.key && Number(row.expiresAt) > now) slotHolds.set(row.key, Number(row.expiresAt));
-    }
-  } catch (error) {
-    console.warn("[ops] failed to load holds:", error.message);
-  }
-}
-
-function persistHolds() {
-  try {
-    const now = Date.now();
-    const rows = [...slotHolds.entries()]
-      .filter(([, expiresAt]) => expiresAt > now)
-      .map(([key, expiresAt]) => ({ key, expiresAt }));
-    fs.mkdirSync(path.dirname(holdsPath), { recursive: true });
-    fs.writeFileSync(holdsPath, JSON.stringify(rows, null, 2), "utf8");
-  } catch (error) {
-    console.warn("[ops] failed to persist holds:", error.message);
-  }
-}
-
-loadHoldsFromDisk();
 
 function toMinutes(hhmm) {
   const [hours, minutes] = String(hhmm || "00:00").split(":").map(Number);
@@ -1170,18 +1182,24 @@ function getStatsSummary(fallbackAppointments = []) {
 }
 
 function resetOpsData() {
-  store = defaultStore();
-  store.workingHours = store.workingHours.map((day) => ({
+  const next = defaultStore();
+  next.workingHours = next.workingHours.map((day) => ({
     ...day,
     breakEnabled: true,
     breakStartsAt: day.breakStartsAt || "13:00",
     breakEndsAt: day.breakEndsAt || "14:00"
   }));
+  opsWorkspace.replaceStoreData(ctx(), next);
   slotHolds.clear();
   persistHolds();
-  persist();
+  try {
+    opsWorkspace.registerSlug(next.bookingPage.slug, opsWorkspace.currentWorkspaceId(defaultStore));
+  } catch {
+    /* ignore */
+  }
   return {
     ok: true,
+    workspaceId: opsWorkspace.currentWorkspaceId(defaultStore),
     slug: store.bookingPage.slug,
     services: store.services.length,
     staff: store.staff.length,
@@ -1190,8 +1208,35 @@ function resetOpsData() {
   };
 }
 
+function withWorkspace(workspaceId, fn) {
+  return opsWorkspace.runWithWorkspace(workspaceId, defaultStore, fn);
+}
+
+function withWorkspaceAsync(workspaceId, fn) {
+  return opsWorkspace.runWithWorkspaceAsync(workspaceId, defaultStore, fn);
+}
+
+function resolveWorkspaceIdForSlug(slug) {
+  opsWorkspace.ensureCache(opsWorkspace.DEFAULT_WORKSPACE_ID, defaultStore);
+  return opsWorkspace.resolveWorkspaceIdBySlug(slug);
+}
+
+function seedWorkspaceStore(workspaceId, options = {}) {
+  return opsWorkspace.seedWorkspace(workspaceId, options, defaultStore);
+}
+
+function getCurrentWorkspaceId() {
+  return opsWorkspace.currentWorkspaceId(defaultStore);
+}
+
 module.exports = {
   createId,
+  DEFAULT_WORKSPACE_ID: opsWorkspace.DEFAULT_WORKSPACE_ID,
+  withWorkspace,
+  withWorkspaceAsync,
+  resolveWorkspaceIdForSlug,
+  seedWorkspaceStore,
+  getCurrentWorkspaceId,
   listActivityTemplates,
   getActivityProfile,
   updateActivityProfile,

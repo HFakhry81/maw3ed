@@ -1,11 +1,11 @@
 export const api = {
-  workspaceId: typeof localStorage !== "undefined" ? localStorage.getItem("maw3ed.workspaceId") || "" : "",
+  workspaceId: typeof localStorage !== "undefined" ? localStorage.getItem("maw3ed.workspaceId") || "local-default" : "local-default",
 
   setWorkspaceId(id) {
-    this.workspaceId = id || "";
+    this.workspaceId = id || "local-default";
     if (typeof localStorage !== "undefined") {
       if (id) localStorage.setItem("maw3ed.workspaceId", id);
-      else localStorage.removeItem("maw3ed.workspaceId");
+      else localStorage.setItem("maw3ed.workspaceId", "local-default");
     }
   },
 

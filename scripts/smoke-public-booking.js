@@ -18,6 +18,7 @@ function assert(condition, message) {
 }
 
 async function main() {
+  await ops.withWorkspaceAsync(ops.DEFAULT_WORKSPACE_ID, async () => {
   const reset = ops.resetOpsData();
   const slug = reset.slug;
   const date = new Date().toISOString().slice(0, 10);
@@ -98,6 +99,7 @@ async function main() {
       {
         ok: true,
         suite: "smoke-public-booking",
+        workspaceId: ops.getCurrentWorkspaceId(),
         slug,
         date,
         blockMinutes,
@@ -110,6 +112,7 @@ async function main() {
       2
     )
   );
+  });
 }
 
 main().catch((error) => {

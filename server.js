@@ -548,6 +548,16 @@ async function createWorkspace(user, payload) {
     );
   }
   await logPlatformEvent(user.id, "workspace_created", "workspace", workspace.id, { activityType });
+  try {
+    const opsStore = require("./opsStore");
+    opsStore.seedWorkspaceStore(workspace.id, {
+      slug: payload.slug,
+      businessName: name,
+      activityType: resolvedActivityType
+    });
+  } catch (error) {
+    console.warn("[workspace] ops seed failed:", error.message);
+  }
   return { ...workspace, organization_id: newOrganizationId, labels: template.labels };
 }
 
@@ -940,9 +950,25 @@ const server = http.createServer(async (req, res) => {
     if (opsHandled) return;
 
     if (requested.startsWith("/data/uploads/")) {
-      const uploadPath = path.resolve(root, `.${requested}`);
+      let uploadPath = path.resolve(root, `.${requested}`);
+      const workspaceUploadMatch = requested.match(/^\/data\/uploads\/workspaces\/([^/]+)\/([^/]+)$/);
+      if (workspaceUploadMatch) {
+        uploadPath = path.resolve(
+          root,
+          "data",
+          "workspaces",
+          workspaceUploadMatch[1],
+          "uploads",
+          workspaceUploadMatch[2]
+        );
+      }
       const uploadsRoot = path.resolve(root, "data", "uploads");
-      if (!uploadPath.startsWith(uploadsRoot)) {
+      const workspacesRoot = path.resolve(root, "data", "workspaces");
+      const allowed =
+        uploadPath.startsWith(uploadsRoot + path.sep) ||
+        uploadPath === uploadsRoot ||
+        (uploadPath.startsWith(workspacesRoot + path.sep) && uploadPath.includes(`${path.sep}uploads${path.sep}`));
+      if (!allowed) {
         res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
         return res.end("Forbidden");
       }
