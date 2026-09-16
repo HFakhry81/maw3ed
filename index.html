@@ -14,7 +14,19 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+      if ("serviceWorker" in navigator) {
+        // Never let the PWA shell cache Vite HMR / source modules on :7100.
+        if (location.port === "7100") {
+          navigator.serviceWorker.getRegistrations().then((regs) => {
+            regs.forEach((reg) => reg.unregister());
+          });
+          if (window.caches) {
+            caches.keys().then((keys) => keys.forEach((key) => caches.delete(key)));
+          }
+        } else {
+          navigator.serviceWorker.register("/sw.js").catch(() => {});
+        }
+      }
     </script>
   </body>
 </html>

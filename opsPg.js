@@ -69,7 +69,7 @@ async function ensureService(client, orgId, service, departmentId) {
   await client.query(
     `INSERT INTO service_categories (id, organization_id, name)
      VALUES ($1, $2, $3)
-     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, active = true`,
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
     [categoryId, orgId, String(service.categoryName || departmentId)]
   );
   await client.query(
@@ -310,12 +310,32 @@ async function upsertSlotHold({ staffId, date, time, expiresAt, slug }) {
   return { ok: true, key };
 }
 
+/** Drop a soft hold so the booker is not blocked by their own row during confirm. */
+async function releaseSlotHold({ staffId, date, time }) {
+  if (!isOpsPgEnabled()) return { skipped: true };
+  const key = `${staffId}|${date}|${time}`;
+  await pool.query(`DELETE FROM slot_holds WHERE hold_key = $1`, [key]);
+  if (staffId && staffId !== "any") {
+    await pool.query(
+      `DELETE FROM slot_holds WHERE staff_id = $1 AND hold_date = $2 AND TO_CHAR(hold_time, 'HH24:MI') = $3`,
+      [String(staffId), String(date), String(time)]
+    );
+  } else {
+    await pool.query(
+      `DELETE FROM slot_holds WHERE hold_date = $1 AND TO_CHAR(hold_time, 'HH24:MI') = $2`,
+      [String(date), String(time)]
+    );
+  }
+  return { ok: true, key };
+}
+
 module.exports = {
   isOpsPgEnabled,
   resolveOrganizationId,
   listPgBlockedRanges,
   listPgHoldRanges,
   upsertSlotHold,
+  releaseSlotHold,
   persistPublicAppointment,
   DEFAULT_ORG_ID
 };

@@ -52,6 +52,9 @@ async function main() {
           IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'appointments') THEN
             TRUNCATE TABLE appointments CASCADE;
           END IF;
+          IF EXISTS (SELECT FROM pg_tables WHERE tablename = 'slot_holds') THEN
+            TRUNCATE TABLE slot_holds;
+          END IF;
         END $$;
       `);
       await pool.end();

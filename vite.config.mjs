@@ -59,13 +59,16 @@ export default defineConfig(({ mode }) => {
       host: "0.0.0.0",
       port: Number(process.env.VITE_PORT || env.VITE_PORT || 7100),
       strictPort: true,
+      // Pin HMR to the same TCP port the browser uses (7100).
+      // Prefer 127.0.0.1 over "localhost" so Windows/VPN do not flip to ::1 or a wrong port.
       hmr: {
-        // Avoid Vite websocket failures when the browser hits localhost
-        // while the server listens on 0.0.0.0 (common on Windows + VPN).
         protocol: "ws",
-        host: "localhost",
+        host: "127.0.0.1",
         port: Number(process.env.VITE_PORT || env.VITE_PORT || 7100),
         clientPort: Number(process.env.VITE_PORT || env.VITE_PORT || 7100)
+      },
+      watch: {
+        usePolling: false
       },
       proxy: {
         "/api": {

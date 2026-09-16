@@ -4,6 +4,7 @@
  * Usage: node scripts/smoke-public-booking.js
  */
 const path = require("path");
+require("./load-env");
 
 const storeModule = path.join(__dirname, "..", "opsStore.js");
 delete require.cache[require.resolve(storeModule)];
