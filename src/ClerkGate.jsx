@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ClerkProvider,
   SignedIn,
@@ -12,6 +12,8 @@ import {
 } from "@clerk/clerk-react";
 import { bindClerkTokenGetter, clearClerkTokenGetter } from "./clerkAuth";
 import { api } from "./api";
+import { applyDocumentLocale } from "./i18n";
+import { getAuthCopy, getAuthLocales } from "./authI18n";
 
 const envPublishableKey =
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
@@ -51,13 +53,15 @@ export function clearLocalAppSession() {
   api.setWorkspaceId("");
 }
 
-export function Maw3edClerkProvider({ publishableKey, children }) {
+export function Maw3edClerkProvider({ publishableKey, localization, children }) {
   if (!publishableKey) return children;
   return (
     <ClerkProvider
+      key={localization?.locale || "default"}
       publishableKey={publishableKey}
+      localization={localization}
       afterSignOutUrl="/"
-      signInFallbackRedirectUrl="/"
+      signInFallbackRedirectUrl="/?onboarding=1"
       signUpFallbackRedirectUrl="/?onboarding=1"
       appearance={clerkAppearance}
     >
@@ -67,12 +71,45 @@ export function Maw3edClerkProvider({ publishableKey, children }) {
 }
 
 export function ClerkTokenBridge({ children }) {
-  const { isLoaded, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
-    if (!isLoaded) return undefined;
-    bindClerkTokenGetter(() => getToken());
-    return () => clearClerkTokenGetter();
+    if (!isLoaded) {
+      setReady(false);
+      return undefined;
+    }
+    bindClerkTokenGetter(async (options) => {
+      const token = await getToken(options);
+      return token;
+    });
+    setReady(true);
+    return () => {
+      clearClerkTokenGetter();
+      setReady(false);
+    };
   }, [isLoaded, getToken]);
+
+  if (!isLoaded || !ready) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>جارٍ تجهيز جلسة الدخول…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>انتهت الجلسة. سجّل الدخول مرة أخرى للمتابعة.</p>
+        </div>
+      </div>
+    );
+  }
+
   return children;
 }
 
@@ -101,29 +138,95 @@ function initialAuthMode() {
   return "sign-in";
 }
 
-export function AuthLanding() {
+export function AuthLanding({ locale = "ar", onLocaleChange }) {
+  const { isLoaded, isSignedIn } = useAuth();
   const [mode, setMode] = useState(initialAuthMode);
+  const copy = getAuthCopy(locale);
+  const locales = getAuthLocales();
+
+  useEffect(() => {
+    applyDocumentLocale(locale);
+  }, [locale]);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return undefined;
+    const wantsOnboarding =
+      new URLSearchParams(window.location.search).get("onboarding") === "1" ||
+      new URLSearchParams(window.location.search).get("mode") === "sign-up";
+    window.location.replace(wantsOnboarding ? "/?onboarding=1" : "/");
+    return undefined;
+  }, [isLoaded, isSignedIn]);
+
+  if (!isLoaded) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>{copy.checking}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSignedIn) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>{copy.alreadyIn}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-landing">
       <div className="auth-landing-card auth-landing-card-wide">
         <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
-        <h1>موعد Maw3ed</h1>
-        <p>سجّل بالبريد وكلمة المرور، أكّد بريدك، ثم ادخل إلى لوحة التحكم.</p>
-        <div className="auth-mode-switch" role="tablist" aria-label="وضع الحساب">
+        <h1>{copy.title}</h1>
+        <p>{copy.subtitle}</p>
+        <label className="auth-locale-select">
+          <span>Language / اللغة</span>
+          <select
+            value={locale}
+            onChange={(e) => {
+              const next = e.target.value;
+              try {
+                localStorage.setItem("maw3ed.locale", next);
+              } catch {
+                /* ignore */
+              }
+              if (typeof onLocaleChange === "function") onLocaleChange(next);
+            }}
+          >
+            {locales.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="password-rules-banner" role="note">
+          <strong>{copy.password}</strong>
+          <p>{copy.passwordHint}</p>
+          <ul>
+            <li>8+</li>
+            <li>123</li>
+            <li>!@#</li>
+          </ul>
+        </div>
+        <div className="auth-mode-switch" role="tablist" aria-label={copy.signUp}>
           <button
             type="button"
             className={mode === "sign-up" ? "active" : ""}
             onClick={() => setMode("sign-up")}
           >
-            إنشاء حساب
+            {copy.signUp}
           </button>
           <button
             type="button"
             className={mode === "sign-in" ? "active" : ""}
             onClick={() => setMode("sign-in")}
           >
-            تسجيل الدخول
+            {copy.signIn}
           </button>
         </div>
         <div className="auth-clerk-host">
@@ -139,21 +242,40 @@ export function AuthLanding() {
             <SignIn
               routing="hash"
               signUpUrl="/#/sign-up"
-              forceRedirectUrl="/"
-              fallbackRedirectUrl="/"
+              forceRedirectUrl="/?onboarding=1"
+              fallbackRedirectUrl="/?onboarding=1"
               appearance={clerkAppearance}
             />
           )}
         </div>
-        <a className="auth-fallback-link" href="/auth.html?mode=sign-up">
-          فتح صفحة التسجيل الكاملة
+        <a className="auth-fallback-link" href={`/auth.html?mode=sign-up&lang=${encodeURIComponent(locale)}`}>
+          {copy.fullPage}
         </a>
-        <small>
-          بعد التحقق من البريد يمكنك تغيير كلمة المرور من قائمة الحساب (أيقونة المستخدم) → Security.
-        </small>
+        <small>{copy.afterVerify}</small>
       </div>
     </div>
   );
+}
+
+/** Explicit session gate — avoids SignedIn/SignedOut flicker loops after signup. */
+export function AuthSessionGate({ locale, onLocaleChange, children }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  const copy = getAuthCopy(locale);
+
+  if (!isLoaded) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>{copy.checking}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return <AuthLanding locale={locale} onLocaleChange={onLocaleChange} />;
+  }
+  return children;
 }
 
 export function AuthControls({ onSignOut }) {
@@ -194,43 +316,89 @@ export function WorkspaceOnboarding({ onCreated }) {
   const { user } = useUser();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [slugTouched, setSlugTouched] = useState(false);
   const [activityType, setActivityType] = useState("medical");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [slugConflict, setSlugConflict] = useState(null);
+  const slugInputRef = useRef(null);
+
+  const normalizeSlug = (value) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60);
+
+  const withSuffix = (base, suffix = "2") => {
+    const clean = normalizeSlug(base) || "workspace";
+    const tag = `-${String(suffix).replace(/[^a-z0-9-]/gi, "") || "2"}`;
+    return `${clean.slice(0, Math.max(3, 60 - tag.length))}${tag}`;
+  };
 
   useEffect(() => {
-    const base = (user?.fullName || user?.firstName || "مساحة موعد").trim();
-    setName((current) => current || base);
-    setSlug(
-      (current) =>
-        current ||
-        base
-          .toLowerCase()
-          .replace(/\s+/g, "-")
-          .replace(/[^a-z0-9-]/g, "") ||
-        `ws-${Date.now()}`
-    );
+    const base = (user?.fullName || user?.firstName || "").trim();
+    if (base) setName((current) => current || base);
   }, [user]);
 
-  const submit = async (event) => {
-    event.preventDefault();
+  useEffect(() => {
+    if (slugTouched) return;
+    const fromName = normalizeSlug(name);
+    setSlug(fromName || `ws-${Date.now().toString(36)}`);
+  }, [name, slugTouched]);
+
+  const applySuggestedSlug = (suggested) => {
+    const next = normalizeSlug(suggested) || withSuffix(slug || name);
+    setSlugTouched(true);
+    setSlug(next);
+    setSlugConflict(null);
+    setError("");
+    window.setTimeout(() => slugInputRef.current?.focus(), 0);
+  };
+
+  const submit = async (event, options = {}) => {
+    event?.preventDefault?.();
     setBusy(true);
     setError("");
+    if (!options.keepConflict) setSlugConflict(null);
+    let nextSlug =
+      normalizeSlug(options.slugOverride || slug || name) || `ws-${Date.now().toString(36)}`;
+    if (nextSlug.length < 3) nextSlug = `ws-${Date.now().toString(36)}`;
+    setSlug(nextSlug);
     try {
+      const token = await api.resolveToken();
+      if (!token) {
+        throw Object.assign(new Error("يلزم تسجيل الدخول من جديد قبل إنشاء مساحة العمل"), { status: 401 });
+      }
       const result = await api.post("/api/workspaces", {
         name: name.trim(),
-        slug:
-          (slug || name).toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") ||
-          `ws-${Date.now()}`,
-        activityType
+        slug: nextSlug,
+        activityType,
+        acceptSuggestedSlug: Boolean(options.acceptSuggestedSlug)
       });
       const id = result.workspace?.id;
+      if (result.workspace?.slug) setSlug(result.workspace.slug);
       if (id) {
         api.setWorkspaceId(id);
         if (typeof onCreated === "function") onCreated(result.workspace);
       }
     } catch (err) {
-      setError(err.message || "تعذر إنشاء مساحة العمل");
+      const suggested = err.suggestedSlug || withSuffix(nextSlug);
+      if (err.code === "slug_taken" || /slug_taken|مستخدم بالفعل|workspaces_slug_key|duplicate key/i.test(err.message || "")) {
+        setSlugConflict({
+          requested: nextSlug,
+          suggested
+        });
+        setError(`الرابط «${nextSlug}» مستخدم بالفعل. عدّله يدوياً أو اضغط «أضف تمييزاً» لاستخدام «${suggested}».`);
+        window.setTimeout(() => slugInputRef.current?.focus(), 0);
+      } else if (/3-60|slug containing|الرابط يجب/i.test(err.message || "")) {
+        setError("الرابط يجب أن يكون إنجليزياً صغيراً فقط (a-z و 0-9 و -) بطول 3 إلى 60 حرفاً، بدون / أو مسافات");
+      } else {
+        setError(err.message || "تعذر إنشاء مساحة العمل");
+      }
     } finally {
       setBusy(false);
     }
@@ -238,7 +406,7 @@ export function WorkspaceOnboarding({ onCreated }) {
 
   return (
     <div className="auth-landing">
-      <form className="auth-landing-card onboarding-card" onSubmit={submit}>
+      <form className="auth-landing-card onboarding-card" onSubmit={(e) => submit(e)}>
         <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
         <h1>أنشئ مساحة عملك</h1>
         <p>تم التحقق من حسابك. الخطوة التالية: بناء مساحة عمل للمنشأة.</p>
@@ -248,14 +416,66 @@ export function WorkspaceOnboarding({ onCreated }) {
         </label>
         <label>
           الرابط (slug)
-          <input
-            required
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            placeholder="al-noor-clinic"
-            pattern="[a-z0-9-]{3,60}"
-          />
+          <div className="slug-field-row">
+            <input
+              ref={slugInputRef}
+              required
+              value={slug}
+              onChange={(e) => {
+                setSlugTouched(true);
+                setSlugConflict(null);
+                setError("");
+                setSlug(normalizeSlug(e.target.value));
+              }}
+              placeholder="dawy-hospitals"
+              pattern="[a-z0-9-]{3,60}"
+              title="حروف إنجليزية صغيرة وأرقام وشرطات فقط"
+              aria-invalid={Boolean(slugConflict)}
+            />
+            <button
+              type="button"
+              className="slug-distinguish-btn"
+              disabled={busy}
+              onClick={() => {
+                const suggested = slugConflict?.suggested || withSuffix(slug || name);
+                applySuggestedSlug(suggested);
+              }}
+            >
+              أضف تمييزاً
+            </button>
+          </div>
         </label>
+        <small className="slug-hint">مثال صحيح: dawy-hospitals — بدون / أو حروف عربية</small>
+        {slugConflict && (
+          <div className="slug-conflict-banner" role="alert">
+            <div>
+              الرابط <b>{slugConflict.requested}</b> مأخوذ مسبقاً.
+              <br />
+              المقترح: <code>{slugConflict.suggested}</code>
+            </div>
+            <div className="slug-conflict-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => applySuggestedSlug(slugConflict.suggested)}
+              >
+                استخدم المقترح
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={busy}
+                onClick={() => {
+                  const suggested = slugConflict.suggested;
+                  applySuggestedSlug(suggested);
+                  submit(null, { slugOverride: suggested, acceptSuggestedSlug: true });
+                }}
+              >
+                أنشئ بالمقترح
+              </button>
+            </div>
+          </div>
+        )}
         <label>
           نوع النشاط
           <select value={activityType} onChange={(e) => setActivityType(e.target.value)}>
@@ -266,7 +486,8 @@ export function WorkspaceOnboarding({ onCreated }) {
             <option value="other">أخرى</option>
           </select>
         </label>
-        {error && <div className="error-banner">{error}</div>}
+        {error && !slugConflict && <div className="error-banner">{error}</div>}
+        {error && slugConflict && <div className="error-banner">{error}</div>}
         <button className="primary-button auth-cta" type="submit" disabled={busy}>
           {busy ? "جارٍ الإنشاء…" : "إنشاء مساحة العمل"}
         </button>

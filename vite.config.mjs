@@ -58,6 +58,15 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "0.0.0.0",
       port: Number(process.env.VITE_PORT || env.VITE_PORT || 7100),
+      strictPort: true,
+      hmr: {
+        // Avoid Vite websocket failures when the browser hits localhost
+        // while the server listens on 0.0.0.0 (common on Windows + VPN).
+        protocol: "ws",
+        host: "localhost",
+        port: Number(process.env.VITE_PORT || env.VITE_PORT || 7100),
+        clientPort: Number(process.env.VITE_PORT || env.VITE_PORT || 7100)
+      },
       proxy: {
         "/api": {
           target: `http://127.0.0.1:${process.env.BACKEND_PORT || env.BACKEND_PORT || env.PORT || 7000}`,

@@ -9,13 +9,12 @@ import {
   Maw3edClerkProvider,
   ClerkTokenBridge,
   FreshTrialGate,
-  AuthLanding,
   AuthControls,
+  AuthSessionGate,
   WorkspaceOnboarding,
-  SignedIn,
-  SignedOut,
   useClerkPublishableKey
 } from "./ClerkGate.jsx";
+import { getClerkLocalization } from "./authI18n";
 
 const NAV = [
   { id: "overview", mark: "غرفة" },
@@ -1039,24 +1038,46 @@ createRoot(document.getElementById("root")).render(<Root />);
 function AuthenticatedShell() {
   const [workspaces, setWorkspaces] = useState(null);
   const [bootError, setBootError] = useState("");
+  const [authBlocked, setAuthBlocked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .get("/api/workspaces")
-      .then((result) => {
+    let attempts = 0;
+    const load = async () => {
+      attempts += 1;
+      try {
+        const result = await api.get("/api/workspaces");
         if (cancelled) return;
         const list = result.workspaces || [];
+        setBootError("");
+        setAuthBlocked(false);
         setWorkspaces(list);
         if (list[0]?.id && !localStorage.getItem("maw3ed.workspaceId")) {
           api.setWorkspaceId(list[0].id);
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
-        setBootError(err.message || "تعذر تحميل مساحات العمل");
+        const message = err.message || "تعذر تحميل مساحات العمل";
+        const isAuth = err.status === 401 || /authentication|تسجيل الدخول/i.test(message);
+        if (isAuth && attempts < 6) {
+          window.setTimeout(load, 250 * attempts);
+          return;
+        }
+        if (isAuth) {
+          setAuthBlocked(true);
+          setBootError("يلزم إعادة تسجيل الدخول قبل إنشاء مساحة العمل");
+          setWorkspaces([]);
+          return;
+        }
+        if (attempts < 4) {
+          window.setTimeout(load, 350 * attempts);
+          return;
+        }
+        setBootError(message);
         setWorkspaces([]);
-      });
+      }
+    };
+    load();
     return () => {
       cancelled = true;
     };
@@ -1068,6 +1089,21 @@ function AuthenticatedShell() {
         <div className="auth-landing-card">
           <p>جارٍ التحقق من الحساب ومساحات العمل…</p>
           {bootError && <div className="error-banner">{bootError}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (authBlocked) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
+          <h1>مطلوب تسجيل الدخول</h1>
+          <p>{bootError || "انتهت الجلسة أو لم يُربط التوكن بعد. سجّل الدخول مرة أخرى."}</p>
+          <a className="primary-button auth-cta" href="/auth.html" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>
+            فتح صفحة الدخول
+          </a>
         </div>
       </div>
     );
@@ -1088,17 +1124,17 @@ function AuthenticatedShell() {
 }
 
 function ClerkRoot({ publishableKey }) {
+  const [locale, setLocale] = useState(() => localStorage.getItem("maw3ed.locale") || "ar");
+  const localization = useMemo(() => getClerkLocalization(locale), [locale]);
+
   return (
-    <Maw3edClerkProvider publishableKey={publishableKey}>
+    <Maw3edClerkProvider publishableKey={publishableKey} localization={localization}>
       <FreshTrialGate>
-        <SignedOut>
-          <AuthLanding />
-        </SignedOut>
-        <SignedIn>
+        <AuthSessionGate locale={locale} onLocaleChange={setLocale}>
           <ClerkTokenBridge>
             <AuthenticatedShell />
           </ClerkTokenBridge>
-        </SignedIn>
+        </AuthSessionGate>
       </FreshTrialGate>
     </Maw3edClerkProvider>
   );

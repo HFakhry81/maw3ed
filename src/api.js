@@ -10,17 +10,25 @@ export const api = {
     }
   },
 
+  async resolveToken() {
+    if (typeof this.getToken !== "function") return null;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        const token = await this.getToken(attempt === 0 ? undefined : { skipCache: true });
+        if (token) return token;
+      } catch {
+        /* session not ready yet */
+      }
+      await new Promise((resolve) => setTimeout(resolve, 120 * (attempt + 1)));
+    }
+    return null;
+  },
+
   async authHeaders(extra = {}) {
     const headers = { ...extra };
     if (this.workspaceId) headers["x-workspace-id"] = this.workspaceId;
-    if (typeof this.getToken === "function") {
-      try {
-        const token = await this.getToken();
-        if (token) headers.Authorization = `Bearer ${token}`;
-      } catch {
-        /* signed out */
-      }
-    }
+    const token = await this.resolveToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
     return headers;
   },
 
@@ -34,7 +42,18 @@ export const api = {
         throw new Error(response.ok ? "Unexpected end of JSON input" : `HTTP ${response.status}`);
       }
     }
-    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const raw = payload.error || `HTTP ${response.status}`;
+      const message =
+        /authentication is required/i.test(raw)
+          ? "يلزم تسجيل الدخول من جديد قبل إنشاء مساحة العمل"
+          : raw;
+      const err = new Error(message);
+      if (payload.code) err.code = payload.code;
+      if (payload.suggestedSlug) err.suggestedSlug = payload.suggestedSlug;
+      err.status = response.status;
+      throw err;
+    }
     return payload;
   },
 

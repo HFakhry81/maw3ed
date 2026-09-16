@@ -289,7 +289,16 @@ async function getAuthenticatedUser(req) {
   const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : cookies.__session;
   if (!token) return null;
   try {
-    const payload = await verifyToken(token, { secretKey: process.env.CLERK_SECRET_KEY });
+    // Do not pass authorizedParties unless explicitly configured — a mismatched azp
+    // claim rejects valid local sessions and loops users back to the login screen.
+    const verifyOptions = { secretKey: process.env.CLERK_SECRET_KEY };
+    if (process.env.CLERK_AUTHORIZED_PARTY) {
+      verifyOptions.authorizedParties = String(process.env.CLERK_AUTHORIZED_PARTY)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    const payload = await verifyToken(token, verifyOptions);
     clerkClient ||= createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
     const clerkUser = await clerkClient.users.getUser(payload.sub);
     const primaryEmail = clerkUser.emailAddresses.find((item) => item.id === clerkUser.primaryEmailAddressId)?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress;
@@ -298,7 +307,8 @@ async function getAuthenticatedUser(req) {
       email: primaryEmail || "",
       displayName: [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" ") || primaryEmail || "Maw3ed user"
     };
-  } catch {
+  } catch (error) {
+    console.warn("[auth] clerk token verification failed:", error?.message || error);
     return null;
   }
 }
@@ -535,10 +545,36 @@ async function createWorkspace(user, payload) {
   const activityType = typeof payload.activityType === "string" ? payload.activityType.trim().toLowerCase() : "medical";
   const locale = typeof payload.locale === "string" ? payload.locale : "ar";
   const currency = typeof payload.currency === "string" ? payload.currency.toLowerCase() : "egp";
-  if (!name || !/^[a-z0-9-]{3,60}$/.test(payload.slug || "")) {
-    const error = new Error("Workspace name and a slug containing 3-60 letters, numbers or hyphens are required");
+  const baseSlug = String(payload.slug || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!name || !/^[a-z0-9-]{3,60}$/.test(baseSlug)) {
+    const error = new Error("اسم المساحة مطلوب، والرابط يجب أن يكون 3–60 حرفاً إنجليزياً صغيراً أو أرقاماً أو شرطات فقط (مثل dawy-hospitals)");
     error.statusCode = 400;
     throw error;
+  }
+
+  async function nextAvailableSlug(candidate) {
+    let slug = candidate;
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const existing = await query("SELECT 1 FROM workspaces WHERE slug = $1 LIMIT 1", [slug]);
+      if (!existing.rows[0]) return { slug, taken: attempt > 0 };
+      const suffix = `-${attempt + 2}`;
+      slug = `${candidate.slice(0, Math.max(3, 60 - suffix.length))}${suffix}`;
+    }
+    return { slug: `${candidate.slice(0, 40)}-${Date.now().toString(36)}`, taken: true };
+  }
+
+  function slugConflictError(requested, suggested) {
+    const error = new Error(`الرابط «${requested}» مستخدم بالفعل. عدّله أو أضف تمييزاً مثل «${suggested}»`);
+    error.statusCode = 409;
+    error.code = "slug_taken";
+    error.suggestedSlug = suggested;
+    return error;
   }
 
   if (!databaseConfigured) {
@@ -547,18 +583,28 @@ async function createWorkspace(user, payload) {
       ? activityType
       : "other";
     const registry = loadLocalClerkWorkspaces();
-    const slugTaken = Object.values(registry).flat().some((item) => item.slug === payload.slug);
-    if (slugTaken) {
-      const error = new Error("This workspace slug is already taken");
-      error.statusCode = 409;
-      throw error;
+    const takenList = Object.values(registry).flat().map((item) => item.slug);
+    let slug = baseSlug;
+    let n = 2;
+    let suggested = baseSlug;
+    if (takenList.includes(baseSlug)) {
+      while (takenList.includes(suggested) && n < 30) {
+        const suffix = `-${n}`;
+        suggested = `${baseSlug.slice(0, Math.max(3, 60 - suffix.length))}${suffix}`;
+        n += 1;
+      }
+      if (payload.acceptSuggestedSlug && suggested !== baseSlug && !takenList.includes(suggested)) {
+        slug = suggested;
+      } else {
+        throw slugConflictError(baseSlug, suggested);
+      }
     }
     const workspaceId = createId("workspace").replace(/_/g, "-");
     const organizationIdLocal = `org-${workspaceId}`;
     try {
       const opsStore = require("./opsStore");
       opsStore.seedWorkspaceStore(workspaceId, {
-        slug: payload.slug,
+        slug,
         businessName: name,
         activityType: resolvedActivityType
       });
@@ -568,7 +614,7 @@ async function createWorkspace(user, payload) {
     const workspace = {
       id: workspaceId,
       name,
-      slug: payload.slug,
+      slug,
       activity_type: resolvedActivityType,
       status: "active",
       created_at: new Date().toISOString(),
@@ -597,11 +643,29 @@ async function createWorkspace(user, payload) {
     throw error;
   }
   const resolvedActivityType = template.activity_type;
-  const workspace = (await query(
-    `INSERT INTO workspaces (id, owner_user_id, name, slug, activity_type, locale, currency)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [createId("workspace"), user.id, name, payload.slug, resolvedActivityType, locale, currency]
-  )).rows[0];
+  const availability = await nextAvailableSlug(baseSlug);
+  let slug = baseSlug;
+  if (availability.taken) {
+    if (payload.acceptSuggestedSlug && availability.slug) {
+      slug = availability.slug;
+    } else {
+      throw slugConflictError(baseSlug, availability.slug);
+    }
+  }
+  let workspace;
+  try {
+    workspace = (await query(
+      `INSERT INTO workspaces (id, owner_user_id, name, slug, activity_type, locale, currency)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [createId("workspace"), user.id, name, slug, resolvedActivityType, locale, currency]
+    )).rows[0];
+  } catch (error) {
+    if (error?.code === "23505") {
+      const again = await nextAvailableSlug(baseSlug);
+      throw slugConflictError(baseSlug, again.slug);
+    }
+    throw error;
+  }
   await query(
     "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
     [workspace.id, user.id]
@@ -611,13 +675,13 @@ async function createWorkspace(user, payload) {
     `INSERT INTO organizations
       (id, workspace_id, name, slug, owner_company, activity_type, locale, currency, labels)
      VALUES ($1, $2, $3, $4, 'UpNexa-eg.com', $5, $6, $7, $8::jsonb)`,
-    [newOrganizationId, workspace.id, name, payload.slug, resolvedActivityType, locale, currency, JSON.stringify(template.labels)]
+    [newOrganizationId, workspace.id, name, slug, resolvedActivityType, locale, currency, JSON.stringify(template.labels)]
   );
   await query("INSERT INTO dashboard_metrics (organization_id) VALUES ($1)", [newOrganizationId]);
   await query(
     `INSERT INTO booking_pages (organization_id, slug, description, show_platform_branding)
      VALUES ($1, $2, $3, $4)`,
-    [newOrganizationId, payload.slug, `احجز خدمات ${name} بسهولة`, resolvedActivityType === "medical"]
+    [newOrganizationId, slug, `احجز خدمات ${name} بسهولة`, resolvedActivityType === "medical"]
   );
   await query(
     `INSERT INTO departments (id, organization_id, name, default_service)
@@ -645,7 +709,7 @@ async function createWorkspace(user, payload) {
   try {
     const opsStore = require("./opsStore");
     opsStore.seedWorkspaceStore(workspace.id, {
-      slug: payload.slug,
+      slug,
       businessName: name,
       activityType: resolvedActivityType
     });
@@ -1126,7 +1190,13 @@ const server = http.createServer(async (req, res) => {
     });
   } catch (error) {
     const status = error.statusCode || 500;
-    sendJson(res, status, { ok: false, error: error.message || "Internal server error", ...(error.conflictingAppointmentId ? { conflictingAppointmentId: error.conflictingAppointmentId } : {}) });
+    sendJson(res, status, {
+      ok: false,
+      error: error.message || "Internal server error",
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.suggestedSlug ? { suggestedSlug: error.suggestedSlug } : {}),
+      ...(error.conflictingAppointmentId ? { conflictingAppointmentId: error.conflictingAppointmentId } : {})
+    });
   }
 });
 
