@@ -1,7 +1,17 @@
-const { ReplitConnectors } = require("@replit/connectors-sdk");
+let ReplitConnectors = null;
+try {
+  ({ ReplitConnectors } = require("@replit/connectors-sdk"));
+} catch {
+  ReplitConnectors = null;
+}
 
 let connectors;
 function getWhopClient() {
+  if (!ReplitConnectors) {
+    const error = new Error("Whop connector is not available in this environment");
+    error.statusCode = 503;
+    throw error;
+  }
   connectors ||= new ReplitConnectors();
   return connectors;
 }

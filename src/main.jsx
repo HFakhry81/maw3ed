@@ -5,6 +5,17 @@ import "./ops.css";
 import { api } from "./api";
 import { LOCALES, applyDocumentLocale, t } from "./i18n";
 import { CalendarView } from "./CalendarView.jsx";
+import {
+  Maw3edClerkProvider,
+  ClerkTokenBridge,
+  FreshTrialGate,
+  AuthLanding,
+  AuthControls,
+  WorkspaceOnboarding,
+  SignedIn,
+  SignedOut,
+  useClerkPublishableKey
+} from "./ClerkGate.jsx";
 
 const NAV = [
   { id: "overview", mark: "غرفة" },
@@ -29,28 +40,9 @@ const MOBILE_NAV = ["overview", "calendar", "customers", "services", "more"];
 const SERVICE_COLORS = ["#111827", "#7f1d1d", "#92400e", "#9f1239", "#6b21a8", "#a78bfa", "#db2777", "#f9a8d4", "#fb7185", "#3B82F6"];
 
 async function logoutUser() {
-  try {
-    const config = await api.get("/api/config");
-    if (config.clerkPublishableKey) {
-      if (!window.Clerk) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js";
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-      }
-      const clerk = new window.Clerk(config.clerkPublishableKey);
-      await clerk.load();
-      await clerk.signOut();
-    }
-  } catch {
-    // Local mode without Clerk still clears session keys.
-  }
   ["maw3ed.role", "maw3ed.workspaceId"].forEach((key) => localStorage.removeItem(key));
   api.setWorkspaceId("");
-  window.location.href = "/auth.html";
+  window.location.href = "/";
 }
 
 class ModuleBoundary extends Component {
@@ -1000,8 +992,7 @@ function App() {
               <option value="provider">مقدّم خدمة</option>
             </select>
           </label>
-          <div className="user-chip"><b>مستخدم موعد</b><span>{t(locale, "free")} · {role === "owner" ? "مدير" : role === "reception" ? "استقبال" : "مقدّم"}</span></div>
-          <button type="button" className="logout-button" onClick={logoutUser}>تسجيل الخروج</button>
+          <AuthControls onSignOut={logoutUser} />
         </div>
       </aside>
       <main className="ops-main">
@@ -1043,4 +1034,87 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(<Root />);
+
+function AuthenticatedShell() {
+  const [workspaces, setWorkspaces] = useState(null);
+  const [bootError, setBootError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/api/workspaces")
+      .then((result) => {
+        if (cancelled) return;
+        const list = result.workspaces || [];
+        setWorkspaces(list);
+        if (list[0]?.id && !localStorage.getItem("maw3ed.workspaceId")) {
+          api.setWorkspaceId(list[0].id);
+        }
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setBootError(err.message || "تعذر تحميل مساحات العمل");
+        setWorkspaces([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (workspaces === null) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>جارٍ التحقق من الحساب ومساحات العمل…</p>
+          {bootError && <div className="error-banner">{bootError}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (workspaces.length === 0) {
+    return (
+      <WorkspaceOnboarding
+        onCreated={(workspace) => {
+          setWorkspaces([workspace]);
+          if (workspace?.id) api.setWorkspaceId(workspace.id);
+        }}
+      />
+    );
+  }
+
+  return <App />;
+}
+
+function ClerkRoot({ publishableKey }) {
+  return (
+    <Maw3edClerkProvider publishableKey={publishableKey}>
+      <FreshTrialGate>
+        <SignedOut>
+          <AuthLanding />
+        </SignedOut>
+        <SignedIn>
+          <ClerkTokenBridge>
+            <AuthenticatedShell />
+          </ClerkTokenBridge>
+        </SignedIn>
+      </FreshTrialGate>
+    </Maw3edClerkProvider>
+  );
+}
+
+function Root() {
+  const { key, ready } = useClerkPublishableKey();
+  if (!ready) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>جارٍ تجهيز تسجيل الدخول…</p>
+        </div>
+      </div>
+    );
+  }
+  if (!key) return <App />;
+  return <ClerkRoot publishableKey={key} />;
+}

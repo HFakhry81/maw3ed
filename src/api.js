@@ -1,5 +1,6 @@
 export const api = {
   workspaceId: typeof localStorage !== "undefined" ? localStorage.getItem("maw3ed.workspaceId") || "local-default" : "local-default",
+  getToken: null,
 
   setWorkspaceId(id) {
     this.workspaceId = id || "local-default";
@@ -9,9 +10,17 @@ export const api = {
     }
   },
 
-  headers(extra = {}) {
+  async authHeaders(extra = {}) {
     const headers = { ...extra };
     if (this.workspaceId) headers["x-workspace-id"] = this.workspaceId;
+    if (typeof this.getToken === "function") {
+      try {
+        const token = await this.getToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch {
+        /* signed out */
+      }
+    }
     return headers;
   },
 
@@ -30,13 +39,13 @@ export const api = {
   },
 
   async get(url) {
-    return this.parse(await fetch(url, { headers: this.headers() }));
+    return this.parse(await fetch(url, { headers: await this.authHeaders() }));
   },
   async post(url, body) {
     return this.parse(
       await fetch(url, {
         method: "POST",
-        headers: this.headers({ "Content-Type": "application/json" }),
+        headers: await this.authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body)
       })
     );
@@ -45,7 +54,7 @@ export const api = {
     return this.parse(
       await fetch(url, {
         method: "PUT",
-        headers: this.headers({ "Content-Type": "application/json" }),
+        headers: await this.authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body)
       })
     );
@@ -54,12 +63,12 @@ export const api = {
     return this.parse(
       await fetch(url, {
         method: "PATCH",
-        headers: this.headers({ "Content-Type": "application/json" }),
+        headers: await this.authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify(body)
       })
     );
   },
   async del(url) {
-    return this.parse(await fetch(url, { method: "DELETE", headers: this.headers() }));
+    return this.parse(await fetch(url, { method: "DELETE", headers: await this.authHeaders() }));
   }
 };

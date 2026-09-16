@@ -11,6 +11,7 @@ data/workspaces/**
 !data/workspaces/.gitkeep
 data/email-outbox.jsonl
 data/development-events.jsonl
+data/local-clerk-workspaces.json
 *.log
 .DS_Store
 data/last-refresh-report.json

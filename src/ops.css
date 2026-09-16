@@ -711,6 +711,123 @@
   width: calc(100% - 24px);
 }
 
+.auth-landing {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px 16px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(36, 107, 210, 0.16), transparent 42%),
+    radial-gradient(circle at 88% 8%, rgba(15, 52, 110, 0.12), transparent 36%),
+    linear-gradient(160deg, #eef4fc 0%, #f7fafc 48%, #e8eef8 100%);
+}
+
+.auth-landing-card {
+  width: min(100%, 420px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 24px;
+  border: 1px solid #d7e3f4;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 24px 60px rgba(18, 49, 96, 0.12);
+  text-align: center;
+}
+
+.auth-brand-logo {
+  width: 112px;
+  height: 112px;
+  margin: 0 auto 4px;
+  border-radius: 28px;
+  box-shadow: 0 16px 36px rgba(11, 54, 156, 0.28);
+  object-fit: contain;
+}
+
+.auth-landing-card h1 {
+  margin: 0;
+  font-size: 1.55rem;
+  letter-spacing: -0.03em;
+  color: #0b1f44;
+}
+
+.auth-landing-card p,
+.auth-landing-card small {
+  margin: 0;
+  color: #5b6b86;
+  line-height: 1.6;
+}
+
+.auth-landing-card small {
+  font-size: 0.75rem;
+}
+
+.auth-landing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.auth-cta {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.primary-button.auth-cta {
+  border: 0;
+  background: #1769e8;
+  color: #fff;
+}
+
+.ghost-button.auth-cta {
+  border: 1px solid #c9d7ec;
+  background: #fff;
+  color: #0b1f44;
+}
+
+.auth-fallback-link {
+  color: #246bd2;
+  font-size: 0.82rem;
+  text-decoration: none;
+}
+
+.onboarding-card {
+  text-align: start;
+}
+
+.onboarding-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: #314463;
+  text-align: start;
+}
+
+.onboarding-card input,
+.onboarding-card select {
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #cfdced;
+  border-radius: 10px;
+  background: #fff;
+  color: #0b1f44;
+  font: inherit;
+}
+
+.auth-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-controls .cl-userButton-root {
+  align-self: flex-start;
+}
+
 .facility-logo-row {
   display: flex;
   gap: 16px;

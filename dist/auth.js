@@ -18,7 +18,13 @@ async function loadClerkScript() {
     const clerk = new window.Clerk(config.clerkPublishableKey);
     await clerk.load();
     if (clerk.user) {
-      window.location.href = new URLSearchParams(window.location.search).get("next") || "/";
+      try {
+        localStorage.setItem("maw3ed.clerkTrialFresh", "2026-09-16");
+      } catch {
+        /* ignore */
+      }
+      const next = new URLSearchParams(window.location.search).get("next") || "/?onboarding=1";
+      window.location.href = next;
       return;
     }
     const isSignUp = new URLSearchParams(window.location.search).get("mode") === "sign-up";
@@ -28,7 +34,19 @@ async function loadClerkScript() {
         elements: { card: "shadow-none", headerTitle: "text-[#071942]", formButtonPrimary: "bg-[#1769e8] hover:bg-[#0b369c]" }
       }
     };
-    (isSignUp ? clerk.mountSignUp : clerk.mountSignIn).call(clerk, container, options);
+    if (isSignUp) {
+      clerk.mountSignUp(container, {
+        ...options,
+        routing: "hash",
+        forceRedirectUrl: "/?onboarding=1"
+      });
+    } else {
+      clerk.mountSignIn(container, {
+        ...options,
+        routing: "hash",
+        forceRedirectUrl: "/"
+      });
+    }
   } catch (error) {
     container.className = "loading";
     container.textContent = "تعذر تجهيز تسجيل الدخول. تأكد من إعداد Clerk ثم أعد المحاولة.";

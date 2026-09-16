@@ -303,12 +303,50 @@ async function getAuthenticatedUser(req) {
   }
 }
 
+const localClerkWorkspacesPath = path.join(__dirname, "data", "local-clerk-workspaces.json");
+
+function loadLocalClerkWorkspaces() {
+  try {
+    if (!fs.existsSync(localClerkWorkspacesPath)) return {};
+    const data = JSON.parse(fs.readFileSync(localClerkWorkspacesPath, "utf8"));
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveLocalClerkWorkspaces(data) {
+  fs.mkdirSync(path.dirname(localClerkWorkspacesPath), { recursive: true });
+  fs.writeFileSync(localClerkWorkspacesPath, JSON.stringify(data, null, 2), "utf8");
+}
+
+function localActivityMeta(activityType) {
+  const catalog = {
+    medical: { display_name: "طبي", labels: { customer: "المرضى", staff: "الأطباء", department: "الأقسام والعيادات", service: "الخدمات", appointment: "المواعيد" } },
+    salon: { display_name: "صالون", labels: { customer: "العملاء", staff: "الفريق", department: "الأقسام", service: "الخدمات", appointment: "المواعيد" } },
+    education: { display_name: "تعليمي", labels: { customer: "الطلاب", staff: "المعلمون", department: "الأقسام", service: "الدورات", appointment: "الحصص" } },
+    fitness: { display_name: "رياضي", labels: { customer: "الأعضاء", staff: "المدربون", department: "الأقسام", service: "الباقات", appointment: "الجلسات" } },
+    other: { display_name: "أخرى", labels: { customer: "العملاء", staff: "الفريق", department: "الأقسام", service: "الخدمات", appointment: "المواعيد" } }
+  };
+  return catalog[activityType] || catalog.other;
+}
+
 async function requireAppUser(req) {
   const identity = await getAuthenticatedUser(req);
   if (!identity) {
     const error = new Error("Authentication is required");
     error.statusCode = 401;
     throw error;
+  }
+  if (!databaseConfigured) {
+    return {
+      id: `local-user-${identity.clerkUserId}`,
+      clerk_user_id: identity.clerkUserId,
+      email: identity.email,
+      display_name: identity.displayName,
+      is_platform_admin: true,
+      status: "active"
+    };
   }
   let result = await query("SELECT * FROM app_users WHERE clerk_user_id = $1", [identity.clerkUserId]);
   if (!result.rows[0]) {
@@ -334,6 +372,10 @@ async function requirePlatformAdmin(req) {
 }
 
 async function getUserWorkspace(userId, workspaceId = null) {
+  if (!databaseConfigured) {
+    const rows = loadLocalClerkWorkspaces()[userId] || [];
+    return (workspaceId ? rows.find((item) => item.id === workspaceId) : rows[0]) || null;
+  }
   const result = await query(
     `SELECT w.*, ws.role, o.id AS organization_id, o.activity_type AS organization_activity_type,
             o.locale AS organization_locale, o.currency AS organization_currency,
@@ -353,6 +395,9 @@ async function getUserWorkspace(userId, workspaceId = null) {
 }
 
 async function listUserWorkspaces(userId) {
+  if (!databaseConfigured) {
+    return loadLocalClerkWorkspaces()[userId] || [];
+  }
   const result = await query(
     `SELECT w.id, w.name, w.slug, w.activity_type, w.status, w.created_at,
             o.id AS organization_id, o.logo_url, o.name AS organization_name
@@ -495,6 +540,55 @@ async function createWorkspace(user, payload) {
     error.statusCode = 400;
     throw error;
   }
+
+  if (!databaseConfigured) {
+    const meta = localActivityMeta(activityType);
+    const resolvedActivityType = ["medical", "salon", "education", "fitness", "billiards", "other"].includes(activityType)
+      ? activityType
+      : "other";
+    const registry = loadLocalClerkWorkspaces();
+    const slugTaken = Object.values(registry).flat().some((item) => item.slug === payload.slug);
+    if (slugTaken) {
+      const error = new Error("This workspace slug is already taken");
+      error.statusCode = 409;
+      throw error;
+    }
+    const workspaceId = createId("workspace").replace(/_/g, "-");
+    const organizationIdLocal = `org-${workspaceId}`;
+    try {
+      const opsStore = require("./opsStore");
+      opsStore.seedWorkspaceStore(workspaceId, {
+        slug: payload.slug,
+        businessName: name,
+        activityType: resolvedActivityType
+      });
+    } catch (error) {
+      console.warn("[workspace] local ops seed failed:", error.message);
+    }
+    const workspace = {
+      id: workspaceId,
+      name,
+      slug: payload.slug,
+      activity_type: resolvedActivityType,
+      status: "active",
+      created_at: new Date().toISOString(),
+      organization_id: organizationIdLocal,
+      organization_name: name,
+      logo_url: null,
+      role: "owner",
+      plan_key: "free",
+      plan_name: "Free",
+      features: ["لوحة التحكم", "إدارة المواعيد"],
+      limits: {},
+      locale,
+      currency,
+      labels: meta.labels
+    };
+    registry[user.id] = [...(registry[user.id] || []), workspace];
+    saveLocalClerkWorkspaces(registry);
+    return workspace;
+  }
+
   const template = (await query("SELECT * FROM activity_templates WHERE activity_type = $1", [activityType])).rows[0]
     || (await query("SELECT * FROM activity_templates WHERE activity_type = 'other'")).rows[0];
   if (!template) {
@@ -727,7 +821,11 @@ const server = http.createServer(async (req, res) => {
     if (requested === "/api/config" && req.method === "GET") {
       return sendJson(res, 200, {
         ok: true,
-        clerkPublishableKey: process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY || null,
+        clerkPublishableKey:
+          process.env.VITE_CLERK_PUBLISHABLE_KEY
+          || process.env.CLERK_PUBLISHABLE_KEY
+          || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+          || null,
         product: "Maw3ed",
         company: "UpNexa-eg.com"
       });
