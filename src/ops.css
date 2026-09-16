@@ -735,6 +735,56 @@
   text-align: center;
 }
 
+.auth-landing-card-wide {
+  width: min(100%, 440px);
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid #d7e3f4;
+  border-radius: 12px;
+  background: #f3f7ff;
+}
+
+.auth-mode-switch button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  color: #314463;
+  font-weight: 700;
+}
+
+.auth-mode-switch button.active {
+  background: #1769e8;
+  color: #fff;
+}
+
+.auth-clerk-host {
+  width: 100%;
+  min-height: 320px;
+  text-align: start;
+}
+
+.auth-clerk-host .cl-rootBox,
+.auth-clerk-host .cl-card {
+  width: 100%;
+  margin: 0 auto;
+}
+
+.auth-profile-btn {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #c9d7ec;
+  border-radius: 10px;
+  background: #fff;
+  color: #0b1f44;
+  font-weight: 600;
+}
+
 .auth-brand-logo {
   width: 112px;
   height: 112px;

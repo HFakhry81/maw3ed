@@ -3,8 +3,8 @@ import {
   ClerkProvider,
   SignedIn,
   SignedOut,
-  SignInButton,
-  SignUpButton,
+  SignIn,
+  SignUp,
   UserButton,
   useAuth,
   useUser,
@@ -21,6 +21,24 @@ const envPublishableKey =
 const SESSION_KEYS = ["maw3ed.role", "maw3ed.workspaceId", "maw3ed.industrySeen"];
 const FRESH_TRIAL_FLAG = "maw3ed.clerkTrialFresh";
 const FRESH_TRIAL_VALUE = "2026-09-16";
+
+const clerkAppearance = {
+  variables: {
+    colorPrimary: "#1769e8",
+    colorText: "#071942",
+    colorBackground: "#ffffff",
+    borderRadius: "12px"
+  },
+  elements: {
+    rootBox: { width: "100%" },
+    card: { boxShadow: "none", border: "0", width: "100%" },
+    headerTitle: { color: "#071942" },
+    formButtonPrimary: {
+      background: "#1769e8",
+      "&:hover": { background: "#0b369c" }
+    }
+  }
+};
 
 export function clearLocalAppSession() {
   SESSION_KEYS.forEach((key) => {
@@ -41,6 +59,7 @@ export function Maw3edClerkProvider({ publishableKey, children }) {
       afterSignOutUrl="/"
       signInFallbackRedirectUrl="/"
       signUpFallbackRedirectUrl="/?onboarding=1"
+      appearance={clerkAppearance}
     >
       {children}
     </ClerkProvider>
@@ -57,77 +76,81 @@ export function ClerkTokenBridge({ children }) {
   return children;
 }
 
-/** One-time local wipe; sign out prior Clerk session unless arriving from signup/verify. */
+/** Clear stale local demo keys once — never sign the user out after signup/verify. */
 export function FreshTrialGate({ children }) {
-  const { isLoaded, isSignedIn } = useAuth();
-  const { signOut } = useClerk();
-  const [ready, setReady] = useState(() => {
-    try {
-      return localStorage.getItem(FRESH_TRIAL_FLAG) === FRESH_TRIAL_VALUE;
-    } catch {
-      return false;
-    }
-  });
-
   useEffect(() => {
-    if (!isLoaded || ready) return undefined;
-    let cancelled = false;
-    (async () => {
-      const params = new URLSearchParams(window.location.search);
-      const preserveSession =
-        params.get("onboarding") === "1" ||
-        (typeof document !== "undefined" && /auth\.html/i.test(document.referrer || ""));
+    try {
+      if (localStorage.getItem(FRESH_TRIAL_FLAG) === FRESH_TRIAL_VALUE) return;
       clearLocalAppSession();
-      if (isSignedIn && !preserveSession) {
-        try {
-          await signOut();
-        } catch {
-          /* ignore */
-        }
-      }
-      try {
-        localStorage.setItem(FRESH_TRIAL_FLAG, FRESH_TRIAL_VALUE);
-      } catch {
-        /* ignore */
-      }
-      if (!cancelled) setReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoaded, isSignedIn, ready, signOut]);
-
-  if (!ready) {
-    return (
-      <div className="auth-landing">
-        <div className="auth-landing-card">
-          <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
-          <h1>موعد Maw3ed</h1>
-          <p>جارٍ تجهيز تجربة تسجيل جديدة…</p>
-        </div>
-      </div>
-    );
-  }
+      localStorage.setItem(FRESH_TRIAL_FLAG, FRESH_TRIAL_VALUE);
+    } catch {
+      /* ignore */
+    }
+  }, []);
   return children;
 }
 
+function initialAuthMode() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") === "sign-up" || params.get("onboarding") === "1") return "sign-up";
+    if (window.location.hash.includes("sign-up")) return "sign-up";
+  } catch {
+    /* ignore */
+  }
+  return "sign-in";
+}
+
 export function AuthLanding() {
+  const [mode, setMode] = useState(initialAuthMode);
+
   return (
     <div className="auth-landing">
-      <div className="auth-landing-card">
+      <div className="auth-landing-card auth-landing-card-wide">
         <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
         <h1>موعد Maw3ed</h1>
-        <p>سجّل حساباً جديداً، أكّد بريدك، ثم أنشئ مساحة عملك الأولى.</p>
-        <div className="auth-landing-actions">
-          <SignUpButton mode="modal">
-            <button type="button" className="primary-button auth-cta">إنشاء حساب</button>
-          </SignUpButton>
-          <SignInButton mode="modal">
-            <button type="button" className="ghost-button auth-cta">تسجيل الدخول</button>
-          </SignInButton>
+        <p>سجّل بالبريد وكلمة المرور، أكّد بريدك، ثم ادخل إلى لوحة التحكم.</p>
+        <div className="auth-mode-switch" role="tablist" aria-label="وضع الحساب">
+          <button
+            type="button"
+            className={mode === "sign-up" ? "active" : ""}
+            onClick={() => setMode("sign-up")}
+          >
+            إنشاء حساب
+          </button>
+          <button
+            type="button"
+            className={mode === "sign-in" ? "active" : ""}
+            onClick={() => setMode("sign-in")}
+          >
+            تسجيل الدخول
+          </button>
         </div>
-        <a className="auth-fallback-link" href="/auth.html?mode=sign-up">فتح صفحة التسجيل الكاملة</a>
-        <small>التحقق من البريد يتم عبر Clerk · ثم بناء مساحة العمل داخل المنصة</small>
+        <div className="auth-clerk-host">
+          {mode === "sign-up" ? (
+            <SignUp
+              routing="hash"
+              signInUrl="/#/sign-in"
+              forceRedirectUrl="/?onboarding=1"
+              fallbackRedirectUrl="/?onboarding=1"
+              appearance={clerkAppearance}
+            />
+          ) : (
+            <SignIn
+              routing="hash"
+              signUpUrl="/#/sign-up"
+              forceRedirectUrl="/"
+              fallbackRedirectUrl="/"
+              appearance={clerkAppearance}
+            />
+          )}
+        </div>
+        <a className="auth-fallback-link" href="/auth.html?mode=sign-up">
+          فتح صفحة التسجيل الكاملة
+        </a>
+        <small>
+          بعد التحقق من البريد يمكنك تغيير كلمة المرور من قائمة الحساب (أيقونة المستخدم) → Security.
+        </small>
       </div>
     </div>
   );
@@ -135,7 +158,7 @@ export function AuthLanding() {
 
 export function AuthControls({ onSignOut }) {
   const { user } = useUser();
-  const { signOut } = useClerk();
+  const { signOut, openUserProfile } = useClerk();
   const email = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || "";
   const name = user?.fullName || user?.firstName || email || "مستخدم موعد";
 
@@ -157,6 +180,9 @@ export function AuthControls({ onSignOut }) {
         <span>{email || "حساب Clerk"}</span>
       </div>
       <UserButton afterSignOutUrl="/" />
+      <button type="button" className="ghost-button auth-profile-btn" onClick={() => openUserProfile()}>
+        الأمان وكلمة المرور
+      </button>
       <button type="button" className="logout-button" onClick={handleSignOut}>
         تسجيل الخروج
       </button>
@@ -273,4 +299,4 @@ export function useClerkPublishableKey() {
   return { key, ready };
 }
 
-export { SignedIn, SignedOut, SignInButton, SignUpButton, useAuth, useUser, envPublishableKey };
+export { SignedIn, SignedOut, SignIn, SignUp, useAuth, useUser, envPublishableKey };
