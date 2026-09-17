@@ -143,6 +143,16 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         sendJson(res, 201, { ok: true, category: ops.createServiceCategory(await parseJsonBody(req)) });
         return true;
       }
+      const categoryMatch = requested.match(/^\/api\/ops\/service-categories\/([^/]+)$/);
+      if (categoryMatch && req.method === "PATCH") {
+        sendJson(res, 200, { ok: true, category: ops.updateServiceCategory(categoryMatch[1], await parseJsonBody(req)) });
+        return true;
+      }
+      if (categoryMatch && req.method === "DELETE") {
+        ops.deleteServiceCategory(categoryMatch[1]);
+        sendJson(res, 200, { ok: true });
+        return true;
+      }
       if (requested === "/api/ops/services" && req.method === "GET") {
         sendJson(res, 200, {
           ok: true,

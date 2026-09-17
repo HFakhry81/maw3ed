@@ -32,7 +32,8 @@
     "change:watch": "node scripts/development-log.js watch",
     "change:report": "node scripts/development-log.js report",
     "build": "node scripts/build.js",
-    "web:dist": "npm run build"
+    "web:dist": "npm run build",
+    "icons:png": "node scripts/export-icon-pngs.js"
   },
   "dependencies": {
     "@clerk/backend": "^3.17.2",
@@ -47,6 +48,7 @@
     "vite": "^8.3.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "picomatch": "4.0.2"
   }
 }

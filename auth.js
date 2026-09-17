@@ -340,7 +340,9 @@ function redirectAfterAuth(isSignUp) {
         routing: "hash",
         forceRedirectUrl: "/?onboarding=1",
         fallbackRedirectUrl: "/?onboarding=1",
-        signUpUrl: "/auth.html?mode=sign-up"
+        signUpUrl: "/auth.html?mode=sign-up",
+        // Password sign-in only — email OTP is for signup / email change in Clerk Dashboard.
+        withSignUp: false
       });
     }
 

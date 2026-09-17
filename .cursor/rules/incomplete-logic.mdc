@@ -1,0 +1,13 @@
+---
+description: Remind about open incomplete Maw3ed logic until closed
+alwaysApply: true
+---
+
+# Incomplete logic reminders
+
+Before finishing any Maw3ed task response, if work touches booking, services, or pricing, briefly remind the user of still-open items from `docs/INCOMPLETE_LOGIC.md`:
+
+1. **range pricing** — `priceMin`/`priceMax` saved, but choosing a concrete price within the range at booking request/confirm is NOT done.
+2. **on_request pricing** — amount hidden, but setting price when the service is requested is NOT done.
+
+Do not mark these closed until the booking flow actually applies the price. When closed, update `docs/INCOMPLETE_LOGIC.md` and the agent-store `incomplete-logic` notes.

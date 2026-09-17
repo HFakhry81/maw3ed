@@ -18,7 +18,7 @@ import {
 import { getClerkLocalization } from "./authI18n";
 
 const NAV = [
-  { id: "overview", mark: "غرفة" },
+  { id: "overview", mark: "لوحة" },
   { id: "calendar", mark: "تق" },
   { id: "customers", mark: "عم" },
   { id: "staff", mark: "مو" },
@@ -32,6 +32,7 @@ const NAV = [
   { id: "marketing", mark: "تس", growth: true, badge: "جديد" },
   { id: "notifications", mark: "تنب" },
   { id: "preferences", mark: "تفض" },
+  { id: "account", mark: "حساب" },
   { id: "integrations", mark: "ربط", growth: true }
 ];
 
@@ -57,7 +58,7 @@ class ModuleBoundary extends Component {
     if (this.state.failed) {
       return (
         <section className="ops-page">
-          <div className="panel empty-state">تعذّر عرض هذا القسم. باقي غرفة العمليات يعمل بشكل طبيعي.</div>
+          <p>تعذّر عرض هذا القسم. باقي لوحة التحكم يعمل بشكل طبيعي.</p>
         </section>
       );
     }
@@ -219,7 +220,7 @@ function StaffView({ ops, reload, locale }) {
       </div>
       <div className="data-table panel">
         {(ops?.staff || []).map((person) => (
-          <div className="table-row" key={person.id}>
+          <div className="table-row staff-row" key={person.id}>
             <div className="avatar" style={person.avatarUrl ? { backgroundImage: `url(${person.avatarUrl})`, backgroundSize: "cover" } : undefined}>
               {!person.avatarUrl && person.name.charAt(0)}
             </div>
@@ -228,15 +229,24 @@ function StaffView({ ops, reload, locale }) {
               <small>{person.title}{person.phone ? ` · ${person.phone}` : ""} · {person.useBusinessHours === false ? "ساعات خاصة" : "ساعات المنشأة"}</small>
             </div>
             <span>{person.servicesCount || 0} خدمات</span>
-            <button type="button" onClick={() => openEdit(person)}>تعديل</button>
-            <button type="button" className="danger-button" onClick={async () => {
-              try {
-                await api.del(`/api/ops/staff/${person.id}`);
-                reload();
-              } catch (error) {
-                window.alert(error.message || "تعذر الحذف");
-              }
-            }}>حذف</button>
+            <div className="row-actions">
+              <button type="button" className="edit-button" onClick={() => openEdit(person)}>تعديل</button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={async () => {
+                  if (!window.confirm(`حذف الموظف «${person.name}»؟`)) return;
+                  try {
+                    await api.del(`/api/ops/staff/${person.id}`);
+                    reload();
+                  } catch (error) {
+                    window.alert(error.message || "تعذر الحذف");
+                  }
+                }}
+              >
+                حذف
+              </button>
+            </div>
           </div>
         ))}
       </div>
@@ -312,17 +322,43 @@ function StaffView({ ops, reload, locale }) {
 
 function ServicesView({ ops, reload, locale }) {
   const emptyForm = {
-    name: "", categoryId: "", durationMinutes: 30, bufferMinutes: 0, price: 0, pricingType: "fixed",
-    providerId: "", publicBooking: true, autoAccept: true, autoComplete: true, color: "#3B82F6", description: ""
+    name: "",
+    categoryId: "",
+    durationMinutes: 30,
+    bufferMinutes: 0,
+    price: 0,
+    priceMin: 0,
+    priceMax: 0,
+    pricingType: "fixed",
+    providerId: "",
+    publicBooking: true,
+    autoAccept: true,
+    autoComplete: true,
+    active: true,
+    color: "#3B82F6",
+    description: ""
   };
   const [categoryId, setCategoryId] = useState(ops?.serviceCategories?.[0]?.id || "");
   const [open, setOpen] = useState(false);
+  const [categoryOpen, setCategoryOpen] = useState(false);
   const [editingId, setEditingId] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState("");
+  const [categoryName, setCategoryName] = useState("");
   const [form, setForm] = useState(emptyForm);
   useEffect(() => {
     if (!categoryId && ops?.serviceCategories?.[0]) setCategoryId(ops.serviceCategories[0].id);
   }, [ops, categoryId]);
   const services = (ops?.services || []).filter((service) => !categoryId || service.categoryId === categoryId);
+  const incompletePricing = form.pricingType === "range" || form.pricingType === "on_request";
+
+  const formatPrice = (service) => {
+    const type = service.pricingType || "fixed";
+    if (type === "free") return "مجاني";
+    if (type === "on_request") return "عند الطلب";
+    if (type === "range") return `E£${service.priceMin ?? service.price ?? 0} – ${service.priceMax ?? service.price ?? 0}`;
+    return Number(service.price) === 0 ? "مجاني" : `E£${service.price}`;
+  };
+
   const openCreate = () => {
     setEditingId("");
     setForm({ ...emptyForm, categoryId });
@@ -336,15 +372,74 @@ function ServicesView({ ops, reload, locale }) {
       durationMinutes: service.durationMinutes || 30,
       bufferMinutes: service.bufferMinutes || 0,
       price: service.price || 0,
+      priceMin: service.priceMin ?? service.price ?? 0,
+      priceMax: service.priceMax ?? service.price ?? 0,
       pricingType: service.pricingType || "fixed",
       providerId: (service.providerIds || [])[0] || "",
       publicBooking: service.publicBooking !== false,
       autoAccept: Boolean(service.autoAccept),
       autoComplete: Boolean(service.autoComplete),
+      active: service.active !== false,
       color: service.color || "#3B82F6",
       description: service.description || ""
     });
     setOpen(true);
+  };
+  const openCategoryCreate = () => {
+    setEditingCategoryId("");
+    setCategoryName("");
+    setCategoryOpen(true);
+  };
+  const openCategoryEdit = (category) => {
+    setEditingCategoryId(category.id);
+    setCategoryName(category.name || "");
+    setCategoryOpen(true);
+  };
+  const submitCategory = async (event) => {
+    event.preventDefault();
+    if (editingCategoryId) await api.patch(`/api/ops/service-categories/${editingCategoryId}`, { name: categoryName });
+    else {
+      const created = await api.post("/api/ops/service-categories", { name: categoryName });
+      if (created?.category?.id) setCategoryId(created.category.id);
+    }
+    setCategoryOpen(false);
+    reload();
+  };
+  const toggleCategoryActive = async (category) => {
+    const next = category.active === false || category.enabled === false;
+    try {
+      await api.patch(`/api/ops/service-categories/${category.id}`, { active: next });
+      reload();
+    } catch (error) {
+      window.alert(error.message || "تعذر تحديث الفئة");
+    }
+  };
+  const deleteCategory = async (category) => {
+    if (!window.confirm(`حذف فئة «${category.name}»؟ الحذف مسموح فقط إذا كانت فارغة ولم يُسجَّل عليها تعامل.`)) return;
+    try {
+      await api.del(`/api/ops/service-categories/${category.id}`);
+      if (categoryId === category.id) setCategoryId(ops?.serviceCategories?.find((item) => item.id !== category.id)?.id || "");
+      reload();
+    } catch (error) {
+      window.alert(error.message || "تعذر حذف الفئة — الحذف للمحتوى الفارغ فقط.");
+    }
+  };
+  const toggleServiceActive = async (service) => {
+    try {
+      await api.patch(`/api/ops/services/${service.id}`, { active: service.active === false });
+      reload();
+    } catch (error) {
+      window.alert(error.message || "تعذر تحديث الخدمة");
+    }
+  };
+  const deleteServiceRow = async (service) => {
+    if (!window.confirm(`حذف خدمة «${service.name}»؟ الحذف مسموح فقط إذا لم يسبق التعامل عليها.`)) return;
+    try {
+      await api.del(`/api/ops/services/${service.id}`);
+      reload();
+    } catch (error) {
+      window.alert(error.message || "تعذر حذف الخدمة — الحذف للمحتوى الفارغ فقط.");
+    }
   };
   const submit = async (event) => {
     event.preventDefault();
@@ -358,39 +453,63 @@ function ServicesView({ ops, reload, locale }) {
   return (
     <section className="ops-page">
       <div className="ops-header">
-        <div><h1>{t(locale, "services")}</h1><p>فئات الخدمات والتسعير والمدة</p></div>
+        <div><h1>{t(locale, "services")}</h1><p>فئات الخدمات والتسعير وزمن التقديم</p></div>
         <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
+      </div>
+      <div className="panel incomplete-logic-note" role="note">
+        <b>منطق غير مكتمل — تذكير</b>
+        <p>تسعير «نطاق» و«عند الطلب» يُحفظ في الخدمة، لكن ربط السعر عند طلب الحجز لم يُغلق بعد. راجع docs/INCOMPLETE_LOGIC.md.</p>
       </div>
       <div className="split-panels">
         <aside className="panel category-list">
-          <div className="panel-head"><b>فئة الخدمة</b><button type="button" onClick={async () => {
-            const name = window.prompt("اسم الفئة");
-            if (name) { await api.post("/api/ops/service-categories", { name }); reload(); }
-          }}>+ إضافة</button></div>
-          {(ops?.serviceCategories || []).map((category) => (
-            <button key={category.id} type="button" className={categoryId === category.id ? "cat active" : "cat"} onClick={() => setCategoryId(category.id)}>{category.name}</button>
-          ))}
+          <div className="panel-head"><b>فئة الخدمة</b><button type="button" onClick={openCategoryCreate}>+ إضافة</button></div>
+          {(ops?.serviceCategories || []).map((category) => {
+            const inactive = category.active === false || category.enabled === false;
+            return (
+              <div key={category.id} className={categoryId === category.id ? "cat-row active" : "cat-row"}>
+                <button type="button" className={categoryId === category.id ? "cat active" : "cat"} onClick={() => setCategoryId(category.id)}>
+                  {category.name}{inactive ? " · متوقفة" : ""}
+                </button>
+                <div className="row-actions compact">
+                  <button type="button" className="edit-button" onClick={() => openCategoryEdit(category)}>تعديل</button>
+                  <button type="button" className="warn-button" onClick={() => toggleCategoryActive(category)}>{inactive ? "تفعيل" : "إيقاف"}</button>
+                  <button type="button" className="danger-button" onClick={() => deleteCategory(category)}>حذف</button>
+                </div>
+              </div>
+            );
+          })}
         </aside>
         <div className="panel service-list">
           {services.map((service) => (
-            <div className="table-row" key={service.id}>
+            <div className={`table-row service-row${service.active === false ? " is-inactive" : ""}`} key={service.id}>
               <span className="color-dot" style={{ background: service.color || "#3B82F6" }} />
-              <div><b>{service.name}</b><small>{service.durationMinutes} د · انتظار {service.bufferMinutes} د</small></div>
-              <span>{Number(service.price) === 0 ? "مجاني" : `E£${service.price}`}</span>
-              <button type="button" onClick={() => openEdit(service)}>تعديل</button>
-              <button type="button" className="danger-button" onClick={async () => {
-                try {
-                  await api.del(`/api/ops/services/${service.id}`);
-                  reload();
-                } catch (error) {
-                  window.alert(error.message || "تعذر الحذف");
-                }
-              }}>حذف</button>
+              <div>
+                <b>{service.name}{service.active === false ? " · متوقفة" : ""}</b>
+                <small>
+                  زمن التقديم {service.durationMinutes} د
+                  {service.bufferMinutes ? ` · فاصل ${service.bufferMinutes} د` : ""}
+                </small>
+              </div>
+              <span>{formatPrice(service)}</span>
+              <div className="row-actions">
+                <button type="button" className="edit-button" onClick={() => openEdit(service)}>تعديل</button>
+                <button type="button" className="warn-button" onClick={() => toggleServiceActive(service)}>
+                  {service.active === false ? "تفعيل" : "إيقاف"}
+                </button>
+                <button type="button" className="danger-button" onClick={() => deleteServiceRow(service)}>حذف</button>
+              </div>
             </div>
           ))}
           {!services.length && <div className="empty-state">{t(locale, "empty")}</div>}
         </div>
       </div>
+      <Drawer title={editingCategoryId ? "تعديل فئة" : "فئة جديدة"} open={categoryOpen} onClose={() => setCategoryOpen(false)}>
+        <form className="stack-form" onSubmit={submitCategory}>
+          <label>اسم الفئة<input required value={categoryName} onChange={(e) => setCategoryName(e.target.value)} /></label>
+          <p className="muted">الحذف مسموح فقط للفئات الفارغة التي لم يسبق التعامل عليها.</p>
+          <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
+        </form>
+      </Drawer>
       <Drawer title={editingId ? "تعديل خدمة" : "خدمة جديدة"} open={open} onClose={() => setOpen(false)}>
         <form className="stack-form" onSubmit={submit}>
           <label>الاسم<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
@@ -401,16 +520,41 @@ function ServicesView({ ops, reload, locale }) {
             <option value="">— اختر موظفاً —</option>
             {(ops?.staff || []).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
           </select></label>
+          <label>نوع التسعير
+            <select
+              value={form.pricingType}
+              onChange={(e) => setForm({ ...form, pricingType: e.target.value })}
+            >
+              <option value="fixed">ثابت (قيمة ثابتة)</option>
+              <option value="free">مجاني</option>
+              <option value="range">نطاق</option>
+              <option value="on_request">عند الطلب</option>
+            </select>
+          </label>
+          {form.pricingType === "fixed" && (
+            <label>السعر<input type="number" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></label>
+          )}
+          {form.pricingType === "range" && (
+            <div className="form-row">
+              <label>يبدأ من<input type="number" min="0" required value={form.priceMin} onChange={(e) => setForm({ ...form, priceMin: Number(e.target.value) })} /></label>
+              <label>ينتهي عند<input type="number" min="0" required value={form.priceMax} onChange={(e) => setForm({ ...form, priceMax: Number(e.target.value) })} /></label>
+            </div>
+          )}
+          {(form.pricingType === "free" || form.pricingType === "on_request") && (
+            <p className="muted">{form.pricingType === "free" ? "بدون قيمة — حقل المبلغ مخفي." : "يُحدَّد السعر عند طلب الخدمة (منطق غير مكتمل بعد)."}</p>
+          )}
+          {incompletePricing && (
+            <div className="plan-warning">تسعير «{form.pricingType === "range" ? "نطاق" : "عند الطلب"}» محفوظ شكلياً — منطق الربط عند الحجز غير مكتمل.</div>
+          )}
           <div className="form-row">
-            <label>نوع التسعير<select value={form.pricingType} onChange={(e) => setForm({ ...form, pricingType: e.target.value })}>
-              <option value="fixed">ثابت</option>
-              <option value="from">يبدأ من</option>
-            </select></label>
-            <label>السعر<input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></label>
-          </div>
-          <div className="form-row">
-            <label>المدة (د)<input type="number" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })} /></label>
-            <label>وقت الانتظار<input type="number" value={form.bufferMinutes} onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })} /></label>
+            <label title="المدة الفعلية التي تستغرقها الخدمة مع العميل أو الموعد.">
+              زمن تقديم الخدمة (د)
+              <input type="number" min="5" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })} />
+            </label>
+            <label title="فاصل زمني بعد انتهاء الخدمة قبل قبول موعد جديد لنفس المقدم (buffer).">
+              فاصل زمني (د)
+              <input type="number" min="0" value={form.bufferMinutes} onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })} />
+            </label>
           </div>
           <label>لون الخدمة
             <div className="color-swatches">
@@ -424,6 +568,7 @@ function ServicesView({ ops, reload, locale }) {
           <label className="check"><input type="checkbox" checked={form.publicBooking} onChange={(e) => setForm({ ...form, publicBooking: e.target.checked })} /> عرض على صفحة الحجز</label>
           <label className="check"><input type="checkbox" checked={form.autoAccept} onChange={(e) => setForm({ ...form, autoAccept: e.target.checked })} /> قبول تلقائي</label>
           <label className="check"><input type="checkbox" checked={form.autoComplete} onChange={(e) => setForm({ ...form, autoComplete: e.target.checked })} /> إنهاء تلقائي</label>
+          <label className="check"><input type="checkbox" checked={form.active !== false} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> نشطة</label>
           <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
         </form>
       </Drawer>
@@ -609,14 +754,15 @@ function OverviewView({ ops, appointments, locale, onNavigate }) {
   const today = new Date().toISOString().slice(0, 10);
   const todayItems = (appointments || []).filter((item) => item.date === today && item.status !== "cancelled").slice(0, 6);
   const usage = ops?.planUsage;
+  const showPlanUi = usage?.limitsEnforced === true;
   return (
     <section className="ops-page command-center">
       <div className="ops-header">
         <div>
           <h1>{t(locale, "overview")}</h1>
-          <p>غرفة العمليات المركزية — شفافية لحظية عبر الحجوزات والعملاء والمال</p>
+          <p>ملخص يومك — الحجوزات والعملاء والإيراد في مكان واحد</p>
         </div>
-        <a className="primary-button" href="/plans.html">ترقية الخطة</a>
+        {showPlanUi && <a className="primary-button" href="/plans.html">ترقية الخطة</a>}
       </div>
       <div className="stats-cards">
         <article className="panel kpi"><span>مواعيد اليوم</span><b>{stats.appointments?.todayCount || todayItems.length}</b></article>
@@ -638,23 +784,26 @@ function OverviewView({ ops, appointments, locale, onNavigate }) {
           {!todayItems.length && <div className="empty-state">لا مواعيد اليوم بعد — صفحة الحجز العامة جاهزة لاستقبال العملاء.</div>}
         </div>
         <div className="panel">
-          <div className="panel-head"><b>اختصارات تشغيلية</b></div>
+          <div className="panel-head"><b>اختصارات سريعة</b></div>
           <div className="quick-actions">
             <button type="button" onClick={() => onNavigate("customers")}>CRM العملاء</button>
             <button type="button" onClick={() => onNavigate("services")}>الخدمات والأقسام</button>
             <button type="button" onClick={() => onNavigate("bookingPage")}>صفحة الحجز العامة</button>
             <button type="button" onClick={() => onNavigate("stats")}>التقارير</button>
+            <button type="button" onClick={() => onNavigate("account")}>الحساب والإعدادات</button>
           </div>
-          {usage?.warnings?.length > 0 && (
+          {showPlanUi && usage?.warnings?.length > 0 && (
             <div className="plan-warning">
               اقتربت من حدود الخطة المجانية: {usage.warnings.map((item) => `${item.key} ${item.used}/${item.limit}`).join(" · ")}
             </div>
           )}
-          <div className="upgrade-card">
-            <b>بوابة الترقية</b>
-            <p>التقارير التفصيلية، أكواد الخصم، وواتساب تفتح مع Pro — الواجهة موجودة كـ Teaser.</p>
-            <a href="/plans.html">عرض الخطط</a>
-          </div>
+          {showPlanUi && (
+            <div className="upgrade-card">
+              <b>بوابة الترقية</b>
+              <p>التقارير التفصيلية، أكواد الخصم، وواتساب تفتح مع Pro — الواجهة موجودة كـ Teaser.</p>
+              <a href="/plans.html">عرض الخطط</a>
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -712,14 +861,66 @@ function ExpensesView({ ops, reload, locale }) {
   );
 }
 
-function PlaceholderView({ title, body }) {
+function PlaceholderView({ title, body, locked = false }) {
   return (
     <section className="ops-page">
       <div className="ops-header"><div><h1>{title}</h1><p>{body}</p></div></div>
-      <div className="panel locked growth-note">
-        <b>ميزة مقفلة — Teaser للترقية</b>
-        <p>متاح في مرحلة النمو / Pro. الواجهة جاهزة والقفل مفعّل للخطة المجانية لتحفيز الترقية عند الحاجة.</p>
-        <a className="primary-button" href="/plans.html">الترقية الآن</a>
+      {locked ? (
+        <div className="panel locked growth-note">
+          <b>ميزة مقفلة — Teaser للترقية</b>
+          <p>متاح في مرحلة النمو / Pro. الواجهة جاهزة والقفل مفعّل للخطة المجانية لتحفيز الترقية عند الحاجة.</p>
+          <a className="primary-button" href="/plans.html">الترقية الآن</a>
+        </div>
+      ) : (
+        <div className="panel">
+          <b>متاح أثناء الاختبار</b>
+          <p className="muted">قيود الخطط موقوفة مؤقتاً حتى اكتمال الاختبارات. يمكنك استكشاف الواجهة بحرية.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AccountSettingsView({ locale, setLocale, role, setRole }) {
+  return (
+    <section className="ops-page">
+      <div className="ops-header">
+        <div>
+          <h1>{t(locale, "account")}</h1>
+          <p>اللغة، الدور، الأمان، وكلمة المرور — بعيداً عن القائمة الجانبية</p>
+        </div>
+      </div>
+      <div className="split-panels">
+        <div className="panel stack-form account-settings-panel">
+          <h3>تفضيلات العرض</h3>
+          <label className="locale-select">
+            <span>اللغة</span>
+            <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+              {LOCALES.map((item) => (
+                <option key={item.code} value={item.code}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="locale-select">
+            <span>الدور التجريبي</span>
+            <select
+              value={role}
+              onChange={(e) => {
+                setRole(e.target.value);
+                localStorage.setItem("maw3ed.role", e.target.value);
+              }}
+            >
+              <option value="owner">مدير عام</option>
+              <option value="reception">استقبال</option>
+              <option value="provider">مقدّم خدمة</option>
+            </select>
+          </label>
+        </div>
+        <div className="panel account-settings-panel">
+          <h3>الحساب والأمان</h3>
+          <p className="muted">تغيير البريد يعيد التحقق برمز OTP مرة واحدة. تسجيل الدخول العادي لا يرسل رمزاً.</p>
+          <AuthControls onSignOut={logoutUser} />
+        </div>
       </div>
     </section>
   );
@@ -734,7 +935,7 @@ function NotificationsView({ ops, reload, locale }) {
   };
   return (
     <section className="ops-page">
-      <div className="ops-header"><div><h1>{t(locale, "notifications")}</h1><p>البريد مجاني · المراسلة Pro</p></div><button className="primary-button" type="button" onClick={save}>{t(locale, "save")}</button></div>
+      <div className="ops-header"><div><h1>{t(locale, "notifications")}</h1><p>البريد الإلكتروني وتذكيرات المواعيد</p></div><button className="primary-button" type="button" onClick={save}>{t(locale, "save")}</button></div>
       <div className="notif-grid">
         <article className="panel">
           <h3>البريد الإلكتروني</h3>
@@ -742,9 +943,9 @@ function NotificationsView({ ops, reload, locale }) {
             <label key={key} className="check"><input type="checkbox" checked={!!value} onChange={(e) => setDraft({ ...draft, email: { ...draft.email, [key]: e.target.checked } })} /> {key}</label>
           ))}
         </article>
-        <article className="panel locked">
-          <h3>واتساب / SMS <span className="pro-badge">Pro</span></h3>
-          <p className="muted">مقفلة في الخطة المجانية</p>
+        <article className={`panel${ops?.planUsage?.limitsEnforced ? " locked" : ""}`}>
+          <h3>واتساب / SMS {ops?.planUsage?.limitsEnforced ? <span className="pro-badge">Pro</span> : null}</h3>
+          <p className="muted">{ops?.planUsage?.limitsEnforced ? "مقفلة في الخطة المجانية" : "متاحة أثناء الاختبار (قيود الخطط موقوفة مؤقتاً)"}</p>
         </article>
         <article className="panel">
           <h3>تذكير يومي</h3>
@@ -846,7 +1047,7 @@ function ActivityProfileBar({ ops, reload, locale }) {
       {activity.mode === "flexible" && (
         <p className="flexible-note">الحقول والخدمات قابلة للتخصيص لأي نشاط: شركات، تدريب، صالونات، استشارات، أو مؤسسات خدمية.</p>
       )}
-      {usage?.warnings?.length > 0 && (
+      {ops?.planUsage?.limitsEnforced === true && usage?.warnings?.length > 0 && (
         <div className="plan-warning">
           اقتربت من حدود الخطة المجانية:
           {" "}
@@ -863,6 +1064,11 @@ function App() {
   const [view, setView] = useState("overview");
   const [moreOpen, setMoreOpen] = useState(false);
   const [role, setRole] = useState(localStorage.getItem("maw3ed.role") || "owner");
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const stored = Number(localStorage.getItem("maw3ed.sidebarWidth"));
+    return Number.isFinite(stored) && stored >= 260 && stored <= 420 ? stored : 304;
+  });
+  const [resizingSidebar, setResizingSidebar] = useState(false);
   const { ops, error, isPending, reload } = useOpsBootstrap();
   const { appointments, reload: reloadAppointments } = useAppointments();
   const [profile, setProfile] = useState(null);
@@ -873,6 +1079,29 @@ function App() {
     applyDocumentLocale(locale);
     localStorage.setItem("maw3ed.locale", locale);
   }, [locale]);
+
+  useEffect(() => {
+    localStorage.setItem("maw3ed.sidebarWidth", String(sidebarWidth));
+    document.documentElement.style.setProperty("--ops-sidebar-width", `${sidebarWidth}px`);
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    if (!resizingSidebar) return undefined;
+    const onMove = (event) => {
+      const rtl = document.documentElement.dir === "rtl";
+      const next = rtl ? window.innerWidth - event.clientX : event.clientX;
+      setSidebarWidth(Math.min(420, Math.max(260, Math.round(next))));
+    };
+    const onUp = () => setResizingSidebar(false);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [resizingSidebar]);
 
   useEffect(() => {
     let cancelled = false;
@@ -940,6 +1169,7 @@ function App() {
   };
 
   const logoUrl = ops?.bookingPage?.logoUrl || profile?.logoUrl || "";
+  const planLocked = ops?.planUsage?.limitsEnforced === true;
   const content = (() => {
     if (!ops && isPending) return <div className="loading-state">{t(locale, "loading")}</div>;
     switch (view) {
@@ -951,19 +1181,23 @@ function App() {
       case "schedule": return <ScheduleView ops={ops} reload={reload} locale={locale} />;
       case "bookingPage": return <BookingPageView ops={ops} reload={reload} locale={locale} />;
       case "industry": return <IndustryTemplatesView ops={ops} reload={reload} locale={locale} />;
-      case "stats": return role === "reception" ? <PlaceholderView title={t(locale, "stats")} body="التقارير المالية للمدير العام فقط — صلاحيات الاستقبال محدودة" /> : <StatsView ops={ops} locale={locale} />;
-      case "expenses": return role === "provider" ? <PlaceholderView title={t(locale, "expenses")} body="المصروفات ظاهرة للمدير فقط في هذه المرحلة" /> : <ExpensesView ops={ops} reload={reload} locale={locale} />;
+      case "stats": return role === "reception" ? <PlaceholderView title={t(locale, "stats")} body="التقارير المالية للمدير العام فقط — صلاحيات الاستقبال محدودة" locked={false} /> : <StatsView ops={ops} locale={locale} />;
+      case "expenses": return role === "provider" ? <PlaceholderView title={t(locale, "expenses")} body="المصروفات ظاهرة للمدير فقط في هذه المرحلة" locked={false} /> : <ExpensesView ops={ops} reload={reload} locale={locale} />;
       case "notifications": return <NotificationsView ops={ops} reload={reload} locale={locale} />;
       case "preferences": return <PreferencesView ops={ops} reload={reload} locale={locale} />;
-      case "payments": return <PlaceholderView title={t(locale, "payments")} body="بوابة الدفع الإلكتروني (Stripe) — مرحلة النمو" />;
-      case "marketing": return <PlaceholderView title={t(locale, "marketing")} body="الخصومات والولاء — مرحلة النمو / Pro" />;
-      case "integrations": return <PlaceholderView title={t(locale, "integrations")} body="Google Calendar و Stripe — مرحلة النمو" />;
+      case "account": return <AccountSettingsView locale={locale} setLocale={setLocale} role={role} setRole={setRole} />;
+      case "payments": return <PlaceholderView title={t(locale, "payments")} body="بوابة الدفع الإلكتروني (Stripe)" locked={planLocked} />;
+      case "marketing": return <PlaceholderView title={t(locale, "marketing")} body="الخصومات والولاء" locked={planLocked} />;
+      case "integrations": return <PlaceholderView title={t(locale, "integrations")} body="Google Calendar و Stripe" locked={planLocked} />;
       default: return <OverviewView ops={ops} appointments={appointments} locale={locale} onNavigate={navigate} />;
     }
   })();
 
   return (
-    <div className={`ops-shell ${isPending ? "is-pending" : ""}`}>
+    <div
+      className={`ops-shell ${isPending ? "is-pending" : ""} ${resizingSidebar ? "is-resizing-sidebar" : ""}`}
+      style={{ "--ops-sidebar-width": `${sidebarWidth}px` }}
+    >
       <aside className="ops-sidebar">
         <div className="ops-brand">
           <img src={logoUrl || "/assets/maw3ed-icon.svg"} alt="" />
@@ -988,35 +1222,36 @@ function App() {
               <span className="nav-ico" aria-hidden="true">{item.mark}</span>
               <span>{item.id === "industry" ? "القوالب" : item.id === "bookingPage" ? "المنشأة والحجز" : t(locale, item.id)}</span>
               {item.badge && <i className="new-badge">{item.badge}</i>}
-              {item.growth && <i className="lock-dot" title="Growth" />}
+              {item.growth && planLocked && <i className="lock-dot" title="Growth" />}
             </button>
           ))}
         </nav>
         <div className="ops-sidebar-foot">
-          <label className="locale-select">
-            <span>اللغة</span>
-            <select value={locale} onChange={(e) => setLocale(e.target.value)}>
-              {LOCALES.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
-            </select>
-          </label>
-          <label className="locale-select">
-            <span>الدور</span>
-            <select value={role} onChange={(e) => { setRole(e.target.value); localStorage.setItem("maw3ed.role", e.target.value); }}>
-              <option value="owner">مدير عام</option>
-              <option value="reception">استقبال</option>
-              <option value="provider">مقدّم خدمة</option>
-            </select>
-          </label>
-          <AuthControls onSignOut={logoutUser} />
+          <button type="button" className="ghost-button sidebar-account-link" onClick={() => navigate("account")}>
+            الحساب والإعدادات
+          </button>
         </div>
       </aside>
+      <button
+        type="button"
+        className="ops-sidebar-resize"
+        aria-label="تغيير عرض القائمة الجانبية"
+        title="اسحب لتغيير العرض"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          setResizingSidebar(true);
+        }}
+      />
       <main className="ops-main">
         <ActivityProfileBar ops={ops} reload={reload} locale={locale} />
         {error && <div className="error-banner">{error}<button type="button" onClick={reload}>إعادة</button></div>}
         <ModuleBoundary key={view}>
           <Suspense fallback={<div className="loading-state">{t(locale, "loading")}</div>}>{content}</Suspense>
         </ModuleBoundary>
-        <footer className="ops-footer">{t(locale, "poweredBy")}</footer>
+        <footer className="ops-footer">
+          <div>{t(locale, "poweredBy")}</div>
+          <a href={`mailto:${t(locale, "contactEmail")}`}>{t(locale, "contactEmail")}</a>
+        </footer>
       </main>
       <nav className="mobile-bottom-nav" aria-label="mobile">
         {MOBILE_NAV.map((id) => (
@@ -1042,6 +1277,7 @@ function App() {
               {item.id === "industry" ? "القوالب" : item.id === "bookingPage" ? "المنشأة والحجز" : t(locale, item.id)}
             </button>
           ))}
+          <button type="button" onClick={() => navigate("account")}>{t(locale, "account")}</button>
           <button type="button" className="logout-button" onClick={logoutUser}>تسجيل الخروج</button>
         </div>
       )}

@@ -147,8 +147,13 @@
               </div>
               ${list.map((item) => `
                 <button type="button" class="pick ${state.serviceId === item.id ? "on" : ""}" data-service="${item.id}">
-                  <div><b>${item.name}</b><div class="muted">${item.durationMinutes} د${item.bufferMinutes ? ` + راحة ${item.bufferMinutes}د` : ""}</div></div>
-                  <div><b>${item.price ? `E£${item.price}` : "حسب العيادة"}</b></div>
+                  <div><b>${item.name}</b><div class="muted">${item.durationMinutes} د${item.bufferMinutes ? ` · فاصل ${item.bufferMinutes}د` : ""}</div></div>
+                  <div><b>${
+                    item.pricingType === "free" ? "مجاني"
+                    : item.pricingType === "on_request" ? "عند الطلب"
+                    : item.pricingType === "range" ? `E£${item.priceMin ?? item.price ?? 0}–${item.priceMax ?? item.price ?? 0}`
+                    : item.price ? `E£${item.price}` : "مجاني"
+                  }</b></div>
                 </button>
               `).join("") || "<p>لا توجد خدمات في هذا القسم.</p>"}
               <div class="actions">
@@ -228,7 +233,7 @@
               `}
             </section>` : ""}
 
-          <p class="foot">${page.showPlatformBranding !== false ? "مدعوم من موعد · UpNexa-eg.com" : ""}</p>
+          <p class="foot">${page.showPlatformBranding !== false ? "منصة موعد – مدعوم من UpNexa-eg.com<br/><a href=\"mailto:contact@upnexa-eg.com\">contact@upnexa-eg.com</a>" : ""}</p>
         `;
 
         root.querySelectorAll("[data-cat]").forEach((button) => button.addEventListener("click", () => {

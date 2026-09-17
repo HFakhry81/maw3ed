@@ -282,7 +282,7 @@ export function AuthLanding({ locale = "ar", onLocaleChange }) {
               forceRedirectUrl="/?onboarding=1"
               fallbackRedirectUrl="/?onboarding=1"
               appearance={clerkAppearance}
-              // Sign-in must not re-trigger email OTP for already-verified accounts.
+              // Password sign-in only. OTP is signup/email-change via Clerk Dashboard — see docs/CLERK_OTP.md
               withSignUp={false}
             />
           )}
@@ -290,11 +290,7 @@ export function AuthLanding({ locale = "ar", onLocaleChange }) {
         <a className="auth-fallback-link" href={`/auth.html?mode=sign-up&lang=${encodeURIComponent(locale)}`}>
           {copy.fullPage}
         </a>
-        <small>
-          {mode === "sign-up"
-            ? copy.afterVerify
-            : "التحقق من البريد مرة واحدة عند إنشاء الحساب أو عند تغيير البريد فقط — ليس في كل تسجيل دخول."}
-        </small>
+        <small>{mode === "sign-up" ? copy.afterVerify : copy.signInHint || copy.afterVerify}</small>
       </div>
     </div>
   );

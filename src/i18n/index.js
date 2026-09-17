@@ -20,7 +20,8 @@ const messages = {
   ar: {
     brand: "موعد",
     tagline: "إدارة المواعيد بوضوح",
-    overview: "غرفة العمليات",
+    overview: "لوحة التحكم",
+    account: "الحساب والإعدادات",
     calendar: "التقويم",
     customers: "العملاء",
     staff: "الموظفون",
@@ -44,12 +45,14 @@ const messages = {
     loading: "جارٍ التحميل...",
     createAppointment: "موعد جديد",
     publicBooking: "صفحة الحجز العامة",
-    poweredBy: "مدعوم من موعد · UpNexa-eg.com"
+    poweredBy: "منصة موعد – مدعوم من UpNexa-eg.com",
+    contactEmail: "contact@upnexa-eg.com"
   },
   en: {
     brand: "Maw3ed",
     tagline: "Appointments, clearly managed",
-    overview: "Command center",
+    overview: "Dashboard",
+    account: "Account & settings",
     calendar: "Calendar",
     customers: "Customers",
     staff: "Staff",
@@ -73,7 +76,8 @@ const messages = {
     loading: "Loading...",
     createAppointment: "New appointment",
     publicBooking: "Public booking page",
-    poweredBy: "Powered by Maw3ed · UpNexa-eg.com"
+    poweredBy: "Maw3ed platform – powered by UpNexa-eg.com",
+    contactEmail: "contact@upnexa-eg.com"
   }
 };
 

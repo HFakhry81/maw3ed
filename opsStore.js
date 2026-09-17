@@ -32,6 +32,11 @@ const PLAN_LIMITS = {
   business: { staff: Infinity, services: Infinity, appointmentsPerMonth: Infinity }
 };
 
+/** Soften plan caps while end-to-end testing continues. Set MAW3ED_ENFORCE_PLAN_LIMITS=1 to re-enable. */
+function planLimitsEnforced() {
+  return process.env.MAW3ED_ENFORCE_PLAN_LIMITS === "1";
+}
+
 function defaultStore() {
   return {
     customerCategories: [
@@ -332,6 +337,23 @@ function resolveHoursForStaff(staffId, date) {
   return store.workingHours.find((item) => item.weekday === weekday) || null;
 }
 
+function appointmentsForService(serviceId) {
+  return store.appointments.filter((item) => {
+    if (item.serviceId !== serviceId) return false;
+    if (item.status === "cancelled" || item.status === "canceled") return false;
+    return true;
+  });
+}
+
+function appointmentsForCategory(categoryId) {
+  const serviceIds = new Set(store.services.filter((service) => service.categoryId === categoryId).map((service) => service.id));
+  return store.appointments.filter((item) => {
+    if (!serviceIds.has(item.serviceId)) return false;
+    if (item.status === "cancelled" || item.status === "canceled") return false;
+    return true;
+  });
+}
+
 function futureAppointmentsFor({ staffId = "", serviceId = "" } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   return store.appointments.filter((item) => {
@@ -352,13 +374,53 @@ function assertServiceProviders(service) {
 function normalizeServiceTiming(payload, current = {}) {
   const durationMinutes = Number(payload.durationMinutes != null ? payload.durationMinutes : current.durationMinutes ?? 30);
   const bufferMinutes = Number(payload.bufferMinutes != null ? payload.bufferMinutes : current.bufferMinutes ?? 0);
-  if (!Number.isFinite(durationMinutes) || durationMinutes < 5) fail("مدة الخدمة يجب ألا تقل عن 5 دقائق", 400);
-  if (!Number.isFinite(bufferMinutes) || bufferMinutes < 0) fail("وقت الانتظار غير صالح", 400);
-  if (durationMinutes > 24 * 60) fail("مدة الخدمة طويلة جداً", 400);
+  if (!Number.isFinite(durationMinutes) || durationMinutes < 5) fail("زمن تقديم الخدمة يجب ألا يقل عن 5 دقائق", 400);
+  if (!Number.isFinite(bufferMinutes) || bufferMinutes < 0) fail("الفاصل الزمني غير صالح", 400);
+  if (durationMinutes > 24 * 60) fail("زمن تقديم الخدمة طويل جداً", 400);
   return { durationMinutes: Math.round(durationMinutes), bufferMinutes: Math.round(bufferMinutes) };
 }
 
+function normalizeServicePricing(payload, current = {}) {
+  const pricingType = String(payload.pricingType != null ? payload.pricingType : current.pricingType || "fixed");
+  const allowed = new Set(["fixed", "free", "range", "on_request"]);
+  if (!allowed.has(pricingType)) fail("نوع التسعير غير مدعوم", 400);
+
+  let price = Number(payload.price != null ? payload.price : current.price ?? 0);
+  let priceMin = Number(payload.priceMin != null ? payload.priceMin : current.priceMin ?? 0);
+  let priceMax = Number(payload.priceMax != null ? payload.priceMax : current.priceMax ?? 0);
+
+  if (!Number.isFinite(price)) price = 0;
+  if (!Number.isFinite(priceMin)) priceMin = 0;
+  if (!Number.isFinite(priceMax)) priceMax = 0;
+
+  if (pricingType === "free" || pricingType === "on_request") {
+    price = 0;
+    priceMin = 0;
+    priceMax = 0;
+  } else if (pricingType === "fixed") {
+    if (price < 0) fail("سعر الخدمة غير صالح", 400);
+    priceMin = price;
+    priceMax = price;
+  } else if (pricingType === "range") {
+    if (priceMin < 0 || priceMax < priceMin) {
+      fail("نطاق السعر غير صالح — يجب أن يكون «ينتهي عند» أكبر من أو يساوي «يبدأ من»", 400);
+    }
+    // Incomplete: concrete price within range is chosen later at booking request.
+    price = priceMin;
+  }
+
+  return {
+    pricingType,
+    price: Math.round(price),
+    priceMin: Math.round(priceMin),
+    priceMax: Math.round(priceMax)
+  };
+}
+
 function getPlanLimits() {
+  if (!planLimitsEnforced()) {
+    return { staff: Infinity, services: Infinity, appointmentsPerMonth: Infinity };
+  }
   return PLAN_LIMITS[store.planKey] || PLAN_LIMITS.free;
 }
 
@@ -383,10 +445,11 @@ function getPlanUsage() {
       warnings.push({ key, used: bucket.used, limit: bucket.limit });
     }
   }
-  return { ...usage, warnings };
+  return { ...usage, warnings, limitsEnforced: planLimitsEnforced() };
 }
 
 function assertPlanCapacity(kind) {
+  if (!planLimitsEnforced()) return;
   const limits = getPlanLimits();
   const usage = getPlanUsage();
   if (kind === "staff" && Number.isFinite(limits.staff) && usage.staff.used >= limits.staff) {
@@ -603,10 +666,55 @@ function listServiceCategories() {
 function createServiceCategory(payload) {
   const name = String(payload.name || "").trim();
   if (!name) fail("اسم الفئة مطلوب");
-  const category = { id: createId("svc-cat"), name, sort: store.serviceCategories.length };
+  const category = {
+    id: createId("svc-cat"),
+    name,
+    sort: store.serviceCategories.length,
+    enabled: payload.enabled !== false,
+    active: payload.active !== false
+  };
   store.serviceCategories.push(category);
   persist();
   return category;
+}
+
+function updateServiceCategory(id, payload) {
+  const category = store.serviceCategories.find((item) => item.id === id);
+  if (!category) fail("فئة الخدمة غير موجودة", 404);
+  if (payload.name != null) {
+    const name = String(payload.name || "").trim();
+    if (!name) fail("اسم الفئة مطلوب");
+    category.name = name;
+  }
+  if (payload.enabled != null) category.enabled = Boolean(payload.enabled);
+  if (payload.active != null) {
+    category.active = Boolean(payload.active);
+    category.enabled = category.active;
+  }
+  if (payload.sort != null && Number.isFinite(Number(payload.sort))) category.sort = Number(payload.sort);
+  persist();
+  return category;
+}
+
+function deleteServiceCategory(id) {
+  const index = store.serviceCategories.findIndex((item) => item.id === id);
+  if (index < 0) fail("فئة الخدمة غير موجودة", 404);
+  const childServices = store.services.filter((service) => service.categoryId === id);
+  if (childServices.length) {
+    fail(
+      `لا يمكن حذف الفئة لأنها تحتوي على ${childServices.length} خدمة. احذف الخدمات الفارغة أولاً أو أوقف الفئة.`,
+      409
+    );
+  }
+  const used = appointmentsForCategory(id);
+  if (used.length) {
+    fail(
+      `لا يمكن حذف الفئة — سبق التعامل عليها عبر ${used.length} حجز/موعد. الحذف مسموح فقط للمحتوى الفارغ.`,
+      409
+    );
+  }
+  store.serviceCategories.splice(index, 1);
+  persist();
 }
 
 function listServices(categoryId) {
@@ -619,14 +727,17 @@ function createService(payload) {
   const categoryId = payload.categoryId;
   if (!name || !categoryId) fail("اسم الخدمة والفئة مطلوبان");
   const timing = normalizeServiceTiming(payload);
+  const pricing = normalizeServicePricing(payload);
   const service = {
     id: createId("svc"),
     categoryId,
     name,
     durationMinutes: timing.durationMinutes,
     bufferMinutes: timing.bufferMinutes,
-    pricingType: payload.pricingType || "fixed",
-    price: Number(payload.price) || 0,
+    pricingType: pricing.pricingType,
+    price: pricing.price,
+    priceMin: pricing.priceMin,
+    priceMax: pricing.priceMax,
     color: payload.color || "#1967e8",
     providerIds: Array.isArray(payload.providerIds)
       ? payload.providerIds.map(String).filter(Boolean)
@@ -636,6 +747,7 @@ function createService(payload) {
     publicBooking: payload.publicBooking !== false,
     autoAccept: Boolean(payload.autoAccept),
     autoComplete: Boolean(payload.autoComplete),
+    active: payload.active !== false,
     description: String(payload.description || "")
   };
   assertServiceProviders(service);
@@ -654,13 +766,19 @@ function updateService(id, payload) {
     service.durationMinutes = timing.durationMinutes;
     service.bufferMinutes = timing.bufferMinutes;
   }
-  if (payload.pricingType != null) service.pricingType = payload.pricingType || "fixed";
-  if (payload.price != null) service.price = Number(payload.price) || 0;
+  if (payload.pricingType != null || payload.price != null || payload.priceMin != null || payload.priceMax != null) {
+    const pricing = normalizeServicePricing(payload, service);
+    service.pricingType = pricing.pricingType;
+    service.price = pricing.price;
+    service.priceMin = pricing.priceMin;
+    service.priceMax = pricing.priceMax;
+  }
   if (payload.color != null) service.color = String(payload.color || "#1967e8");
   if (payload.description != null) service.description = String(payload.description || "");
   if (payload.publicBooking != null) service.publicBooking = Boolean(payload.publicBooking);
   if (payload.autoAccept != null) service.autoAccept = Boolean(payload.autoAccept);
   if (payload.autoComplete != null) service.autoComplete = Boolean(payload.autoComplete);
+  if (payload.active != null) service.active = Boolean(payload.active);
   if (Array.isArray(payload.providerIds)) service.providerIds = payload.providerIds.map(String).filter(Boolean);
   else if (payload.providerId != null) service.providerIds = payload.providerId ? [String(payload.providerId)] : [];
   assertServiceProviders(service);
@@ -671,9 +789,12 @@ function updateService(id, payload) {
 function deleteService(id) {
   const index = store.services.findIndex((item) => item.id === id);
   if (index < 0) fail("الخدمة غير موجودة", 404);
-  const blocked = futureAppointmentsFor({ serviceId: id });
-  if (blocked.length) {
-    fail(`لا يمكن حذف الخدمة لوجود ${blocked.length} مواعيد قادمة مرتبطة بها.`, 409);
+  const used = appointmentsForService(id);
+  if (used.length) {
+    fail(
+      `لا يمكن حذف الخدمة — سبق التعامل عليها عبر ${used.length} حجز/موعد. الحذف مسموح فقط للمحتوى الفارغ. يمكنك إيقاف الخدمة بدلاً من حذفها.`,
+      409
+    );
   }
   store.services.splice(index, 1);
   persist();
@@ -768,7 +889,12 @@ function getPublicBooking(slug) {
   }
   return {
     page: store.bookingPage,
-    services: store.services.filter((service) => service.publicBooking),
+    services: store.services.filter((service) => {
+      if (!service.publicBooking || service.active === false) return false;
+      const category = store.serviceCategories.find((item) => item.id === service.categoryId);
+      if (category && (category.active === false || category.enabled === false)) return false;
+      return true;
+    }),
     categories: listServiceCategories(),
     staff: store.staff.filter((person) => person.active),
     workingHours: store.workingHours
@@ -861,7 +987,7 @@ async function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreH
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) fail("التاريخ مطلوب");
   const service = store.services.find((item) => item.id === serviceId);
-  if (!service || !service.publicBooking) fail("الخدمة غير متاحة للحجز العام", 400);
+  if (!service || !service.publicBooking || service.active === false) fail("الخدمة غير متاحة للحجز العام", 400);
   const blockMinutes = Number(service.durationMinutes || 30) + Number(service.bufferMinutes || 0);
   const providers = (service.providerIds || [])
     .map((id) => store.staff.find((person) => person.id === id && person.active))
@@ -962,7 +1088,7 @@ async function createPublicAppointment(slug, payload = {}) {
   }
   const serviceId = String(payload.serviceId || "");
   const service = store.services.find((item) => item.id === serviceId);
-  if (!service || !service.publicBooking) fail("الخدمة غير متاحة للحجز العام", 400);
+  if (!service || !service.publicBooking || service.active === false) fail("الخدمة غير متاحة للحجز العام", 400);
   const date = String(payload.date || "");
   const time = String(payload.time || "");
   let staffId = String(payload.staffId || "");
@@ -1259,6 +1385,8 @@ module.exports = {
   deleteStaff,
   listServiceCategories,
   createServiceCategory,
+  updateServiceCategory,
+  deleteServiceCategory,
   listServices,
   createService,
   updateService,
