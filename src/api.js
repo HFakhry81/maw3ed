@@ -44,13 +44,19 @@ export const api = {
   },
 
   async parse(response) {
-    const text = await response.text();
+    const text = String(await response.text() || "").trim();
     let payload = {};
     if (text) {
       try {
         payload = JSON.parse(text);
       } catch {
-        throw new Error(response.ok ? "Unexpected end of JSON input" : `HTTP ${response.status}`);
+        const err = new Error(
+          response.ok
+            ? "استجابة غير صالحة من الخادم"
+            : `HTTP ${response.status}`
+        );
+        err.status = response.status;
+        throw err;
       }
     }
     if (!response.ok) {

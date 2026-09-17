@@ -366,18 +366,46 @@ function futureAppointmentsFor({ staffId = "", serviceId = "" } = {}) {
 }
 
 function assertServiceProviders(service) {
-  if (service.publicBooking && !(service.providerIds || []).length) {
-    fail("الخدمة العامة تتطلب موظفاً واحداً على الأقل", 400);
+  // Creating/editing a service may omit providers. Booking must not.
+  void service;
+}
+
+function assertServiceBookable(service) {
+  if (!service) fail("الخدمة غير موجودة", 404);
+  if (service.active === false) fail("هذه الخدمة متوقفة ولا يمكن الحجز عليها", 400);
+  const providers = (service.providerIds || []).filter(Boolean);
+  if (!providers.length) {
+    fail("لا يمكن تحديد موعد لخدمة بلا مقدم خدمة. عيّن موظفاً للخدمة أولاً.", 400);
   }
+  return providers;
+}
+
+function snapQuarterMinutes(value, { min = 0, allowZero = false } = {}) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return allowZero ? 0 : min;
+  if (allowZero && raw <= 0) return 0;
+  const snapped = Math.round(raw / 15) * 15;
+  return Math.max(min, snapped);
 }
 
 function normalizeServiceTiming(payload, current = {}) {
-  const durationMinutes = Number(payload.durationMinutes != null ? payload.durationMinutes : current.durationMinutes ?? 30);
-  const bufferMinutes = Number(payload.bufferMinutes != null ? payload.bufferMinutes : current.bufferMinutes ?? 0);
-  if (!Number.isFinite(durationMinutes) || durationMinutes < 5) fail("زمن تقديم الخدمة يجب ألا يقل عن 5 دقائق", 400);
-  if (!Number.isFinite(bufferMinutes) || bufferMinutes < 0) fail("الفاصل الزمني غير صالح", 400);
-  if (durationMinutes > 24 * 60) fail("زمن تقديم الخدمة طويل جداً", 400);
-  return { durationMinutes: Math.round(durationMinutes), bufferMinutes: Math.round(bufferMinutes) };
+  const durationMinutes = snapQuarterMinutes(
+    payload.durationMinutes != null ? payload.durationMinutes : current.durationMinutes ?? 30,
+    { min: 15 }
+  );
+  const bufferMinutes = snapQuarterMinutes(
+    payload.bufferMinutes != null ? payload.bufferMinutes : current.bufferMinutes ?? 0,
+    { min: 0, allowZero: true }
+  );
+  if (durationMinutes < 15) fail("زمن تقديم الخدمة يجب ألا يقل عن 15 دقيقة", 400);
+  if (bufferMinutes < 0) fail("الفاصل الزمني غير صالح", 400);
+  if (durationMinutes > 8 * 60) fail("زمن تقديم الخدمة طويل جداً", 400);
+  return { durationMinutes, bufferMinutes };
+}
+
+/** Booking block = delivery time + maintenance / re-cleaning interval. */
+function serviceBookingBlockMinutes(service) {
+  return Number(service?.durationMinutes || 30) + Number(service?.bufferMinutes || 0);
 }
 
 function normalizeServicePricing(payload, current = {}) {
@@ -713,8 +741,15 @@ function deleteServiceCategory(id) {
       409
     );
   }
+  // Keep medical template in sync so deleted empty departments do not reappear.
+  if (Array.isArray(store.medicalDepartments)) {
+    store.medicalDepartments = store.medicalDepartments.map((department) =>
+      department.id === id ? { ...department, enabled: false } : department
+    );
+  }
   store.serviceCategories.splice(index, 1);
   persist();
+  return { ok: true, id };
 }
 
 function listServices(categoryId) {
@@ -891,6 +926,7 @@ function getPublicBooking(slug) {
     page: store.bookingPage,
     services: store.services.filter((service) => {
       if (!service.publicBooking || service.active === false) return false;
+      if (!(service.providerIds || []).length) return false;
       const category = store.serviceCategories.find((item) => item.id === service.categoryId);
       if (category && (category.active === false || category.enabled === false)) return false;
       return true;
@@ -988,12 +1024,13 @@ async function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreH
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) fail("التاريخ مطلوب");
   const service = store.services.find((item) => item.id === serviceId);
   if (!service || !service.publicBooking || service.active === false) fail("الخدمة غير متاحة للحجز العام", 400);
-  const blockMinutes = Number(service.durationMinutes || 30) + Number(service.bufferMinutes || 0);
+  assertServiceBookable(service);
+  const blockMinutes = serviceBookingBlockMinutes(service);
   const providers = (service.providerIds || [])
     .map((id) => store.staff.find((person) => person.id === id && person.active))
     .filter(Boolean);
-  const pool = providers.length ? providers : store.staff.filter((person) => person.active);
-  if (!pool.length) return { date, serviceId, blockMinutes, staffId, slots: [] };
+  if (!providers.length) fail("لا يمكن الحجز — هذه الخدمة بلا مقدم خدمة نشط", 400);
+  const pool = providers;
 
   async function slotsForPerson(person) {
     let extraBlocked = [];
@@ -1089,6 +1126,7 @@ async function createPublicAppointment(slug, payload = {}) {
   const serviceId = String(payload.serviceId || "");
   const service = store.services.find((item) => item.id === serviceId);
   if (!service || !service.publicBooking || service.active === false) fail("الخدمة غير متاحة للحجز العام", 400);
+  assertServiceBookable(service);
   const date = String(payload.date || "");
   const time = String(payload.time || "");
   let staffId = String(payload.staffId || "");
@@ -1232,9 +1270,14 @@ function createAppointment(payload) {
   const staff = store.staff.find((person) => person.id === staffId);
   if (!staff) fail("الموظف غير موجود", 404);
   const service = store.services.find((item) => item.id === serviceId) || null;
+  if (serviceId && !service) fail("الخدمة غير موجودة", 404);
+  if (service) {
+    const providers = assertServiceBookable(service);
+    if (!providers.includes(staffId)) fail("هذا الموظف غير مرتبط بالخدمة", 400);
+  }
   const phone = String(payload.phone || "").trim();
   const email = String(payload.email || "").trim();
-  const blockMinutes = Number(service?.durationMinutes || 30) + Number(service?.bufferMinutes || 0);
+  const blockMinutes = serviceBookingBlockMinutes(service);
   const start = toMinutes(time);
   const end = start + blockMinutes;
   const collision = store.appointments.find((item) => {

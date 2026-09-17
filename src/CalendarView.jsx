@@ -23,7 +23,11 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
   const [open, setOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const staff = ops?.staff || [];
-  const services = ops?.services || [];
+  const allServices = ops?.services || [];
+  const services = useMemo(
+    () => allServices.filter((service) => service.active !== false && (service.providerIds || []).length > 0),
+    [allServices]
+  );
   const customers = ops?.customers || [];
   const [form, setForm] = useState({
     customerName: "",
@@ -38,13 +42,23 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
   const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
   const hours = useMemo(() => Array.from({ length: 13 }, (_, index) => `${String(8 + index).padStart(2, "0")}:00`), []);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
+  const selectedService = services.find((service) => service.id === form.serviceId) || null;
+  const staffForService = useMemo(() => {
+    const providerIds = selectedService?.providerIds || [];
+    if (!providerIds.length) return [];
+    return staff.filter((person) => person.active !== false && providerIds.includes(person.id));
+  }, [staff, selectedService]);
 
   useEffect(() => {
-    setForm((current) => ({
-      ...current,
-      staffId: current.staffId || staff[0]?.id || "",
-      serviceId: current.serviceId || services[0]?.id || ""
-    }));
+    setForm((current) => {
+      const nextServiceId = services.some((service) => service.id === current.serviceId)
+        ? current.serviceId
+        : services[0]?.id || "";
+      const providers = (services.find((service) => service.id === nextServiceId)?.providerIds || []);
+      const nextStaffId = providers.includes(current.staffId) ? current.staffId : providers[0] || "";
+      if (nextServiceId === current.serviceId && nextStaffId === current.staffId) return current;
+      return { ...current, serviceId: nextServiceId, staffId: nextStaffId };
+    });
   }, [staff, services]);
 
   const weekAppointments = useMemo(() => {
@@ -147,11 +161,25 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
           </label>
           <label>التاريخ<input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
           <label>وقت البدء<input type="time" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></label>
-          <label>الموظف<select required value={form.staffId} onChange={(e) => setForm({ ...form, staffId: e.target.value })}>
-            {staff.map((person) => <option key={person.id} value={person.id}>{person.name} — {person.title}</option>)}
+          <label>الخدمة<select required value={form.serviceId} onChange={(e) => {
+            const serviceId = e.target.value;
+            const providers = (services.find((service) => service.id === serviceId)?.providerIds || []);
+            setForm({
+              ...form,
+              serviceId,
+              staffId: providers.includes(form.staffId) ? form.staffId : providers[0] || ""
+            });
+          }}>
+            {!services.length && <option value="">لا توجد خدمات بمقدم معيّن</option>}
+            {services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.name} · {service.durationMinutes}د · حجز {(Number(service.durationMinutes) || 0) + (Number(service.bufferMinutes) || 0)}د
+              </option>
+            ))}
           </select></label>
-          <label>الخدمة<select required value={form.serviceId} onChange={(e) => setForm({ ...form, serviceId: e.target.value })}>
-            {services.map((service) => <option key={service.id} value={service.id}>{service.name} · {service.durationMinutes}د · E£{service.price}</option>)}
+          <label>الموظف<select required value={form.staffId} onChange={(e) => setForm({ ...form, staffId: e.target.value })}>
+            {!staffForService.length && <option value="">عيّن مقدماً للخدمة أولاً</option>}
+            {staffForService.map((person) => <option key={person.id} value={person.id}>{person.name} — {person.title}</option>)}
           </select></label>
           <fieldset className="pay-row">
             <legend>طريقة الدفع</legend>

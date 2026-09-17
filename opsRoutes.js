@@ -149,8 +149,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         return true;
       }
       if (categoryMatch && req.method === "DELETE") {
-        ops.deleteServiceCategory(categoryMatch[1]);
-        sendJson(res, 200, { ok: true });
+        sendJson(res, 200, { ok: true, ...ops.deleteServiceCategory(categoryMatch[1]) });
         return true;
       }
       if (requested === "/api/ops/services" && req.method === "GET") {

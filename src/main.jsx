@@ -39,6 +39,25 @@ const NAV = [
 const MOBILE_NAV = ["overview", "calendar", "customers", "services", "more"];
 
 const SERVICE_COLORS = ["#111827", "#7f1d1d", "#92400e", "#9f1239", "#6b21a8", "#a78bfa", "#db2777", "#f9a8d4", "#fb7185", "#3B82F6"];
+const SERVICE_DURATION_OPTIONS = Array.from({ length: 16 }, (_, index) => (index + 1) * 15); // 15..240
+const SERVICE_BUFFER_OPTIONS = [0, ...SERVICE_DURATION_OPTIONS];
+
+function formatMinutesLabel(minutes) {
+  const value = Number(minutes) || 0;
+  if (value === 0) return "بدون فاصل (0 د)";
+  if (value < 60) return `${value} دقيقة`;
+  const hours = Math.floor(value / 60);
+  const rest = value % 60;
+  if (!rest) return hours === 1 ? "ساعة واحدة" : `${hours} ساعات`;
+  return `${hours}س ${rest}د`;
+}
+
+function snapToQuarter(value, { min = 0, allowZero = false } = {}) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return allowZero ? 0 : min;
+  if (allowZero && raw <= 0) return 0;
+  return Math.max(min, Math.round(raw / 15) * 15);
+}
 
 async function logoutUser() {
   ["maw3ed.role", "maw3ed.workspaceId"].forEach((key) => localStorage.removeItem(key));
@@ -345,11 +364,25 @@ function ServicesView({ ops, reload, locale }) {
   const [editingCategoryId, setEditingCategoryId] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const categories = ops?.serviceCategories || [];
+  const allServices = ops?.services || [];
+
   useEffect(() => {
-    if (!categoryId && ops?.serviceCategories?.[0]) setCategoryId(ops.serviceCategories[0].id);
-  }, [ops, categoryId]);
-  const services = (ops?.services || []).filter((service) => !categoryId || service.categoryId === categoryId);
+    if (!categories.length) {
+      if (categoryId) setCategoryId("");
+      return;
+    }
+    if (!categories.some((item) => item.id === categoryId)) {
+      setCategoryId(categories[0].id);
+    }
+  }, [ops, categoryId, categories]);
+
+  const selectedCategory = categories.find((item) => item.id === categoryId) || null;
+  const services = categoryId
+    ? allServices.filter((service) => service.categoryId === categoryId)
+    : [];
   const incompletePricing = form.pricingType === "range" || form.pricingType === "on_request";
+  const countInCategory = (id) => allServices.filter((service) => service.categoryId === id).length;
 
   const formatPrice = (service) => {
     const type = service.pricingType || "fixed";
@@ -361,7 +394,7 @@ function ServicesView({ ops, reload, locale }) {
 
   const openCreate = () => {
     setEditingId("");
-    setForm({ ...emptyForm, categoryId });
+    setForm({ ...emptyForm, categoryId, durationMinutes: 30, bufferMinutes: 15 });
     setOpen(true);
   };
   const openEdit = (service) => {
@@ -369,8 +402,8 @@ function ServicesView({ ops, reload, locale }) {
     setForm({
       name: service.name || "",
       categoryId: service.categoryId || categoryId,
-      durationMinutes: service.durationMinutes || 30,
-      bufferMinutes: service.bufferMinutes || 0,
+      durationMinutes: snapToQuarter(service.durationMinutes || 30, { min: 15 }),
+      bufferMinutes: snapToQuarter(service.bufferMinutes || 0, { min: 0, allowZero: true }),
       price: service.price || 0,
       priceMin: service.priceMin ?? service.price ?? 0,
       priceMax: service.priceMax ?? service.price ?? 0,
@@ -460,15 +493,20 @@ function ServicesView({ ops, reload, locale }) {
         <b>منطق غير مكتمل — تذكير</b>
         <p>تسعير «نطاق» و«عند الطلب» يُحفظ في الخدمة، لكن ربط السعر عند طلب الحجز لم يُغلق بعد. راجع docs/INCOMPLETE_LOGIC.md.</p>
       </div>
-      <div className="split-panels">
+      <div className="split-panels services-split">
         <aside className="panel category-list">
           <div className="panel-head"><b>فئة الخدمة</b><button type="button" onClick={openCategoryCreate}>+ إضافة</button></div>
-          {(ops?.serviceCategories || []).map((category) => {
+          {categories.map((category) => {
             const inactive = category.active === false || category.enabled === false;
+            const count = countInCategory(category.id);
             return (
               <div key={category.id} className={categoryId === category.id ? "cat-row active" : "cat-row"}>
                 <button type="button" className={categoryId === category.id ? "cat active" : "cat"} onClick={() => setCategoryId(category.id)}>
-                  {category.name}{inactive ? " · متوقفة" : ""}
+                  <span className="cat-name">
+                    {category.name}
+                    {inactive ? <span className="status-soft">متوقفة</span> : null}
+                  </span>
+                  <span className="cat-count">{count} خدمة</span>
                 </button>
                 <div className="row-actions compact">
                   <button type="button" className="edit-button" onClick={() => openCategoryEdit(category)}>تعديل</button>
@@ -480,17 +518,32 @@ function ServicesView({ ops, reload, locale }) {
           })}
         </aside>
         <div className="panel service-list">
+          <div className="panel-head service-list-head">
+            <div>
+              <b>{selectedCategory ? `خدمات «${selectedCategory.name}»` : "الخدمات"}</b>
+              <small>{services.length} خدمة في هذه الفئة</small>
+            </div>
+            {services.length > 0 && (
+              <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
+            )}
+          </div>
           {services.map((service) => (
             <div className={`table-row service-row${service.active === false ? " is-inactive" : ""}`} key={service.id}>
               <span className="color-dot" style={{ background: service.color || "#3B82F6" }} />
-              <div>
-                <b>{service.name}{service.active === false ? " · متوقفة" : ""}</b>
+              <div className="service-main">
+                <b>
+                  {service.name}
+                  {service.active === false ? <span className="service-status">متوقفة</span> : null}
+                  {!(service.providerIds || []).length ? <span className="service-status">بلا مقدم</span> : null}
+                </b>
                 <small>
-                  زمن التقديم {service.durationMinutes} د
-                  {service.bufferMinutes ? ` · فاصل ${service.bufferMinutes} د` : ""}
+                  تقديم {service.durationMinutes} د
+                  {service.bufferMinutes ? ` · فاصل صيانة ${service.bufferMinutes} د` : ""}
+                  {" · "}
+                  حجز {(Number(service.durationMinutes) || 0) + (Number(service.bufferMinutes) || 0)} د
                 </small>
               </div>
-              <span>{formatPrice(service)}</span>
+              <span className="service-price">{formatPrice(service)}</span>
               <div className="row-actions">
                 <button type="button" className="edit-button" onClick={() => openEdit(service)}>تعديل</button>
                 <button type="button" className="warn-button" onClick={() => toggleServiceActive(service)}>
@@ -500,7 +553,20 @@ function ServicesView({ ops, reload, locale }) {
               </div>
             </div>
           ))}
-          {!services.length && <div className="empty-state">{t(locale, "empty")}</div>}
+          {!services.length && (
+            <div className="service-empty">
+              <p>
+                {selectedCategory
+                  ? `لا توجد خدمات في فئة «${selectedCategory.name}» بعد.`
+                  : "اختر فئة لعرض خدماتها."}
+              </p>
+              {selectedCategory && (
+                <button className="primary-button service-empty-cta" type="button" onClick={openCreate}>
+                  + إضافة خدمة لهذه الفئة
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
       <Drawer title={editingCategoryId ? "تعديل فئة" : "فئة جديدة"} open={categoryOpen} onClose={() => setCategoryOpen(false)}>
@@ -516,10 +582,13 @@ function ServicesView({ ops, reload, locale }) {
           <label>الفئة<select value={form.categoryId || categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
             {(ops?.serviceCategories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
-          <label>مقدم الخدمة<select required value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })}>
-            <option value="">— اختر موظفاً —</option>
-            {(ops?.staff || []).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-          </select></label>
+          <label>مقدم الخدمة (اختياري عند الإنشاء)
+            <select value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })}>
+              <option value="">— بدون تعيين الآن —</option>
+              {(ops?.staff || []).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+            </select>
+          </label>
+          <p className="muted">يمكن إنشاء الخدمة بلا مقدم، لكن لن يُسمح بتحديد أي موعد عليها حتى يُعيَّن مقدم خدمة واحد على الأقل.</p>
           <label>نوع التسعير
             <select
               value={form.pricingType}
@@ -547,14 +616,39 @@ function ServicesView({ ops, reload, locale }) {
             <div className="plan-warning">تسعير «{form.pricingType === "range" ? "نطاق" : "عند الطلب"}» محفوظ شكلياً — منطق الربط عند الحجز غير مكتمل.</div>
           )}
           <div className="form-row">
-            <label title="المدة الفعلية التي تستغرقها الخدمة مع العميل أو الموعد.">
-              زمن تقديم الخدمة (د)
-              <input type="number" min="5" value={form.durationMinutes} onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })} />
+            <label title="المدة الفعلية لتقديم الخدمة مع العميل. تُختار بمضاعفات ربع ساعة.">
+              زمن تقديم الخدمة
+              <select
+                value={snapToQuarter(form.durationMinutes, { min: 15 })}
+                onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
+              >
+                {SERVICE_DURATION_OPTIONS.map((minutes) => (
+                  <option key={minutes} value={minutes}>{formatMinutesLabel(minutes)}</option>
+                ))}
+              </select>
             </label>
-            <label title="فاصل زمني بعد انتهاء الخدمة قبل قبول موعد جديد لنفس المقدم (buffer).">
-              فاصل زمني (د)
-              <input type="number" min="0" value={form.bufferMinutes} onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })} />
+            <label title="فاصل صيانة / إعادة تجهيز (re-cleaning) بعد انتهاء الخدمة قبل قبول موعد جديد.">
+              فاصل زمني (صيانة / إعادة تجهيز)
+              <select
+                value={snapToQuarter(form.bufferMinutes, { min: 0, allowZero: true })}
+                onChange={(e) => setForm({ ...form, bufferMinutes: Number(e.target.value) })}
+              >
+                {SERVICE_BUFFER_OPTIONS.map((minutes) => (
+                  <option key={minutes} value={minutes}>{formatMinutesLabel(minutes)}</option>
+                ))}
+              </select>
             </label>
+          </div>
+          <div className="booking-block-note">
+            زمن كل حجز لهذه الخدمة =
+            {" "}
+            <b>{Number(form.durationMinutes) || 0}</b>
+            {" "}د تقديم +
+            {" "}
+            <b>{Number(form.bufferMinutes) || 0}</b>
+            {" "}د فاصل =
+            {" "}
+            <b>{(Number(form.durationMinutes) || 0) + (Number(form.bufferMinutes) || 0)} دقيقة</b>
           </div>
           <label>لون الخدمة
             <div className="color-swatches">
