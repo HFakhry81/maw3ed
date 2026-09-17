@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#1a6deb" />
     <meta name="author" content="UpNexa-eg.com" />
     <meta name="description" content="موظف الاستقبال الرقمي — احجز عبر موعد Maw3ed" />
@@ -12,10 +12,10 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
     <style>
-      :root { --ink:#13233f; --muted:#7b889e; --line:#e7edf5; --blue:#1a6deb; --card:#fff; }
+      :root { --ink:#13233f; --muted:#7b889e; --line:#e7edf5; --blue:#1a6deb; --card:#fff; --keyboard-inset:0px; }
       * { box-sizing: border-box; }
       body { margin: 0; font-family: Cairo, "IBM Plex Sans Arabic", Tahoma, sans-serif; background: linear-gradient(180deg,#eaf2ff,#f6f8fb); color: var(--ink); }
-      .wrap { max-width: 820px; margin: 0 auto; padding: 24px 16px 64px; }
+      .wrap { max-width: 820px; margin: 0 auto; padding: 24px 16px calc(64px + var(--keyboard-inset)); transition: padding-bottom .15s ease; }
       .hero { display: grid; gap: 8px; margin-bottom: 14px; }
       .hero .eyebrow { color: var(--blue); font-weight: 700; }
       .hero h1 { margin: 0; font-size: clamp(1.7rem,4vw,2.35rem); letter-spacing: -.04em; }
@@ -41,6 +41,7 @@
       .err { color: #b42318; font-weight: 700; }
       .foot { margin-top: 16px; color: var(--muted); font-size: .85rem; }
       .muted { color: var(--muted); font-size: .85rem; }
+      .keyboard-spacer { height: var(--keyboard-inset); min-height: var(--keyboard-inset); width: 100%; pointer-events: none; transition: height .15s ease; }
     </style>
   </head>
   <body>
@@ -54,6 +55,44 @@
         document.documentElement.dir = "ltr";
       }
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+      (function bindKeyboardInset() {
+        const root = document.documentElement;
+        const FOCUSABLE = "input, textarea, select, [contenteditable='true']";
+        let frame = 0;
+        const apply = () => {
+          cancelAnimationFrame(frame);
+          frame = requestAnimationFrame(() => {
+            const vv = window.visualViewport;
+            if (!vv) {
+              root.style.setProperty("--keyboard-inset", "0px");
+              return;
+            }
+            const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+            const value = inset > 60 ? Math.round(inset) : 0;
+            root.style.setProperty("--keyboard-inset", `${value}px`);
+            root.classList.toggle("keyboard-open", value > 0);
+          });
+        };
+        const onFocusIn = (event) => {
+          apply();
+          const target = event.target;
+          if (!target?.matches?.(FOCUSABLE) && !target?.closest?.(FOCUSABLE)) return;
+          const el = target.matches?.(FOCUSABLE) ? target : target.closest(FOCUSABLE);
+          window.setTimeout(() => {
+            try { el.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" }); }
+            catch { el.scrollIntoView(true); }
+          }, 120);
+        };
+        const vv = window.visualViewport;
+        vv?.addEventListener("resize", apply);
+        vv?.addEventListener("scroll", apply);
+        window.addEventListener("resize", apply);
+        window.addEventListener("orientationchange", apply);
+        document.addEventListener("focusin", onFocusIn);
+        document.addEventListener("focusout", apply);
+        apply();
+      })();
 
       const state = {
         step: 1,

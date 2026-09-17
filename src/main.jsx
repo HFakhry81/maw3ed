@@ -18,6 +18,7 @@ import {
 import { getClerkLocalization } from "./authI18n";
 import { MoneyInput, SearchableMultiSelect, SearchableSelect, digitsPhone, lettersOnly, toMoneyNumber } from "./uiFields.jsx";
 import { jobTitlesForTemplate } from "./jobTitles";
+import { KeyboardSpacer, useKeyboardInset } from "./useKeyboardInset.jsx";
 
 const NAV = [
   { id: "overview", mark: "لوحة" },
@@ -117,7 +118,7 @@ function Drawer({ title, open, onClose, children }) {
     <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside className="drawer-panel" role="dialog" aria-modal="true">
         <header><h3>{title}</h3><button type="button" onClick={onClose} aria-label="close">✕</button></header>
-        {children}
+        <div className="drawer-body">{children}</div>
       </aside>
     </div>
   );
@@ -1512,6 +1513,7 @@ function App() {
           <div>{t(locale, "poweredBy")}</div>
           <a href={`mailto:${t(locale, "contactEmail")}`}>{t(locale, "contactEmail")}</a>
         </footer>
+        <KeyboardSpacer className="ops-keyboard-spacer" />
       </main>
       <nav className="mobile-bottom-nav" aria-label="mobile">
         {MOBILE_NAV.map((id) => (
@@ -1676,17 +1678,35 @@ function ClerkRoot({ publishableKey }) {
   );
 }
 
+function KeyboardInsetHost({ children }) {
+  useKeyboardInset();
+  return children;
+}
+
 function Root() {
   const { key, ready } = useClerkPublishableKey();
   if (!ready) {
     return (
-      <div className="auth-landing">
-        <div className="auth-landing-card">
-          <p>جارٍ تجهيز تسجيل الدخول…</p>
+      <KeyboardInsetHost>
+        <div className="auth-landing">
+          <div className="auth-landing-card">
+            <p>جارٍ تجهيز تسجيل الدخول…</p>
+            <KeyboardSpacer />
+          </div>
         </div>
-      </div>
+      </KeyboardInsetHost>
     );
   }
-  if (!key) return <App />;
-  return <ClerkRoot publishableKey={key} />;
+  if (!key) {
+    return (
+      <KeyboardInsetHost>
+        <App />
+      </KeyboardInsetHost>
+    );
+  }
+  return (
+    <KeyboardInsetHost>
+      <ClerkRoot publishableKey={key} />
+    </KeyboardInsetHost>
+  );
 }

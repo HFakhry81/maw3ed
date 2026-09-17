@@ -14,6 +14,7 @@ import { bindClerkTokenGetter, clearClerkTokenGetter } from "./clerkAuth";
 import { api } from "./api";
 import { applyDocumentLocale } from "./i18n";
 import { getAuthCopy, getAuthLocales } from "./authI18n";
+import { KeyboardSpacer } from "./useKeyboardInset.jsx";
 
 const envPublishableKey =
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
@@ -291,6 +292,7 @@ export function AuthLanding({ locale = "ar", onLocaleChange }) {
           {copy.fullPage}
         </a>
         <small>{mode === "sign-up" ? copy.afterVerify : copy.signInHint || copy.afterVerify}</small>
+        <KeyboardSpacer />
       </div>
     </div>
   );
@@ -544,6 +546,7 @@ export function WorkspaceOnboarding({ onCreated }) {
         <button className="primary-button auth-cta" type="submit" disabled={busy}>
           {busy ? "جارٍ الإنشاء…" : "إنشاء مساحة العمل"}
         </button>
+        <KeyboardSpacer />
       </form>
     </div>
   );
