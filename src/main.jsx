@@ -477,11 +477,15 @@ function ServicesView({ ops, reload, locale }) {
   const submit = async (event) => {
     event.preventDefault();
     const payload = { ...form, categoryId: form.categoryId || categoryId };
-    if (editingId) await api.patch(`/api/ops/services/${editingId}`, payload);
-    else await api.post("/api/ops/services", payload);
-    setOpen(false);
-    setEditingId("");
-    reload();
+    try {
+      if (editingId) await api.patch(`/api/ops/services/${editingId}`, payload);
+      else await api.post("/api/ops/services", payload);
+      setOpen(false);
+      setEditingId("");
+      reload();
+    } catch (error) {
+      window.alert(error.message || "تعذر حفظ الخدمة");
+    }
   };
   return (
     <section className="ops-page">
