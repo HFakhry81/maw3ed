@@ -32,6 +32,17 @@ export const api = {
     return headers;
   },
 
+  async authHeadersRequired(extra = {}) {
+    const headers = await this.authHeaders(extra);
+    if (!headers.Authorization) {
+      const err = new Error("يلزم تسجيل الدخول من جديد قبل إنشاء مساحة العمل");
+      err.status = 401;
+      err.code = "missing_clerk_token";
+      throw err;
+    }
+    return headers;
+  },
+
   async parse(response) {
     const text = await response.text();
     let payload = {};
@@ -57,37 +68,53 @@ export const api = {
     return payload;
   },
 
+  needsAuth(url) {
+    const path = String(url || "").split("?")[0];
+    return path.startsWith("/api/") && path !== "/api/config";
+  },
+
   async get(url) {
-    return this.parse(await fetch(url, { headers: await this.authHeaders() }));
+    const headers = this.needsAuth(url) ? await this.authHeadersRequired() : await this.authHeaders();
+    return this.parse(await fetch(url, { headers }));
   },
   async post(url, body) {
+    const headers = this.needsAuth(url)
+      ? await this.authHeadersRequired({ "Content-Type": "application/json" })
+      : await this.authHeaders({ "Content-Type": "application/json" });
     return this.parse(
       await fetch(url, {
         method: "POST",
-        headers: await this.authHeaders({ "Content-Type": "application/json" }),
+        headers,
         body: JSON.stringify(body)
       })
     );
   },
   async put(url, body) {
+    const headers = this.needsAuth(url)
+      ? await this.authHeadersRequired({ "Content-Type": "application/json" })
+      : await this.authHeaders({ "Content-Type": "application/json" });
     return this.parse(
       await fetch(url, {
         method: "PUT",
-        headers: await this.authHeaders({ "Content-Type": "application/json" }),
+        headers,
         body: JSON.stringify(body)
       })
     );
   },
   async patch(url, body) {
+    const headers = this.needsAuth(url)
+      ? await this.authHeadersRequired({ "Content-Type": "application/json" })
+      : await this.authHeaders({ "Content-Type": "application/json" });
     return this.parse(
       await fetch(url, {
         method: "PATCH",
-        headers: await this.authHeaders({ "Content-Type": "application/json" }),
+        headers,
         body: JSON.stringify(body)
       })
     );
   },
   async del(url) {
-    return this.parse(await fetch(url, { method: "DELETE", headers: await this.authHeaders() }));
+    const headers = this.needsAuth(url) ? await this.authHeadersRequired() : await this.authHeaders();
+    return this.parse(await fetch(url, { method: "DELETE", headers }));
   }
 };

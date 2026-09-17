@@ -6,9 +6,10 @@
   "scripts": {
     "env:local": "node -e \"require('fs').writeFileSync('.env.mode','local\\n')\"",
     "env:production": "node -e \"require('fs').writeFileSync('.env.mode','production\\n')\"",
-    "start": "npm run build && node server.js",
+    "start": "npm run build && node --use-system-ca server.js",
     "start:local": "npm run env:local && npm start",
     "start:production": "npm run env:production && npm start",
+    "dev:api": "node --use-system-ca server.js",
     "dev": "vite --host 0.0.0.0",
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",

@@ -291,17 +291,43 @@ async function getAuthenticatedUser(req) {
   try {
     // Do not pass authorizedParties unless explicitly configured — a mismatched azp
     // claim rejects valid local sessions and loops users back to the login screen.
-    const verifyOptions = { secretKey: process.env.CLERK_SECRET_KEY };
+    const verifyOptions = {
+      secretKey: process.env.CLERK_SECRET_KEY,
+      clockSkewInMs: 60_000
+    };
+    if (process.env.CLERK_JWT_KEY) {
+      verifyOptions.jwtKey = process.env.CLERK_JWT_KEY;
+    }
     if (process.env.CLERK_AUTHORIZED_PARTY) {
       verifyOptions.authorizedParties = String(process.env.CLERK_AUTHORIZED_PARTY)
         .split(",")
         .map((item) => item.trim())
         .filter(Boolean);
     }
-    const payload = await verifyToken(token, verifyOptions);
-    clerkClient ||= createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+
+    // @clerk/backend v3 returns { data, errors } — it does not throw on invalid tokens.
+    const verified = await verifyToken(token, verifyOptions);
+    const payload = verified?.data || (verified?.sub ? verified : null);
+    const verifyErrors = verified?.errors;
+    if (!payload?.sub) {
+      const reason = Array.isArray(verifyErrors) && verifyErrors[0]
+        ? verifyErrors[0].message || verifyErrors[0].reason || String(verifyErrors[0])
+        : "token verification returned no subject";
+      console.warn("[auth] clerk token verification failed:", reason);
+      return null;
+    }
+
+    clerkClient ||= createClerkClient({
+      secretKey: process.env.CLERK_SECRET_KEY,
+      publishableKey:
+        process.env.CLERK_PUBLISHABLE_KEY ||
+        process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+        undefined
+    });
     const clerkUser = await clerkClient.users.getUser(payload.sub);
-    const primaryEmail = clerkUser.emailAddresses.find((item) => item.id === clerkUser.primaryEmailAddressId)?.emailAddress || clerkUser.emailAddresses[0]?.emailAddress;
+    const primaryEmail =
+      clerkUser.emailAddresses.find((item) => item.id === clerkUser.primaryEmailAddressId)?.emailAddress ||
+      clerkUser.emailAddresses[0]?.emailAddress;
     return {
       clerkUserId: clerkUser.id,
       email: primaryEmail || "",
@@ -344,7 +370,11 @@ function localActivityMeta(activityType) {
 async function requireAppUser(req) {
   const identity = await getAuthenticatedUser(req);
   if (!identity) {
-    const error = new Error("Authentication is required");
+    const error = new Error(
+      process.env.MAW3ED_ENV === "local"
+        ? "Authentication is required (تحقق من جلسة Clerk؛ إن ظهر fetch failed في السيرفر أوقف VPN أو شغّل: node --use-system-ca server.js)"
+        : "Authentication is required"
+    );
     error.statusCode = 401;
     throw error;
   }
@@ -560,11 +590,23 @@ async function createWorkspace(user, payload) {
 
   async function nextAvailableSlug(candidate) {
     let slug = candidate;
-    for (let attempt = 0; attempt < 25; attempt += 1) {
-      const existing = await query("SELECT 1 FROM workspaces WHERE slug = $1 LIMIT 1", [slug]);
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const existing = await query(
+        `SELECT 1 AS hit FROM workspaces WHERE slug = $1
+         UNION ALL
+         SELECT 1 FROM booking_pages WHERE slug = $1
+         UNION ALL
+         SELECT 1 FROM organizations WHERE slug = $1
+         LIMIT 1`,
+        [slug]
+      );
       if (!existing.rows[0]) return { slug, taken: attempt > 0 };
-      const suffix = `-${attempt + 2}`;
-      slug = `${candidate.slice(0, Math.max(3, 60 - suffix.length))}${suffix}`;
+      const match = String(candidate).match(/^(.*)-(\d+)$/);
+      const base = match ? match[1] : candidate;
+      const start = match ? Number(match[2]) : 1;
+      const n = start + attempt + 1;
+      const suffix = `-${n}`;
+      slug = `${base.slice(0, Math.max(3, 60 - suffix.length))}${suffix}`;
     }
     return { slug: `${candidate.slice(0, 40)}-${Date.now().toString(36)}`, taken: true };
   }
@@ -585,12 +627,12 @@ async function createWorkspace(user, payload) {
     const registry = loadLocalClerkWorkspaces();
     const takenList = Object.values(registry).flat().map((item) => item.slug);
     let slug = baseSlug;
-    let n = 2;
-    let suggested = baseSlug;
     if (takenList.includes(baseSlug)) {
-      while (takenList.includes(suggested) && n < 30) {
+      let suggested = baseSlug;
+      let n = 2;
+      while (takenList.includes(suggested) && n < 40) {
         const suffix = `-${n}`;
-        suggested = `${baseSlug.slice(0, Math.max(3, 60 - suffix.length))}${suffix}`;
+        suggested = `${baseSlug.replace(/-\d+$/, "").slice(0, Math.max(3, 60 - suffix.length))}${suffix}`;
         n += 1;
       }
       if (payload.acceptSuggestedSlug && suggested !== baseSlug && !takenList.includes(suggested)) {
@@ -652,71 +694,96 @@ async function createWorkspace(user, payload) {
       throw slugConflictError(baseSlug, availability.slug);
     }
   }
-  let workspace;
-  try {
-    workspace = (await query(
-      `INSERT INTO workspaces (id, owner_user_id, name, slug, activity_type, locale, currency)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [createId("workspace"), user.id, name, slug, resolvedActivityType, locale, currency]
-    )).rows[0];
-  } catch (error) {
-    if (error?.code === "23505") {
-      const again = await nextAvailableSlug(baseSlug);
-      throw slugConflictError(baseSlug, again.slug);
-    }
+
+  if (!pool) {
+    const error = new Error("قاعدة البيانات غير متاحة");
+    error.statusCode = 500;
     throw error;
   }
-  await query(
-    "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
-    [workspace.id, user.id]
-  );
-  const newOrganizationId = `org-${workspace.id}`;
-  await query(
-    `INSERT INTO organizations
-      (id, workspace_id, name, slug, owner_company, activity_type, locale, currency, labels)
-     VALUES ($1, $2, $3, $4, 'UpNexa-eg.com', $5, $6, $7, $8::jsonb)`,
-    [newOrganizationId, workspace.id, name, slug, resolvedActivityType, locale, currency, JSON.stringify(template.labels)]
-  );
-  await query("INSERT INTO dashboard_metrics (organization_id) VALUES ($1)", [newOrganizationId]);
-  await query(
-    `INSERT INTO booking_pages (organization_id, slug, description, show_platform_branding)
-     VALUES ($1, $2, $3, $4)`,
-    [newOrganizationId, slug, `احجز خدمات ${name} بسهولة`, resolvedActivityType === "medical"]
-  );
-  await query(
-    `INSERT INTO departments (id, organization_id, name, default_service)
-     VALUES ($1, $2, $3, $4)`,
-    [`department-${workspace.id}-main`, newOrganizationId, template.labels.department, template.labels.service]
-  );
-  await query(
-    `INSERT INTO doctors (id, organization_id, name, specialty)
-     VALUES ($1, $2, $3, $4)`,
-    [`staff-${workspace.id}-main`, newOrganizationId, template.labels.staff, template.display_name]
-  );
-  await query(
-    `INSERT INTO customer_categories (id, organization_id, name, color)
-     VALUES ($1, $2, $3, $4)`,
-    [`customer-category-${workspace.id}-standard`, newOrganizationId, template.labels.customer, "#2474df"]
-  );
-  for (let weekday = 0; weekday <= 6; weekday += 1) {
-    await query(
-      `INSERT INTO working_hours (organization_id, weekday, opens_at, closes_at, is_closed)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [newOrganizationId, weekday, "09:00", "17:00", weekday === 5]
+
+  const client = await pool.connect();
+  let workspace;
+  try {
+    await client.query("BEGIN");
+    try {
+      workspace = (
+        await client.query(
+          `INSERT INTO workspaces (id, owner_user_id, name, slug, activity_type, locale, currency)
+           VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+          [createId("workspace"), user.id, name, slug, resolvedActivityType, locale, currency]
+        )
+      ).rows[0];
+    } catch (error) {
+      if (error?.code === "23505") {
+        const again = await nextAvailableSlug(baseSlug);
+        throw slugConflictError(baseSlug, again.slug);
+      }
+      throw error;
+    }
+    const organizationId = `org-${workspace.id}`;
+    await client.query(
+      "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ($1, $2, 'owner')",
+      [workspace.id, user.id]
     );
+    await client.query(
+      `INSERT INTO organizations
+        (id, workspace_id, name, slug, owner_company, activity_type, locale, currency, labels)
+       VALUES ($1, $2, $3, $4, 'UpNexa-eg.com', $5, $6, $7, $8::jsonb)`,
+      [organizationId, workspace.id, name, slug, resolvedActivityType, locale, currency, JSON.stringify(template.labels)]
+    );
+    await client.query("INSERT INTO dashboard_metrics (organization_id) VALUES ($1)", [organizationId]);
+    await client.query(
+      `INSERT INTO booking_pages (organization_id, slug, description, show_platform_branding)
+       VALUES ($1, $2, $3, $4)`,
+      [organizationId, slug, `احجز خدمات ${name} بسهولة`, true]
+    );
+    await client.query(
+      `INSERT INTO departments (id, organization_id, name, default_service)
+       VALUES ($1, $2, $3, $4)`,
+      [`department-${workspace.id}-main`, organizationId, template.labels.department, template.labels.service]
+    );
+    await client.query(
+      `INSERT INTO doctors (id, organization_id, name, specialty)
+       VALUES ($1, $2, $3, $4)`,
+      [`staff-${workspace.id}-main`, organizationId, template.labels.staff, template.display_name]
+    );
+    await client.query(
+      `INSERT INTO customer_categories (id, organization_id, name, color)
+       VALUES ($1, $2, $3, $4)`,
+      [`customer-category-${workspace.id}-standard`, organizationId, template.labels.customer, "#2474df"]
+    );
+    for (let weekday = 0; weekday <= 6; weekday += 1) {
+      await client.query(
+        `INSERT INTO working_hours (organization_id, weekday, opens_at, closes_at, is_closed)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [organizationId, weekday, "09:00", "17:00", weekday === 5]
+      );
+    }
+    await client.query("COMMIT");
+    workspace = { ...workspace, organization_id: organizationId };
+  } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    throw error;
+  } finally {
+    client.release();
   }
+
   await logPlatformEvent(user.id, "workspace_created", "workspace", workspace.id, { activityType });
   try {
     const opsStore = require("./opsStore");
     opsStore.seedWorkspaceStore(workspace.id, {
-      slug,
+      slug: workspace.slug,
       businessName: name,
       activityType: resolvedActivityType
     });
   } catch (error) {
     console.warn("[workspace] ops seed failed:", error.message);
   }
-  return { ...workspace, organization_id: newOrganizationId, labels: template.labels };
+  return { ...workspace, organization_id: workspace.organization_id, labels: template.labels };
 }
 
 async function createWhopCheckout(user, planKey, requestUrl) {

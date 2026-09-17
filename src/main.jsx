@@ -12,7 +12,8 @@ import {
   AuthControls,
   AuthSessionGate,
   WorkspaceOnboarding,
-  useClerkPublishableKey
+  useClerkPublishableKey,
+  useAuth
 } from "./ClerkGate.jsx";
 import { getClerkLocalization } from "./authI18n";
 
@@ -874,10 +875,25 @@ function App() {
   }, [locale]);
 
   useEffect(() => {
-    api.get("/api/workspace-profile").then((result) => setProfile(result.profile)).catch(() => {});
-    api.get("/api/workspaces")
-      .then((result) => setWorkspaces(result.workspaces || []))
-      .catch(() => setWorkspaces([]));
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await api.resolveToken();
+        if (!token || cancelled) return;
+        const [profileResult, workspaceResult] = await Promise.all([
+          api.get("/api/workspace-profile").catch(() => null),
+          api.get("/api/workspaces").catch(() => ({ workspaces: [] }))
+        ]);
+        if (cancelled) return;
+        if (profileResult?.profile) setProfile(profileResult.profile);
+        setWorkspaces(workspaceResult.workspaces || []);
+      } catch {
+        if (!cancelled) setWorkspaces([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [workspaceId]);
 
   useEffect(() => {
@@ -1036,16 +1052,42 @@ function App() {
 createRoot(document.getElementById("root")).render(<Root />);
 
 function AuthenticatedShell() {
+  const { isLoaded, isSignedIn, getToken } = useAuth();
   const [workspaces, setWorkspaces] = useState(null);
   const [bootError, setBootError] = useState("");
   const [authBlocked, setAuthBlocked] = useState(false);
 
   useEffect(() => {
+    // Do not call /api/workspaces until Clerk finished loading and the user is signed in.
+    if (!isLoaded || !isSignedIn) {
+      if (isLoaded && !isSignedIn) {
+        setAuthBlocked(true);
+        setBootError("يلزم تسجيل الدخول قبل إنشاء مساحة العمل");
+        setWorkspaces([]);
+      }
+      return undefined;
+    }
+
     let cancelled = false;
-    let attempts = 0;
+    let tokenAttempts = 0;
+
     const load = async () => {
-      attempts += 1;
       try {
+        const token = await getToken(tokenAttempts === 0 ? undefined : { skipCache: true });
+        if (!token) {
+          tokenAttempts += 1;
+          // Warm up JWT briefly; never hammer /api/workspaces without a Bearer token.
+          if (!cancelled && tokenAttempts < 6) {
+            window.setTimeout(load, 200 * tokenAttempts);
+            return;
+          }
+          if (cancelled) return;
+          setAuthBlocked(true);
+          setBootError("يلزم إعادة تسجيل الدخول قبل إنشاء مساحة العمل");
+          setWorkspaces([]);
+          return;
+        }
+
         const result = await api.get("/api/workspaces");
         if (cancelled) return;
         const list = result.workspaces || [];
@@ -1058,32 +1100,26 @@ function AuthenticatedShell() {
       } catch (err) {
         if (cancelled) return;
         const message = err.message || "تعذر تحميل مساحات العمل";
-        const isAuth = err.status === 401 || /authentication|تسجيل الدخول/i.test(message);
-        if (isAuth && attempts < 6) {
-          window.setTimeout(load, 250 * attempts);
-          return;
-        }
+        const isAuth = err.status === 401 || /authentication|تسجيل الدخول|missing_clerk_token/i.test(message);
+        // No retry loop on 401 — surface login UI once.
         if (isAuth) {
           setAuthBlocked(true);
           setBootError("يلزم إعادة تسجيل الدخول قبل إنشاء مساحة العمل");
           setWorkspaces([]);
           return;
         }
-        if (attempts < 4) {
-          window.setTimeout(load, 350 * attempts);
-          return;
-        }
         setBootError(message);
         setWorkspaces([]);
       }
     };
+
     load();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isLoaded, isSignedIn, getToken]);
 
-  if (workspaces === null) {
+  if (!isLoaded || (isSignedIn && workspaces === null && !authBlocked)) {
     return (
       <div className="auth-landing">
         <div className="auth-landing-card">
@@ -1094,14 +1130,18 @@ function AuthenticatedShell() {
     );
   }
 
-  if (authBlocked) {
+  if (authBlocked || !isSignedIn) {
     return (
       <div className="auth-landing">
         <div className="auth-landing-card">
           <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
           <h1>مطلوب تسجيل الدخول</h1>
           <p>{bootError || "انتهت الجلسة أو لم يُربط التوكن بعد. سجّل الدخول مرة أخرى."}</p>
-          <a className="primary-button auth-cta" href="/auth.html" style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>
+          <a
+            className="primary-button auth-cta"
+            href="/?mode=sign-in"
+            style={{ display: "grid", placeItems: "center", textDecoration: "none" }}
+          >
             فتح صفحة الدخول
           </a>
         </div>

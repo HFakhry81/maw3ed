@@ -73,22 +73,49 @@ export function Maw3edClerkProvider({ publishableKey, localization, children }) 
 export function ClerkTokenBridge({ children }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [ready, setReady] = useState(false);
+  const [tokenReady, setTokenReady] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) {
       setReady(false);
+      setTokenReady(false);
       return undefined;
     }
+
     bindClerkTokenGetter(async (options) => {
       const token = await getToken(options);
       return token;
     });
     setReady(true);
+
+    let cancelled = false;
+    (async () => {
+      if (!isSignedIn) {
+        if (!cancelled) setTokenReady(false);
+        return;
+      }
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        try {
+          const token = await getToken(attempt === 0 ? undefined : { skipCache: true });
+          if (token) {
+            if (!cancelled) setTokenReady(true);
+            return;
+          }
+        } catch {
+          /* session still warming up */
+        }
+        await new Promise((resolve) => setTimeout(resolve, 150 * (attempt + 1)));
+      }
+      if (!cancelled) setTokenReady(false);
+    })();
+
     return () => {
+      cancelled = true;
       clearClerkTokenGetter();
       setReady(false);
+      setTokenReady(false);
     };
-  }, [isLoaded, getToken]);
+  }, [isLoaded, isSignedIn, getToken]);
 
   if (!isLoaded || !ready) {
     return (
@@ -105,6 +132,16 @@ export function ClerkTokenBridge({ children }) {
       <div className="auth-landing">
         <div className="auth-landing-card">
           <p>انتهت الجلسة. سجّل الدخول مرة أخرى للمتابعة.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tokenReady) {
+    return (
+      <div className="auth-landing">
+        <div className="auth-landing-card">
+          <p>جارٍ تجهيز رمز الدخول الآمن…</p>
         </div>
       </div>
     );
@@ -245,13 +282,19 @@ export function AuthLanding({ locale = "ar", onLocaleChange }) {
               forceRedirectUrl="/?onboarding=1"
               fallbackRedirectUrl="/?onboarding=1"
               appearance={clerkAppearance}
+              // Sign-in must not re-trigger email OTP for already-verified accounts.
+              withSignUp={false}
             />
           )}
         </div>
         <a className="auth-fallback-link" href={`/auth.html?mode=sign-up&lang=${encodeURIComponent(locale)}`}>
           {copy.fullPage}
         </a>
-        <small>{copy.afterVerify}</small>
+        <small>
+          {mode === "sign-up"
+            ? copy.afterVerify
+            : "التحقق من البريد مرة واحدة عند إنشاء الحساب أو عند تغيير البريد فقط — ليس في كل تسجيل دخول."}
+        </small>
       </div>
     </div>
   );
@@ -333,9 +376,15 @@ export function WorkspaceOnboarding({ onCreated }) {
       .replace(/^-|-$/g, "")
       .slice(0, 60);
 
-  const withSuffix = (base, suffix = "2") => {
+  const withSuffix = (base) => {
     const clean = normalizeSlug(base) || "workspace";
-    const tag = `-${String(suffix).replace(/[^a-z0-9-]/gi, "") || "2"}`;
+    const match = clean.match(/^(.*)-(\d+)$/);
+    if (match) {
+      const next = Number(match[2]) + 1;
+      const tag = `-${next}`;
+      return `${match[1].slice(0, Math.max(3, 60 - tag.length))}${tag}`;
+    }
+    const tag = "-2";
     return `${clean.slice(0, Math.max(3, 60 - tag.length))}${tag}`;
   };
 
@@ -357,16 +406,19 @@ export function WorkspaceOnboarding({ onCreated }) {
     setSlugConflict(null);
     setError("");
     window.setTimeout(() => slugInputRef.current?.focus(), 0);
+    return next;
   };
 
   const submit = async (event, options = {}) => {
     event?.preventDefault?.();
+    if (busy) return;
     setBusy(true);
     setError("");
     if (!options.keepConflict) setSlugConflict(null);
     let nextSlug =
       normalizeSlug(options.slugOverride || slug || name) || `ws-${Date.now().toString(36)}`;
     if (nextSlug.length < 3) nextSlug = `ws-${Date.now().toString(36)}`;
+    setSlugTouched(true);
     setSlug(nextSlug);
     try {
       const token = await api.resolveToken();
@@ -381,6 +433,8 @@ export function WorkspaceOnboarding({ onCreated }) {
       });
       const id = result.workspace?.id;
       if (result.workspace?.slug) setSlug(result.workspace.slug);
+      setSlugConflict(null);
+      setError("");
       if (id) {
         api.setWorkspaceId(id);
         if (typeof onCreated === "function") onCreated(result.workspace);
@@ -392,7 +446,7 @@ export function WorkspaceOnboarding({ onCreated }) {
           requested: nextSlug,
           suggested
         });
-        setError(`الرابط «${nextSlug}» مستخدم بالفعل. عدّله يدوياً أو اضغط «أضف تمييزاً» لاستخدام «${suggested}».`);
+        setError(`الرابط «${nextSlug}» مستخدم بالفعل. عدّله يدوياً أو استخدم المقترح «${suggested}».`);
         window.setTimeout(() => slugInputRef.current?.focus(), 0);
       } else if (/3-60|slug containing|الرابط يجب/i.test(err.message || "")) {
         setError("الرابط يجب أن يكون إنجليزياً صغيراً فقط (a-z و 0-9 و -) بطول 3 إلى 60 حرفاً، بدون / أو مسافات");
@@ -412,13 +466,15 @@ export function WorkspaceOnboarding({ onCreated }) {
         <p>تم التحقق من حسابك. الخطوة التالية: بناء مساحة عمل للمنشأة.</p>
         <label>
           اسم المساحة
-          <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="عيادة النور" />
+          <input id="workspace-name" name="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="عيادة النور" />
         </label>
         <label>
           الرابط (slug)
           <div className="slug-field-row">
             <input
               ref={slugInputRef}
+              id="workspace-slug"
+              name="slug"
               required
               value={slug}
               onChange={(e) => {
@@ -428,8 +484,8 @@ export function WorkspaceOnboarding({ onCreated }) {
                 setSlug(normalizeSlug(e.target.value));
               }}
               placeholder="dawy-hospitals"
-              pattern="[a-z0-9-]{3,60}"
-              title="حروف إنجليزية صغيرة وأرقام وشرطات فقط"
+              pattern="[-a-z0-9]{3,60}"
+              title="حروف إنجليزية صغيرة وأرقام وشرطة (-) فقط"
               aria-invalid={Boolean(slugConflict)}
             />
             <button
@@ -445,7 +501,7 @@ export function WorkspaceOnboarding({ onCreated }) {
             </button>
           </div>
         </label>
-        <small className="slug-hint">مثال صحيح: dawy-hospitals — بدون / أو حروف عربية</small>
+        <small className="slug-hint">مثال صحيح: dawy-hospitals — يُسمح بالشرطة (-) بين الكلمات الإنجليزية</small>
         {slugConflict && (
           <div className="slug-conflict-banner" role="alert">
             <div>
@@ -457,6 +513,7 @@ export function WorkspaceOnboarding({ onCreated }) {
               <button
                 type="button"
                 className="ghost-button"
+                disabled={busy}
                 onClick={() => applySuggestedSlug(slugConflict.suggested)}
               >
                 استخدم المقترح
@@ -467,8 +524,9 @@ export function WorkspaceOnboarding({ onCreated }) {
                 disabled={busy}
                 onClick={() => {
                   const suggested = slugConflict.suggested;
-                  applySuggestedSlug(suggested);
-                  submit(null, { slugOverride: suggested, acceptSuggestedSlug: true });
+                  setSlug(suggested);
+                  setSlugTouched(true);
+                  submit(null, { slugOverride: suggested, acceptSuggestedSlug: true, keepConflict: true });
                 }}
               >
                 أنشئ بالمقترح
@@ -478,7 +536,7 @@ export function WorkspaceOnboarding({ onCreated }) {
         )}
         <label>
           نوع النشاط
-          <select value={activityType} onChange={(e) => setActivityType(e.target.value)}>
+          <select id="workspace-activity" name="activityType" value={activityType} onChange={(e) => setActivityType(e.target.value)}>
             <option value="medical">طبي</option>
             <option value="salon">صالون</option>
             <option value="education">تعليمي</option>
@@ -486,8 +544,7 @@ export function WorkspaceOnboarding({ onCreated }) {
             <option value="other">أخرى</option>
           </select>
         </label>
-        {error && !slugConflict && <div className="error-banner">{error}</div>}
-        {error && slugConflict && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner">{error}</div>}
         <button className="primary-button auth-cta" type="submit" disabled={busy}>
           {busy ? "جارٍ الإنشاء…" : "إنشاء مساحة العمل"}
         </button>
