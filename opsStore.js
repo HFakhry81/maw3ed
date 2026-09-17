@@ -275,7 +275,13 @@ function listStaff({ search = "" } = {}) {
     .filter((person) => !q || `${person.name} ${person.title}`.toLowerCase().includes(q))
     .map((person) => ({
       ...person,
-      servicesCount: store.services.filter((service) => (service.providerIds || []).includes(person.id)).length
+      servicesCount: (() => {
+        const linked = new Set([
+          ...(person.serviceIds || []),
+          ...store.services.filter((service) => (service.providerIds || []).includes(person.id)).map((service) => service.id)
+        ]);
+        return linked.size;
+      })()
     }));
 }
 
@@ -580,26 +586,28 @@ function updateActivityProfile(payload = {}) {
 }
 
 function saveUploadedLogo(payload = {}) {
+  const result = saveUploadedImage({ ...payload, kind: "logo" });
+  store.bookingPage.logoUrl = result.url;
+  persist();
+  return { logoUrl: result.url, url: result.url };
+}
+
+function saveUploadedImage(payload = {}) {
   const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
   const uploadsDir = opsWorkspace.uploadsDir(workspaceId);
   fs.mkdirSync(uploadsDir, { recursive: true });
   if (payload.url) {
-    const logoUrl = String(payload.url).trim();
-    store.bookingPage.logoUrl = logoUrl;
-    persist();
-    return { logoUrl };
+    return { url: String(payload.url).trim() };
   }
   const dataUrl = String(payload.dataUrl || "");
   const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
-  if (!match) fail("صورة الشعار غير صالحة");
+  if (!match) fail("صورة غير صالحة");
   const ext = match[1].includes("png") ? "png" : match[1].includes("webp") ? "webp" : match[1].includes("gif") ? "gif" : "jpg";
-  const fileName = `logo-${Date.now()}.${ext}`;
+  const kind = String(payload.kind || "file").replace(/[^a-z0-9_-]/gi, "") || "file";
+  const fileName = `${kind}-${Date.now()}.${ext}`;
   const filePath = path.join(uploadsDir, fileName);
   fs.writeFileSync(filePath, Buffer.from(match[2], "base64"));
-  const logoUrl = `/data/uploads/workspaces/${workspaceId}/${fileName}`;
-  store.bookingPage.logoUrl = logoUrl;
-  persist();
-  return { logoUrl };
+  return { url: `/data/uploads/workspaces/${workspaceId}/${fileName}` };
 }
 
 function createStaff(payload) {
@@ -608,6 +616,8 @@ function createStaff(payload) {
   const lastName = String(payload.lastName || "").trim();
   const name = String(payload.name || `${firstName} ${lastName}`.trim()).trim();
   if (!name) fail("اسم الموظف مطلوب");
+  const title = String(payload.title || "").trim();
+  if (!title) fail("المهنة مطلوبة");
   const useBusinessHours = payload.useBusinessHours !== false;
   const person = {
     id: createId("staff"),
@@ -615,7 +625,7 @@ function createStaff(payload) {
     firstName: firstName || name.split(/\s+/)[0] || name,
     lastName,
     phone: String(payload.phone || "").trim(),
-    title: String(payload.title || "").trim() || "موظف",
+    title,
     avatarUrl: String(payload.avatarUrl || ""),
     serviceIds: Array.isArray(payload.serviceIds) ? payload.serviceIds.map(String) : [],
     active: payload.active !== false,
@@ -644,7 +654,11 @@ function updateStaff(id, payload) {
     person.lastName = lastName;
     person.name = String(payload.name || `${firstName} ${lastName}`.trim() || person.name).trim();
   }
-  if (payload.title != null) person.title = String(payload.title).trim();
+  if (payload.title != null) {
+    const title = String(payload.title).trim();
+    if (!title) fail("المهنة مطلوبة");
+    person.title = title;
+  }
   if (payload.phone != null) person.phone = String(payload.phone).trim();
   if (payload.avatarUrl != null) person.avatarUrl = String(payload.avatarUrl).trim();
   if (payload.active != null) person.active = Boolean(payload.active);
@@ -1417,6 +1431,7 @@ module.exports = {
   getActivityProfile,
   updateActivityProfile,
   saveUploadedLogo,
+  saveUploadedImage,
   getPlanUsage,
   listCustomers,
   createCustomer,

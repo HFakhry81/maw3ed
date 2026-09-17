@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import "./styles.css";
 import "./ops.css";
 import { api } from "./api";
-import { LOCALES, applyDocumentLocale, t } from "./i18n";
+import { LOCALES, applyDocumentLocale, currencyForLocale, formatMoney, t } from "./i18n";
 import { CalendarView } from "./CalendarView.jsx";
 import {
   Maw3edClerkProvider,
@@ -16,6 +16,8 @@ import {
   useAuth
 } from "./ClerkGate.jsx";
 import { getClerkLocalization } from "./authI18n";
+import { MoneyInput, SearchableMultiSelect, SearchableSelect, digitsPhone, lettersOnly, toMoneyNumber } from "./uiFields.jsx";
+import { jobTitlesForTemplate } from "./jobTitles";
 
 const NAV = [
   { id: "overview", mark: "لوحة" },
@@ -191,19 +193,48 @@ function CustomersView({ ops, reload, locale }) {
 
 function StaffView({ ops, reload, locale }) {
   const emptyForm = {
-    firstName: "", lastName: "", phone: "", title: "", avatarUrl: "", serviceIds: [], active: true,
+    firstName: "",
+    lastName: "",
+    phone: "",
+    title: "",
+    avatarUrl: "",
+    serviceCategoryId: "",
+    serviceIds: [],
+    active: true,
     useBusinessHours: true
   };
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyForm);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  const categories = ops?.serviceCategories || [];
+  const allServices = ops?.services || [];
+  const templateId = ops?.activity?.templateId || "custom";
+  const knownTitles = useMemo(() => {
+    const fromStaff = (ops?.staff || []).map((person) => person.title).filter(Boolean);
+    return [...new Set([...jobTitlesForTemplate(templateId), ...fromStaff])];
+  }, [ops, templateId]);
+  const categoryOptions = categories.map((category) => category.name);
+  const selectedCategory = categories.find((item) => item.id === form.serviceCategoryId)
+    || categories.find((item) => item.name === form.serviceCategoryId)
+    || null;
+  const servicesInCategory = allServices.filter(
+    (service) => selectedCategory && service.categoryId === selectedCategory.id && service.active !== false
+  );
+  const serviceOptions = servicesInCategory.map((service) => ({ id: service.id, label: service.name }));
+
   const openCreate = () => {
     setEditingId("");
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      serviceCategoryId: categories[0]?.id || ""
+    });
     setOpen(true);
   };
   const openEdit = (person) => {
+    const linkedIds = person.serviceIds || allServices.filter((s) => (s.providerIds || []).includes(person.id)).map((s) => s.id);
+    const firstService = allServices.find((service) => linkedIds.includes(service.id));
     setEditingId(person.id);
     setForm({
       firstName: person.firstName || person.name?.split(/\s+/)[0] || "",
@@ -211,25 +242,59 @@ function StaffView({ ops, reload, locale }) {
       phone: person.phone || "",
       title: person.title || "",
       avatarUrl: person.avatarUrl || "",
-      serviceIds: person.serviceIds || (ops?.services || []).filter((s) => (s.providerIds || []).includes(person.id)).map((s) => s.id),
+      serviceCategoryId: firstService?.categoryId || categories[0]?.id || "",
+      serviceIds: linkedIds,
       active: person.active !== false,
       useBusinessHours: person.useBusinessHours !== false,
       workingHours: person.workingHours || (ops?.schedule?.general || []).map((day) => ({ ...day }))
     });
     setOpen(true);
   };
+  const onAvatarFile = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await api.post("/api/ops/uploads/image", { dataUrl, kind: "staff" });
+      setForm((current) => ({ ...current, avatarUrl: result.url }));
+    } catch (error) {
+      window.alert(error.message || "تعذر رفع الصورة");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
   const submit = async (event) => {
     event.preventDefault();
+    if (!String(form.title || "").trim()) {
+      window.alert("المهنة مطلوبة");
+      return;
+    }
+    if (/\d/.test(`${form.firstName}${form.lastName}`)) {
+      window.alert("حقول الاسم لا تقبل الأرقام");
+      return;
+    }
     const payload = {
       ...form,
-      name: `${form.firstName} ${form.lastName}`.trim()
+      name: `${form.firstName} ${form.lastName}`.trim(),
+      title: String(form.title).trim(),
+      serviceIds: form.serviceIds || []
     };
-    if (editingId) await api.patch(`/api/ops/staff/${editingId}`, payload);
-    else await api.post("/api/ops/staff", payload);
-    setOpen(false);
-    setForm(emptyForm);
-    setEditingId("");
-    reload();
+    try {
+      if (editingId) await api.patch(`/api/ops/staff/${editingId}`, payload);
+      else await api.post("/api/ops/staff", payload);
+      setOpen(false);
+      setForm(emptyForm);
+      setEditingId("");
+      reload();
+    } catch (error) {
+      window.alert(error.message || "تعذر حفظ الموظف");
+    }
   };
   return (
     <section className="ops-page">
@@ -272,17 +337,79 @@ function StaffView({ ops, reload, locale }) {
       <Drawer title={editingId ? "تعديل موظف" : "موظف جديد"} open={open} onClose={() => setOpen(false)}>
         <form className="stack-form" onSubmit={submit}>
           <div className="form-row">
-            <label>الاسم الأول<input required value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></label>
-            <label>اسم العائلة<input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></label>
+            <label>الاسم الأول
+              <input
+                required
+                value={form.firstName}
+                onChange={(e) => setForm({ ...form, firstName: lettersOnly(e.target.value) })}
+                inputMode="text"
+                autoComplete="given-name"
+              />
+            </label>
+            <label>اسم العائلة
+              <input
+                value={form.lastName}
+                onChange={(e) => setForm({ ...form, lastName: lettersOnly(e.target.value) })}
+                inputMode="text"
+                autoComplete="family-name"
+              />
+            </label>
           </div>
-          <label>الهاتف (+20)<input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="01xxxxxxxxx" /></label>
-          <label>المهنة<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
-          <label>رابط الصورة<input value={form.avatarUrl} onChange={(e) => setForm({ ...form, avatarUrl: e.target.value })} placeholder="https://..." /></label>
-          <label>الخدمات
-            <select multiple value={form.serviceIds} onChange={(e) => setForm({ ...form, serviceIds: [...e.target.selectedOptions].map((o) => o.value) })} style={{ minHeight: 96 }}>
-              {(ops?.services || []).map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
-            </select>
+          <label>الهاتف (+20)
+            <input
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: digitsPhone(e.target.value) })}
+              placeholder="01xxxxxxxxx"
+              inputMode="tel"
+            />
           </label>
+          <label>المهنة
+            <SearchableSelect
+              required
+              allowCustom
+              options={knownTitles}
+              value={form.title}
+              onChange={(title) => setForm({ ...form, title })}
+              placeholder="ابحث أو أضف مهنة…"
+            />
+          </label>
+          <label>صورة الموظف (اختياري)
+            <div className="staff-avatar-upload">
+              <div className="avatar lg" style={form.avatarUrl ? { backgroundImage: `url(${form.avatarUrl})`, backgroundSize: "cover" } : undefined}>
+                {!form.avatarUrl && "صورة"}
+              </div>
+              <input type="file" accept="image/*" onChange={onAvatarFile} disabled={uploadingAvatar} />
+              {uploadingAvatar ? <small>جارٍ الرفع…</small> : null}
+              {form.avatarUrl ? (
+                <button type="button" className="ghost-button" onClick={() => setForm({ ...form, avatarUrl: "" })}>إزالة الصورة</button>
+              ) : null}
+            </div>
+          </label>
+          <label>فئة الخدمة
+            <SearchableSelect
+              options={categoryOptions}
+              value={selectedCategory?.name || ""}
+              onChange={(name) => {
+                const category = categories.find((item) => item.name === name);
+                setForm({ ...form, serviceCategoryId: category?.id || "" });
+              }}
+              placeholder="اختر فئة…"
+            />
+          </label>
+          <label>الخدمات (يمكن اختيار أكثر من خدمة)
+            <SearchableMultiSelect
+              options={serviceOptions}
+              value={form.serviceIds.filter((id) => servicesInCategory.some((service) => service.id === id))}
+              onChange={(idsInCategory) => {
+                const keepFromOther = form.serviceIds.filter((id) => !servicesInCategory.some((service) => service.id === id));
+                setForm({ ...form, serviceIds: [...new Set([...keepFromOther, ...idsInCategory])] });
+              }}
+              placeholder={selectedCategory ? "ابحث واختر خدمات هذه الفئة…" : "اختر فئة أولاً"}
+            />
+          </label>
+          {form.serviceIds.length > 0 && (
+            <p className="muted">محدد: {form.serviceIds.length} خدمة · علاقة الموظف بالخدمات واحد-إلى-كثير، وتُحدَّث قائمة مقدمي كل خدمة تلقائياً.</p>
+          )}
           <label className="check"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> نشط</label>
           <label className="check">
             <input
@@ -344,10 +471,10 @@ function ServicesView({ ops, reload, locale }) {
     name: "",
     categoryId: "",
     durationMinutes: 30,
-    bufferMinutes: 0,
-    price: 0,
-    priceMin: 0,
-    priceMax: 0,
+    bufferMinutes: 15,
+    price: "",
+    priceMin: "",
+    priceMax: "",
     pricingType: "fixed",
     providerId: "",
     publicBooking: true,
@@ -384,12 +511,15 @@ function ServicesView({ ops, reload, locale }) {
   const incompletePricing = form.pricingType === "range" || form.pricingType === "on_request";
   const countInCategory = (id) => allServices.filter((service) => service.categoryId === id).length;
 
+  const currency = currencyForLocale(locale);
   const formatPrice = (service) => {
     const type = service.pricingType || "fixed";
     if (type === "free") return "مجاني";
     if (type === "on_request") return "عند الطلب";
-    if (type === "range") return `E£${service.priceMin ?? service.price ?? 0} – ${service.priceMax ?? service.price ?? 0}`;
-    return Number(service.price) === 0 ? "مجاني" : `E£${service.price}`;
+    if (type === "range") {
+      return `${formatMoney(service.priceMin ?? service.price ?? 0, locale)} – ${formatMoney(service.priceMax ?? service.price ?? 0, locale)}`;
+    }
+    return Number(service.price) === 0 ? "مجاني" : formatMoney(service.price, locale);
   };
 
   const openCreate = () => {
@@ -404,9 +534,9 @@ function ServicesView({ ops, reload, locale }) {
       categoryId: service.categoryId || categoryId,
       durationMinutes: snapToQuarter(service.durationMinutes || 30, { min: 15 }),
       bufferMinutes: snapToQuarter(service.bufferMinutes || 0, { min: 0, allowZero: true }),
-      price: service.price || 0,
-      priceMin: service.priceMin ?? service.price ?? 0,
-      priceMax: service.priceMax ?? service.price ?? 0,
+      price: service.price != null && Number(service.price) !== 0 ? service.price : "",
+      priceMin: service.priceMin != null ? service.priceMin : "",
+      priceMax: service.priceMax != null ? service.priceMax : "",
       pricingType: service.pricingType || "fixed",
       providerId: (service.providerIds || [])[0] || "",
       publicBooking: service.publicBooking !== false,
@@ -476,7 +606,13 @@ function ServicesView({ ops, reload, locale }) {
   };
   const submit = async (event) => {
     event.preventDefault();
-    const payload = { ...form, categoryId: form.categoryId || categoryId };
+    const payload = {
+      ...form,
+      categoryId: form.categoryId || categoryId,
+      price: toMoneyNumber(form.price),
+      priceMin: toMoneyNumber(form.priceMin),
+      priceMax: toMoneyNumber(form.priceMax)
+    };
     try {
       if (editingId) await api.patch(`/api/ops/services/${editingId}`, payload);
       else await api.post("/api/ops/services", payload);
@@ -587,10 +723,16 @@ function ServicesView({ ops, reload, locale }) {
             {(ops?.serviceCategories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
           <label>مقدم الخدمة (اختياري عند الإنشاء)
-            <select value={form.providerId} onChange={(e) => setForm({ ...form, providerId: e.target.value })}>
-              <option value="">— بدون تعيين الآن —</option>
-              {(ops?.staff || []).map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-            </select>
+            <SearchableSelect
+              options={(ops?.staff || []).map((person) => person.name)}
+              value={(ops?.staff || []).find((person) => person.id === form.providerId)?.name || ""}
+              onChange={(name) => {
+                const person = (ops?.staff || []).find((item) => item.name === name);
+                setForm({ ...form, providerId: person?.id || "" });
+              }}
+              placeholder="ابحث عن موظف أو اتركه فارغاً…"
+              allowCustom={false}
+            />
           </label>
           <p className="muted">يمكن إنشاء الخدمة بلا مقدم، لكن لن يُسمح بتحديد أي موعد عليها حتى يُعيَّن مقدم خدمة واحد على الأقل.</p>
           <label>نوع التسعير
@@ -605,12 +747,32 @@ function ServicesView({ ops, reload, locale }) {
             </select>
           </label>
           {form.pricingType === "fixed" && (
-            <label>السعر<input type="number" min="0" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} /></label>
+            <label>السعر ({currency.symbol})
+              <MoneyInput
+                currencySymbol={currency.symbol}
+                value={form.price}
+                onChange={(price) => setForm({ ...form, price })}
+              />
+            </label>
           )}
           {form.pricingType === "range" && (
             <div className="form-row">
-              <label>يبدأ من<input type="number" min="0" required value={form.priceMin} onChange={(e) => setForm({ ...form, priceMin: Number(e.target.value) })} /></label>
-              <label>ينتهي عند<input type="number" min="0" required value={form.priceMax} onChange={(e) => setForm({ ...form, priceMax: Number(e.target.value) })} /></label>
+              <label>يبدأ من ({currency.symbol})
+                <MoneyInput
+                  required
+                  currencySymbol={currency.symbol}
+                  value={form.priceMin}
+                  onChange={(priceMin) => setForm({ ...form, priceMin })}
+                />
+              </label>
+              <label>ينتهي عند ({currency.symbol})
+                <MoneyInput
+                  required
+                  currencySymbol={currency.symbol}
+                  value={form.priceMax}
+                  onChange={(priceMax) => setForm({ ...form, priceMax })}
+                />
+              </label>
             </div>
           )}
           {(form.pricingType === "free" || form.pricingType === "on_request") && (
@@ -865,7 +1027,7 @@ function OverviewView({ ops, appointments, locale, onNavigate }) {
       <div className="stats-cards">
         <article className="panel kpi"><span>مواعيد اليوم</span><b>{stats.appointments?.todayCount || todayItems.length}</b></article>
         <article className="panel kpi"><span>نسبة الحضور</span><b>{stats.attendanceRate || 0}%</b></article>
-        <article className="panel kpi"><span>إيراد مؤكد</span><b>E£{stats.revenueTotal || 0}</b></article>
+        <article className="panel kpi"><span>إيراد مؤكد</span><b>{formatMoney(stats.revenueTotal || 0, locale)}</b></article>
         <article className="panel kpi"><span>قيد الانتظار</span><b>{stats.appointments?.pendingCount || 0}</b></article>
       </div>
       <div className="split-panels">
@@ -919,9 +1081,9 @@ function StatsView({ ops, locale }) {
         <article className="panel"><span>إجمالي المواعيد</span><b>{stats.appointments?.totalCount || 0}</b></article>
         <article className="panel"><span>مواعيد اليوم</span><b>{stats.appointments?.todayCount || 0}</b></article>
         <article className="panel"><span>نسبة الحضور</span><b>{stats.attendanceRate || 0}%</b></article>
-        <article className="panel"><span>إيراد مؤكد</span><b>E£{stats.revenueTotal || 0}</b></article>
+        <article className="panel"><span>إيراد مؤكد</span><b>{formatMoney(stats.revenueTotal || 0, locale)}</b></article>
         <article className="panel"><span>العملاء</span><b>{stats.customersCount || 0}</b></article>
-        <article className="panel"><span>المصروفات</span><b>E£{stats.expensesTotal || 0}</b></article>
+        <article className="panel"><span>المصروفات</span><b>{formatMoney(stats.expensesTotal || 0, locale)}</b></article>
       </div>
     </section>
   );
@@ -940,7 +1102,7 @@ function ExpensesView({ ops, reload, locale }) {
     <section className="ops-page">
       <div className="ops-header"><div><h1>{t(locale, "expenses")}</h1><p>تتبع المصروفات</p></div><button className="primary-button" type="button" onClick={() => setOpen(true)}>+ إضافة مصروف</button></div>
       <div className="panel">
-        {(ops?.expenses || []).map((expense) => <div key={expense.id} className="table-row"><b>{expense.name}</b><span>{expense.category}</span><span>E£{expense.amount}</span><span>{expense.date}</span></div>)}
+        {(ops?.expenses || []).map((expense) => <div key={expense.id} className="table-row"><b>{expense.name}</b><span>{expense.category}</span><span>{formatMoney(expense.amount, locale)}</span><span>{expense.date}</span></div>)}
         {!(ops?.expenses || []).length && <div className="empty-state">{t(locale, "empty")}</div>}
       </div>
       <Drawer title="إضافة مصروف" open={open} onClose={() => setOpen(false)}>

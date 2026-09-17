@@ -180,6 +180,10 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         sendJson(res, 201, { ok: true, ...ops.saveUploadedLogo(await parseJsonBody(req)) });
         return true;
       }
+      if (requested === "/api/ops/uploads/image" && req.method === "POST") {
+        sendJson(res, 201, { ok: true, ...ops.saveUploadedImage(await parseJsonBody(req)) });
+        return true;
+      }
 
       if (requested === "/api/ops/activity-templates" && req.method === "GET") {
         sendJson(res, 200, { ok: true, templates: ops.listActivityTemplates() });

@@ -91,3 +91,34 @@ export function applyDocumentLocale(locale) {
   document.documentElement.dir = meta.dir;
   return meta;
 }
+
+/** Display currency follows UI language. */
+const CURRENCY_BY_LOCALE = {
+  ar: { code: "EGP", symbol: "ج.م" },
+  en: { code: "EGP", symbol: "EGP" },
+  fr: { code: "EUR", symbol: "€" },
+  ur: { code: "PKR", symbol: "Rs" },
+  tr: { code: "TRY", symbol: "₺" },
+  es: { code: "EUR", symbol: "€" },
+  hi: { code: "INR", symbol: "₹" },
+  bn: { code: "BDT", symbol: "৳" },
+  de: { code: "EUR", symbol: "€" },
+  pt: { code: "BRL", symbol: "R$" },
+  ru: { code: "RUB", symbol: "₽" },
+  zh: { code: "CNY", symbol: "¥" },
+  ja: { code: "JPY", symbol: "¥" },
+  ko: { code: "KRW", symbol: "₩" },
+  id: { code: "IDR", symbol: "Rp" }
+};
+
+export function currencyForLocale(locale) {
+  return CURRENCY_BY_LOCALE[locale] || CURRENCY_BY_LOCALE.en;
+}
+
+export function formatMoney(amount, locale) {
+  const { symbol } = currencyForLocale(locale);
+  const value = Number(amount);
+  if (!Number.isFinite(value)) return `${symbol}0`;
+  const formatted = Number.isInteger(value) ? String(value) : value.toFixed(2);
+  return `${symbol}${formatted}`;
+}

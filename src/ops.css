@@ -744,6 +744,121 @@
   vertical-align: middle;
 }
 
+.money-input {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--ops-line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.money-input .money-currency {
+  display: grid;
+  place-items: center;
+  min-width: 48px;
+  padding: 0 10px;
+  background: #eef4ff;
+  color: var(--ops-blue);
+  font-weight: 800;
+  font-size: 0.82rem;
+  border-inline-end: 1px solid var(--ops-line);
+}
+
+.money-input input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  flex: 1;
+}
+
+.searchable-select {
+  position: relative;
+}
+
+.searchable-select input[type="text"],
+.searchable-select input[type="search"],
+.searchable-select-trigger {
+  width: 100%;
+  border: 1px solid var(--ops-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  font: inherit;
+  text-align: start;
+}
+
+.searchable-select-trigger {
+  cursor: pointer;
+  color: var(--ops-ink);
+}
+
+.searchable-select-menu,
+.searchable-select-panel {
+  position: absolute;
+  inset-inline: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--ops-line);
+  border-radius: 12px;
+  box-shadow: var(--ops-shadow);
+}
+
+.searchable-select-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.searchable-select-menu button,
+.searchable-select-menu label {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  border-radius: 8px;
+  text-align: start;
+  cursor: pointer;
+  font: inherit;
+}
+
+.searchable-select-menu button:hover,
+.searchable-select-menu label:hover {
+  background: #eef4ff;
+}
+
+.searchable-select-create {
+  color: var(--ops-blue);
+  font-weight: 700;
+}
+
+.searchable-select-empty {
+  padding: 10px;
+  color: var(--ops-muted);
+  font-size: 0.85rem;
+}
+
+.staff-avatar-upload {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.avatar.lg {
+  width: 64px;
+  height: 64px;
+  font-size: 0.75rem;
+}
+
 .booking-block-note {
   padding: 10px 12px;
   border-radius: 10px;
