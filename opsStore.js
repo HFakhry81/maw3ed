@@ -3,6 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 const opsPg = require("./opsPg");
 const opsWorkspace = require("./opsWorkspace");
+const shiftHours = require("./shiftHours");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -95,7 +96,7 @@ function defaultStore() {
       isOpen: true,
       opensAt: "09:00",
       closesAt: "21:00",
-      breakEnabled: true,
+      breakEnabled: false,
       breakStartsAt: "13:00",
       breakEndsAt: "14:00"
     })),
@@ -275,6 +276,8 @@ function listStaff({ search = "" } = {}) {
     .filter((person) => !q || `${person.name} ${person.title}`.toLowerCase().includes(q))
     .map((person) => ({
       ...person,
+      closedDays: Array.isArray(person.closedDays) ? person.closedDays : [],
+      specificDays: Array.isArray(person.specificDays) ? person.specificDays : [],
       servicesCount: (() => {
         const linked = new Set([
           ...(person.serviceIds || []),
@@ -290,16 +293,55 @@ function normalizeWeekHours(days, fallback = store.workingHours) {
   const source = Array.isArray(days) && days.length ? days : fallback;
   return [0, 1, 2, 3, 4, 5, 6].map((weekday) => {
     const day = source.find((item) => Number(item.weekday) === weekday) || fallback.find((item) => item.weekday === weekday) || {};
+    const opensAt = day.opensAt || "09:00";
+    const closesAt = day.closesAt || "21:00";
+    const overnight = day.overnight === true;
     return {
       weekday,
       isOpen: day.isOpen !== false,
-      opensAt: day.opensAt || "09:00",
-      closesAt: day.closesAt || "21:00",
+      opensAt,
+      closesAt,
+      overnight,
       breakEnabled: Boolean(day.breakEnabled),
       breakStartsAt: day.breakStartsAt || "13:00",
       breakEndsAt: day.breakEndsAt || "14:00"
     };
   });
+}
+
+/** Staff-level closed days: stored for Pro prep; booking ignores them until Pro unlock. */
+function normalizeStaffClosedDays(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((item, index) => {
+    const startDate = String(item.startDate || item.date || "").trim();
+    return {
+      id: String(item.id || `scd-${Date.now().toString(36)}-${index}`),
+      startDate,
+      endDate: String(item.endDate || startDate).trim() || startDate,
+      description: String(item.description || "").trim()
+    };
+  }).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.startDate));
+}
+
+/** Staff-level specific days: stored for Pro prep; booking ignores them until Pro unlock. */
+function normalizeStaffSpecificDays(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((item, index) => {
+    const startDate = String(item.startDate || item.date || "").trim();
+    return {
+      id: String(item.id || `ssd-${Date.now().toString(36)}-${index}`),
+      title: String(item.title || "").trim() || "يوم محدد",
+      startDate,
+      endDate: String(item.endDate || startDate).trim() || startDate,
+      opensAt: String(item.opensAt || "08:00").trim(),
+      closesAt: String(item.closesAt || "16:00").trim()
+    };
+  }).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.startDate));
+}
+
+/** Explicitly closed Pro staff features — no compute path yet. */
+function assertStaffProFeatureClosed(feature) {
+  fail(`خاصية «${feature}» ضمن الخطة الاحترافية ومغلقة حالياً`, 403);
 }
 
 function dateInRange(date, startDate, endDate) {
@@ -619,6 +661,7 @@ function createStaff(payload) {
   const title = String(payload.title || "").trim();
   if (!title) fail("المهنة مطلوبة");
   const useBusinessHours = payload.useBusinessHours !== false;
+  if (!useBusinessHours) assertWeekHoursValid(payload.workingHours);
   const person = {
     id: createId("staff"),
     name,
@@ -627,10 +670,15 @@ function createStaff(payload) {
     phone: String(payload.phone || "").trim(),
     title,
     avatarUrl: String(payload.avatarUrl || ""),
-    serviceIds: Array.isArray(payload.serviceIds) ? payload.serviceIds.map(String) : [],
+    servicePlace: String(payload.servicePlace || "").trim(),
+    serviceCategoryId: String(payload.serviceCategoryId || "").trim(),
+    serviceIds: Array.isArray(payload.serviceIds) ? payload.serviceIds.map(String).filter(Boolean) : [],
     active: payload.active !== false,
     useBusinessHours,
-    workingHours: useBusinessHours ? null : normalizeWeekHours(payload.workingHours)
+    workingHours: useBusinessHours ? null : normalizeWeekHours(payload.workingHours),
+    // Pro prep: stored only — not applied to booking availability yet.
+    closedDays: normalizeStaffClosedDays(payload.closedDays),
+    specificDays: normalizeStaffSpecificDays(payload.specificDays)
   };
   store.staff.unshift(person);
   if (person.serviceIds.length) {
@@ -661,21 +709,30 @@ function updateStaff(id, payload) {
   }
   if (payload.phone != null) person.phone = String(payload.phone).trim();
   if (payload.avatarUrl != null) person.avatarUrl = String(payload.avatarUrl).trim();
+  if (payload.servicePlace != null) person.servicePlace = String(payload.servicePlace || "").trim();
+  if (payload.serviceCategoryId != null) person.serviceCategoryId = String(payload.serviceCategoryId || "").trim();
   if (payload.active != null) person.active = Boolean(payload.active);
   if (payload.useBusinessHours != null) person.useBusinessHours = Boolean(payload.useBusinessHours);
   if (Array.isArray(payload.workingHours)) {
+    assertWeekHoursValid(payload.workingHours);
     person.workingHours = normalizeWeekHours(payload.workingHours);
     if (payload.useBusinessHours == null) person.useBusinessHours = false;
   }
   if (person.useBusinessHours) person.workingHours = null;
   if (Array.isArray(payload.serviceIds)) {
-    person.serviceIds = payload.serviceIds.map(String);
+    person.serviceIds = payload.serviceIds.map(String).filter(Boolean);
     store.services.forEach((service) => {
       const ids = new Set(service.providerIds || []);
       if (person.serviceIds.includes(service.id)) ids.add(person.id);
       else ids.delete(person.id);
       service.providerIds = [...ids];
     });
+  }
+  if (Array.isArray(payload.closedDays)) {
+    person.closedDays = normalizeStaffClosedDays(payload.closedDays);
+  }
+  if (Array.isArray(payload.specificDays)) {
+    person.specificDays = normalizeStaffSpecificDays(payload.specificDays);
   }
   persist();
   return person;
@@ -857,17 +914,21 @@ function getWorkingSchedule() {
   };
 }
 
+function assertWeekHoursValid(days) {
+  if (!Array.isArray(days) || !days.length) return;
+  const normalized = normalizeWeekHours(days);
+  const names = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  for (const day of normalized) {
+    const label = names[day.weekday] || `يوم ${day.weekday}`;
+    const error = shiftHours.validateShiftDay(day, label);
+    if (error) fail(error);
+  }
+}
+
 function saveWorkingHours(days) {
   if (!Array.isArray(days) || days.length !== 7) fail("جدول الأيام السبعة مطلوب");
-  store.workingHours = days.map((day, weekday) => ({
-    weekday,
-    isOpen: day.isOpen !== false,
-    opensAt: day.opensAt || "09:00",
-    closesAt: day.closesAt || "21:00",
-    breakEnabled: Boolean(day.breakEnabled),
-    breakStartsAt: day.breakStartsAt || "13:00",
-    breakEndsAt: day.breakEndsAt || "14:00"
-  }));
+  assertWeekHoursValid(days);
+  store.workingHours = normalizeWeekHours(days);
   persist();
   return store.workingHours;
 }
@@ -992,42 +1053,91 @@ function listStaffSlotsForDay({ staffId, date, blockMinutes, ignoreHolds = false
   purgeExpiredHolds();
   const day = new Date(`${date}T12:00:00`);
   if (Number.isNaN(day.getTime())) fail("تاريخ غير صالح");
-  const hours = resolveHoursForStaff(staffId, date);
-  if (!hours || hours.isOpen === false) return [];
 
-  const open = toMinutes(hours.opensAt);
-  const close = toMinutes(hours.closesAt);
-  if (!(close > open)) return [];
-  const blocked = [];
-  if (hours.breakEnabled && hours.breakStartsAt && hours.breakEndsAt) {
-    blocked.push([toMinutes(hours.breakStartsAt), toMinutes(hours.breakEndsAt)]);
-  }
-  store.appointments
-    .filter((item) => item.date === date && item.staffId === staffId && item.status !== "cancelled")
-    .forEach((item) => {
-      const start = toMinutes(item.time);
-      blocked.push([start, start + appointmentBlockMinutes(item)]);
-    });
-  for (const range of extraBlocked) {
-    if (Array.isArray(range) && range.length >= 2) blocked.push([Number(range[0]), Number(range[1])]);
-  }
-  if (!ignoreHolds) {
-    for (const [key, expiresAt] of slotHolds.entries()) {
-      if (expiresAt <= Date.now()) continue;
-      const [holdStaff, holdDate, holdTime] = key.split("|");
-      if (holdStaff === staffId && holdDate === date) {
-        const start = toMinutes(holdTime);
-        blocked.push([start, start + blockMinutes]);
+  const collectAppointmentsAndHolds = (hoursContextDate) => {
+    const blocked = [];
+    store.appointments
+      .filter((item) => item.date === hoursContextDate && item.staffId === staffId && item.status !== "cancelled")
+      .forEach((item) => {
+        const start = toMinutes(item.time);
+        blocked.push([start, start + appointmentBlockMinutes(item)]);
+      });
+    if (!ignoreHolds) {
+      for (const [key, expiresAt] of slotHolds.entries()) {
+        if (expiresAt <= Date.now()) continue;
+        const [holdStaff, holdDate, holdTime] = key.split("|");
+        if (holdStaff === staffId && holdDate === hoursContextDate) {
+          const start = toMinutes(holdTime);
+          blocked.push([start, start + blockMinutes]);
+        }
       }
+    }
+    for (const range of extraBlocked) {
+      if (Array.isArray(range) && range.length >= 2) blocked.push([Number(range[0]), Number(range[1])]);
+    }
+    return blocked;
+  };
+
+  const pushSlots = (windowStart, windowEnd, blocked) => {
+    const out = [];
+    if (!(windowEnd > windowStart)) return out;
+    for (let cursor = windowStart; cursor + blockMinutes <= windowEnd; cursor += blockMinutes) {
+      const end = cursor + blockMinutes;
+      const hitsBlock = blocked.some(([start, stop]) => rangesOverlap(cursor, end, start, stop));
+      if (!hitsBlock) out.push(fromMinutes(cursor));
+    }
+    return out;
+  };
+
+  const slots = [];
+  const seen = new Set();
+
+  // 1) Shift that starts on this calendar date
+  const hours = resolveHoursForStaff(staffId, date);
+  if (hours && hours.isOpen !== false) {
+    const open = toMinutes(hours.opensAt);
+    const close = toMinutes(hours.closesAt);
+    const blocked = [
+      ...collectAppointmentsAndHolds(date),
+      ...(shiftHours.isOvernightShift(hours.opensAt, hours.closesAt)
+        ? shiftHours.simplifyBreakBlocks(hours, "evening")
+        : shiftHours.simplifyBreakBlocks(hours, "day"))
+    ];
+    if (shiftHours.isOvernightShift(hours.opensAt, hours.closesAt)) {
+      pushSlots(open, 1440, blocked).forEach((time) => {
+        if (!seen.has(time)) {
+          seen.add(time);
+          slots.push(time);
+        }
+      });
+    } else if (close > open) {
+      pushSlots(open, close, blocked).forEach((time) => {
+        if (!seen.has(time)) {
+          seen.add(time);
+          slots.push(time);
+        }
+      });
     }
   }
 
-  const slots = [];
-  for (let cursor = open; cursor + blockMinutes <= close; cursor += blockMinutes) {
-    const end = cursor + blockMinutes;
-    const hitsBlock = blocked.some(([start, stop]) => rangesOverlap(cursor, end, start, stop));
-    if (!hitsBlock) slots.push(fromMinutes(cursor));
+  // 2) Overnight continuation from previous calendar date into this morning
+  const prevDate = shiftHours.addCalendarDays(date, -1);
+  const prevHours = resolveHoursForStaff(staffId, prevDate);
+  if (prevHours && prevHours.isOpen !== false && shiftHours.isOvernightShift(prevHours.opensAt, prevHours.closesAt)) {
+    const close = toMinutes(prevHours.closesAt);
+    const blocked = [
+      ...collectAppointmentsAndHolds(date),
+      ...shiftHours.simplifyBreakBlocks(prevHours, "morning")
+    ];
+    pushSlots(0, close, blocked).forEach((time) => {
+      if (!seen.has(time)) {
+        seen.add(time);
+        slots.push(time);
+      }
+    });
   }
+
+  slots.sort();
   return slots;
 }
 
@@ -1441,6 +1551,7 @@ module.exports = {
   createStaff,
   updateStaff,
   deleteStaff,
+  assertStaffProFeatureClosed,
   listServiceCategories,
   createServiceCategory,
   updateServiceCategory,

@@ -19,6 +19,15 @@ import { getClerkLocalization } from "./authI18n";
 import { MoneyInput, SearchableMultiSelect, SearchableSelect, digitsPhone, lettersOnly, toMoneyNumber } from "./uiFields.jsx";
 import { jobTitlesForTemplate } from "./jobTitles";
 import { KeyboardSpacer, useKeyboardInset } from "./useKeyboardInset.jsx";
+import {
+  openCategoryQuickCreate,
+  openServiceQuickCreate,
+  useQuickCreateStack
+} from "./quickCreateFlow.jsx";
+import { WeekScheduleTable, ensureWeekHours, validateWeekHours } from "./WeekScheduleTable.jsx";
+import { SaveFeedbackProvider, confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
+import { StaffDetailView } from "./StaffDetailView.jsx";
+import { StaffShiftsBoard, StaffStatsBar, colorForStaffId } from "./StaffShiftsBoard.jsx";
 
 const NAV = [
   { id: "overview", mark: "لوحة" },
@@ -113,10 +122,47 @@ function useAppointments() {
 }
 
 function Drawer({ title, open, onClose, children }) {
+  const [width, setWidth] = useState(() => {
+    const stored = Number(localStorage.getItem("maw3ed.drawerWidth"));
+    return Number.isFinite(stored) && stored >= 360 && stored <= 720 ? stored : 440;
+  });
+  const [resizing, setResizing] = useState(false);
+
+  useEffect(() => {
+    if (!resizing) return undefined;
+    const onMove = (event) => {
+      const rtl = document.documentElement.dir === "rtl";
+      const next = rtl ? window.innerWidth - event.clientX : event.clientX;
+      setWidth(Math.min(720, Math.max(360, Math.round(next))));
+    };
+    const onUp = () => setResizing(false);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [resizing]);
+
+  useEffect(() => {
+    localStorage.setItem("maw3ed.drawerWidth", String(width));
+  }, [width]);
+
   if (!open) return null;
   return (
-    <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <aside className="drawer-panel" role="dialog" aria-modal="true">
+    <div className={`drawer-backdrop${resizing ? " is-resizing" : ""}`} onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <aside className="drawer-panel" role="dialog" aria-modal="true" style={{ width: `min(${width}px, 100%)` }}>
+        <button
+          type="button"
+          className="drawer-resize"
+          aria-label="سحب لتغيير عرض اللوحة"
+          title="اسحب لتغيير العرض"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setResizing(true);
+          }}
+        />
         <header><h3>{title}</h3><button type="button" onClick={onClose} aria-label="close">✕</button></header>
         <div className="drawer-body">{children}</div>
       </aside>
@@ -144,10 +190,15 @@ function CustomersView({ ops, reload, locale }) {
 
   const submit = async (event) => {
     event.preventDefault();
-    await api.post("/api/ops/customers", form);
-    setOpen(false);
-    setForm({ firstName: "", lastName: "", phone: "", email: "", categoryId: "cat-new" });
-    reload();
+    try {
+      await api.post("/api/ops/customers", form);
+      setOpen(false);
+      setForm({ firstName: "", lastName: "", phone: "", email: "", categoryId: "cat-new" });
+      reload();
+      confirmSaved("تم حفظ العميل");
+    } catch (error) {
+      confirmSaveFailed("تعذر حفظ العميل", error.message);
+    }
   };
 
   return (
@@ -192,13 +243,14 @@ function CustomersView({ ops, reload, locale }) {
   );
 }
 
-function StaffView({ ops, reload, locale }) {
+function StaffView({ ops, reload, locale, appointments, reloadAppointments, openStaffId, openStaffSection, onOpenStaff, onClearStaff }) {
   const emptyForm = {
     firstName: "",
     lastName: "",
     phone: "",
     title: "",
     avatarUrl: "",
+    servicePlace: "",
     serviceCategoryId: "",
     serviceIds: [],
     active: true,
@@ -208,7 +260,7 @@ function StaffView({ ops, reload, locale }) {
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  const quickCreate = useQuickCreateStack();
   const categories = ops?.serviceCategories || [];
   const allServices = ops?.services || [];
   const templateId = ops?.activity?.templateId || "custom";
@@ -224,13 +276,49 @@ function StaffView({ ops, reload, locale }) {
     (service) => selectedCategory && service.categoryId === selectedCategory.id && service.active !== false
   );
   const serviceOptions = servicesInCategory.map((service) => ({ id: service.id, label: service.name }));
+  const detailPerson = (ops?.staff || []).find((person) => person.id === openStaffId) || null;
+
+  const staffPlaceLabel = (person) => {
+    const category = categories.find((item) => item.id === person.serviceCategoryId);
+    const place = String(person.servicePlace || "").trim();
+    if (place && category?.name) return `${place} · ${category.name}`;
+    if (place) return place;
+    if (category?.name) return category.name;
+    const linked = allServices.find(
+      (service) => (person.serviceIds || []).includes(service.id) || (service.providerIds || []).includes(person.id)
+    );
+    const fromService = linked && categories.find((item) => item.id === linked.categoryId);
+    return fromService?.name || "بدون مكان خدمة";
+  };
+
+  const createMissingCategory = async (name) => {
+    const created = await openCategoryQuickCreate(quickCreate, { initialName: name });
+    if (!created?.id) return;
+    reload();
+    setForm((current) => ({ ...current, serviceCategoryId: created.id, serviceIds: [] }));
+  };
+
+  const createMissingService = async (name) => {
+    if (!selectedCategory?.id) {
+      window.alert("اختر فئة خدمة أولاً قبل إضافة خدمة جديدة");
+      return;
+    }
+    const created = await openServiceQuickCreate(quickCreate, {
+      initialName: name,
+      categoryId: selectedCategory.id,
+      categoryName: selectedCategory.name
+    });
+    if (!created?.id) return;
+    reload();
+    setForm((current) => ({
+      ...current,
+      serviceIds: [...new Set([...(current.serviceIds || []), created.id])]
+    }));
+  };
 
   const openCreate = () => {
     setEditingId("");
-    setForm({
-      ...emptyForm,
-      serviceCategoryId: categories[0]?.id || ""
-    });
+    setForm({ ...emptyForm });
     setOpen(true);
   };
   const openEdit = (person) => {
@@ -243,11 +331,12 @@ function StaffView({ ops, reload, locale }) {
       phone: person.phone || "",
       title: person.title || "",
       avatarUrl: person.avatarUrl || "",
-      serviceCategoryId: firstService?.categoryId || categories[0]?.id || "",
+      servicePlace: person.servicePlace || "",
+      serviceCategoryId: person.serviceCategoryId || firstService?.categoryId || "",
       serviceIds: linkedIds,
       active: person.active !== false,
       useBusinessHours: person.useBusinessHours !== false,
-      workingHours: person.workingHours || (ops?.schedule?.general || []).map((day) => ({ ...day }))
+      workingHours: ensureWeekHours(person.workingHours || ops?.schedule?.general || [])
     });
     setOpen(true);
   };
@@ -280,11 +369,20 @@ function StaffView({ ops, reload, locale }) {
       window.alert("حقول الاسم لا تقبل الأرقام");
       return;
     }
+    if (form.useBusinessHours === false) {
+      const hoursError = validateWeekHours(form.workingHours);
+      if (hoursError) {
+        window.alert(hoursError);
+        return;
+      }
+    }
     const payload = {
       ...form,
       name: `${form.firstName} ${form.lastName}`.trim(),
       title: String(form.title).trim(),
-      serviceIds: form.serviceIds || []
+      serviceCategoryId: form.serviceCategoryId || "",
+      serviceIds: (form.serviceIds || []).filter(Boolean),
+      workingHours: form.useBusinessHours === false ? ensureWeekHours(form.workingHours) : null
     };
     try {
       if (editingId) await api.patch(`/api/ops/staff/${editingId}`, payload);
@@ -293,48 +391,93 @@ function StaffView({ ops, reload, locale }) {
       setForm(emptyForm);
       setEditingId("");
       reload();
+      confirmSaved(editingId ? "تم تحديث الموظف" : "تم حفظ الموظف");
     } catch (error) {
-      window.alert(error.message || "تعذر حفظ الموظف");
+      confirmSaveFailed("تعذر حفظ الموظف", error.message);
     }
   };
   return (
-    <section className="ops-page">
-      <div className="ops-header">
-        <div><h1>{t(locale, "staff")}</h1><p>الموظفون ومقدمو الخدمات وساعات العمل</p></div>
-        <button className="primary-button" type="button" onClick={openCreate}>+ إضافة موظف</button>
-      </div>
-      <div className="data-table panel">
-        {(ops?.staff || []).map((person) => (
-          <div className="table-row staff-row" key={person.id}>
-            <div className="avatar" style={person.avatarUrl ? { backgroundImage: `url(${person.avatarUrl})`, backgroundSize: "cover" } : undefined}>
-              {!person.avatarUrl && person.name.charAt(0)}
-            </div>
-            <div>
-              <b>{person.name}</b>
-              <small>{person.title}{person.phone ? ` · ${person.phone}` : ""} · {person.useBusinessHours === false ? "ساعات خاصة" : "ساعات المنشأة"}</small>
-            </div>
-            <span>{person.servicesCount || 0} خدمات</span>
-            <div className="row-actions">
-              <button type="button" className="edit-button" onClick={() => openEdit(person)}>تعديل</button>
-              <button
-                type="button"
-                className="danger-button"
-                onClick={async () => {
-                  if (!window.confirm(`حذف الموظف «${person.name}»؟`)) return;
-                  try {
-                    await api.del(`/api/ops/staff/${person.id}`);
-                    reload();
-                  } catch (error) {
-                    window.alert(error.message || "تعذر الحذف");
-                  }
-                }}
-              >
-                حذف
-              </button>
-            </div>
+    <>
+      {detailPerson ? (
+        <StaffDetailView
+          person={detailPerson}
+          ops={ops}
+          appointments={appointments}
+          locale={locale}
+          section={openStaffSection || "history"}
+          onSectionChange={(section) => onOpenStaff?.(detailPerson.id, section)}
+          onBack={() => onClearStaff?.()}
+          onEdit={() => openEdit(detailPerson)}
+          reload={reload}
+          reloadAppointments={reloadAppointments}
+        />
+      ) : (
+      <section className="ops-page">
+        <div className="ops-header">
+          <div><h1>{t(locale, "staff")}</h1><p>الموظفون ومقدمو الخدمات وساعات العمل</p></div>
+          <button className="primary-button" type="button" onClick={openCreate}>+ إضافة موظف</button>
+        </div>
+
+        <StaffStatsBar ops={ops} />
+
+        <StaffShiftsBoard ops={ops} onOpenStaff={onOpenStaff} />
+
+        <div className="ops-header staff-list-head">
+          <div>
+            <h2>قائمة الموظفين</h2>
+            <p className="muted">تفاصيل مقروءة مع مكان الخدمة والربط بالأقسام</p>
           </div>
-        ))}
-      </div>
+        </div>
+        <div className="data-table panel staff-list-panel">
+          {(ops?.staff || []).map((person) => (
+            <div className="table-row staff-row" key={person.id}>
+              <button type="button" className="staff-row-main" onClick={() => onOpenStaff?.(person.id, "history")}>
+                <div
+                  className="avatar"
+                  style={{
+                    ...(person.avatarUrl ? { backgroundImage: `url(${person.avatarUrl})`, backgroundSize: "cover" } : {}),
+                    boxShadow: `inset 0 0 0 2px ${colorForStaffId(person.id)}33`
+                  }}
+                >
+                  {!person.avatarUrl && person.name.charAt(0)}
+                </div>
+                <div className="staff-row-copy">
+                  <b>{person.name}</b>
+                  <small className="staff-row-meta">
+                    <span>{person.title || "بدون مهنة"}</span>
+                    {person.phone ? <span>{person.phone}</span> : null}
+                    <span>{person.useBusinessHours === false ? "ساعات خاصة" : "ساعات المنشأة"}</span>
+                  </small>
+                  <span className="staff-row-place">مكان الخدمة: {staffPlaceLabel(person)}</span>
+                </div>
+                <span className="staff-row-count">{person.servicesCount || 0} خدمات</span>
+              </button>
+              <div className="row-actions">
+                <button type="button" className="ghost-button" onClick={() => onOpenStaff?.(person.id, "history")}>الملف</button>
+                <button type="button" className="edit-button" onClick={() => openEdit(person)}>تعديل</button>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={async () => {
+                    if (!window.confirm(`حذف الموظف «${person.name}»؟`)) return;
+                    try {
+                      await api.del(`/api/ops/staff/${person.id}`);
+                      if (openStaffId === person.id) onClearStaff?.();
+                      reload();
+                    } catch (error) {
+                      window.alert(error.message || "تعذر الحذف");
+                    }
+                  }}
+                >
+                  حذف
+                </button>
+              </div>
+            </div>
+          ))}
+          {!(ops?.staff || []).length ? <div className="empty-state">لا يوجد موظفون بعد</div> : null}
+        </div>
+      </section>
+      )}
       <Drawer title={editingId ? "تعديل موظف" : "موظف جديد"} open={open} onClose={() => setOpen(false)}>
         <form className="stack-form" onSubmit={submit}>
           <div className="form-row">
@@ -374,6 +517,13 @@ function StaffView({ ops, reload, locale }) {
               placeholder="ابحث أو أضف مهنة…"
             />
           </label>
+          <label>مكان الخدمة
+            <input
+              value={form.servicePlace || ""}
+              onChange={(e) => setForm({ ...form, servicePlace: e.target.value })}
+              placeholder="مثال: عيادة 3 · الدور الأول · فرع المعادي"
+            />
+          </label>
           <label>صورة الموظف (اختياري)
             <div className="staff-avatar-upload">
               <div className="avatar lg" style={form.avatarUrl ? { backgroundImage: `url(${form.avatarUrl})`, backgroundSize: "cover" } : undefined}>
@@ -390,22 +540,42 @@ function StaffView({ ops, reload, locale }) {
             <SearchableSelect
               options={categoryOptions}
               value={selectedCategory?.name || ""}
+              noneLabel="بلا اختيار"
               onChange={(name) => {
+                if (!name) {
+                  setForm({ ...form, serviceCategoryId: "", serviceIds: [] });
+                  return;
+                }
                 const category = categories.find((item) => item.name === name);
-                setForm({ ...form, serviceCategoryId: category?.id || "" });
+                const nextCategoryId = category?.id || "";
+                const keepIds = nextCategoryId
+                  ? form.serviceIds.filter((id) => allServices.some((service) => service.id === id && service.categoryId === nextCategoryId))
+                  : [];
+                setForm({ ...form, serviceCategoryId: nextCategoryId, serviceIds: keepIds });
               }}
-              placeholder="اختر فئة…"
+              onCreateMissing={createMissingCategory}
+              createMissingLabel="إضافة الفئة"
+              notFoundMessage="لا توجد فئة بهذا الاسم"
+              placeholder="بلا اختيار"
             />
           </label>
           <label>الخدمات (يمكن اختيار أكثر من خدمة)
             <SearchableMultiSelect
               options={serviceOptions}
               value={form.serviceIds.filter((id) => servicesInCategory.some((service) => service.id === id))}
+              noneLabel="بلا اختيار"
               onChange={(idsInCategory) => {
+                if (!selectedCategory) {
+                  setForm({ ...form, serviceIds: [] });
+                  return;
+                }
                 const keepFromOther = form.serviceIds.filter((id) => !servicesInCategory.some((service) => service.id === id));
                 setForm({ ...form, serviceIds: [...new Set([...keepFromOther, ...idsInCategory])] });
               }}
-              placeholder={selectedCategory ? "ابحث واختر خدمات هذه الفئة…" : "اختر فئة أولاً"}
+              onCreateMissing={selectedCategory ? createMissingService : null}
+              createMissingLabel="إضافة الخدمة"
+              notFoundMessage="لا توجد خدمة بهذا الاسم"
+              placeholder={selectedCategory ? "بلا اختيار" : "اختر فئة أولاً"}
             />
           </label>
           {form.serviceIds.length > 0 && (
@@ -419,51 +589,26 @@ function StaffView({ ops, reload, locale }) {
               onChange={(e) => setForm({
                 ...form,
                 useBusinessHours: e.target.checked,
-                workingHours: e.target.checked ? form.workingHours : (form.workingHours || (ops?.schedule?.general || []).map((day) => ({ ...day })))
+                workingHours: e.target.checked
+                  ? form.workingHours
+                  : ensureWeekHours(form.workingHours || ops?.schedule?.general || [])
               })}
             /> استخدام ساعات عمل المنشأة
           </label>
           {form.useBusinessHours === false && (
-            <div className="panel schedule-table" style={{ marginTop: 8 }}>
-              {(form.workingHours || []).map((day, index) => (
-                <div className="schedule-row" key={day.weekday ?? index}>
-                  <b>{dayNames[index]}</b>
-                  <label className="switch">
-                    <input
-                      type="checkbox"
-                      checked={day.isOpen !== false}
-                      onChange={(e) => setForm((current) => ({
-                        ...current,
-                        workingHours: current.workingHours.map((item, i) => i === index ? { ...item, isOpen: e.target.checked } : item)
-                      }))}
-                    /><i />
-                  </label>
-                  <input
-                    type="time"
-                    value={day.opensAt || "09:00"}
-                    disabled={day.isOpen === false}
-                    onChange={(e) => setForm((current) => ({
-                      ...current,
-                      workingHours: current.workingHours.map((item, i) => i === index ? { ...item, opensAt: e.target.value } : item)
-                    }))}
-                  />
-                  <input
-                    type="time"
-                    value={day.closesAt || "21:00"}
-                    disabled={day.isOpen === false}
-                    onChange={(e) => setForm((current) => ({
-                      ...current,
-                      workingHours: current.workingHours.map((item, i) => i === index ? { ...item, closesAt: e.target.value } : item)
-                    }))}
-                  />
-                </div>
-              ))}
+            <div className="panel week-schedule-panel" style={{ marginTop: 8 }}>
+              <p className="muted" style={{ marginTop: 0 }}>ساعات مخصصة لهذا الموظف — تُطبَّق على الحجز والمواعيد.</p>
+              <WeekScheduleTable
+                days={ensureWeekHours(form.workingHours || ops?.schedule?.general || [])}
+                onChange={(next) => setForm((current) => ({ ...current, workingHours: next }))}
+              />
             </div>
           )}
           <div className="form-actions"><button className="primary-button">{t(locale, "save")}</button></div>
         </form>
       </Drawer>
-    </section>
+      {quickCreate.host}
+    </>
   );
 }
 
@@ -561,13 +706,18 @@ function ServicesView({ ops, reload, locale }) {
   };
   const submitCategory = async (event) => {
     event.preventDefault();
-    if (editingCategoryId) await api.patch(`/api/ops/service-categories/${editingCategoryId}`, { name: categoryName });
-    else {
-      const created = await api.post("/api/ops/service-categories", { name: categoryName });
-      if (created?.category?.id) setCategoryId(created.category.id);
+    try {
+      if (editingCategoryId) await api.patch(`/api/ops/service-categories/${editingCategoryId}`, { name: categoryName });
+      else {
+        const created = await api.post("/api/ops/service-categories", { name: categoryName });
+        if (created?.category?.id) setCategoryId(created.category.id);
+      }
+      setCategoryOpen(false);
+      reload();
+      confirmSaved(editingCategoryId ? "تم تحديث الفئة" : "تم حفظ الفئة");
+    } catch (error) {
+      confirmSaveFailed("تعذر حفظ الفئة", error.message);
     }
-    setCategoryOpen(false);
-    reload();
   };
   const toggleCategoryActive = async (category) => {
     const next = category.active === false || category.enabled === false;
@@ -620,8 +770,9 @@ function ServicesView({ ops, reload, locale }) {
       setOpen(false);
       setEditingId("");
       reload();
+      confirmSaved(editingId ? "تم تحديث الخدمة" : "تم حفظ الخدمة");
     } catch (error) {
-      window.alert(error.message || "تعذر حفظ الخدمة");
+      confirmSaveFailed("تعذر حفظ الخدمة", error.message);
     }
   };
   return (
@@ -839,31 +990,47 @@ function ServicesView({ ops, reload, locale }) {
 
 function ScheduleView({ ops, reload, locale }) {
   const [tab, setTab] = useState("general");
-  const [days, setDays] = useState(ops?.schedule?.general || []);
-  useEffect(() => { setDays(ops?.schedule?.general || []); }, [ops]);
-  const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+  const [days, setDays] = useState(() => ensureWeekHours(ops?.schedule?.general || []));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setDays(ensureWeekHours(ops?.schedule?.general || [])); }, [ops]);
   const save = async () => {
-    await api.put("/api/ops/working-hours", { days });
-    reload();
+    const hoursError = validateWeekHours(days);
+    if (hoursError) {
+      window.alert(hoursError);
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.put("/api/ops/working-hours", { days: ensureWeekHours(days) });
+      reload();
+      confirmSaved("تم حفظ جدول العمل");
+    } catch (error) {
+      confirmSaveFailed("تعذر حفظ جدول العمل", error.message);
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <section className="ops-page">
-      <div className="ops-header"><div><h1>{t(locale, "schedule")}</h1><p>ساعات المنشأة · أيام مغلقة · أيام محددة (تُطبَّق على الحجز العام)</p></div>{tab === "general" && <button className="primary-button" type="button" onClick={save}>{t(locale, "save")}</button>}</div>
+      <div className="ops-header">
+        <div>
+          <h1>{t(locale, "schedule")}</h1>
+          <p>ساعات المنشأة · أيام مغلقة · أيام محددة (تُطبَّق على الحجز العام)</p>
+        </div>
+        {tab === "general" && (
+          <button className="primary-button" type="button" onClick={save} disabled={saving}>
+            {saving ? "جارٍ الحفظ…" : t(locale, "save")}
+          </button>
+        )}
+      </div>
       <div className="tabs">
         {[["general", "عام"], ["closed", "الأيام المغلقة"], ["specific", "أيام محددة"]].map(([id, label]) => (
           <button key={id} type="button" className={tab === id ? "tab active" : "tab"} onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
       {tab === "general" && (
-        <div className="panel schedule-table">
-          {days.map((day, index) => (
-            <div className="schedule-row" key={day.weekday}>
-              <b>{dayNames[index]}</b>
-              <label className="switch"><input type="checkbox" checked={day.isOpen} onChange={(e) => setDays((current) => current.map((item, i) => i === index ? { ...item, isOpen: e.target.checked } : item))} /><i /></label>
-              <input type="time" value={day.opensAt} disabled={!day.isOpen} onChange={(e) => setDays((current) => current.map((item, i) => i === index ? { ...item, opensAt: e.target.value } : item))} />
-              <input type="time" value={day.closesAt} disabled={!day.isOpen} onChange={(e) => setDays((current) => current.map((item, i) => i === index ? { ...item, closesAt: e.target.value } : item))} />
-            </div>
-          ))}
+        <div className="panel week-schedule-panel">
+          <WeekScheduleTable days={days} onChange={setDays} />
         </div>
       )}
       {tab === "closed" && (
@@ -900,8 +1067,13 @@ function BookingPageView({ ops, reload, locale }) {
   useEffect(() => setDraft(page), [ops]);
   const save = async (event) => {
     event.preventDefault();
-    await api.put("/api/ops/booking-page", draft);
-    reload();
+    try {
+      await api.put("/api/ops/booking-page", draft);
+      reload();
+      confirmSaved("تم حفظ صفحة الحجز");
+    } catch (error) {
+      confirmSaveFailed("تعذر حفظ صفحة الحجز", error.message);
+    }
   };
   const onLogoFile = async (event) => {
     const file = event.target.files?.[0];
@@ -1095,9 +1267,14 @@ function ExpensesView({ ops, reload, locale }) {
   const [form, setForm] = useState({ name: "", amount: 0, category: "rent", date: new Date().toISOString().slice(0, 10), description: "", recurrence: "none" });
   const submit = async (event) => {
     event.preventDefault();
-    await api.post("/api/ops/expenses", form);
-    setOpen(false);
-    reload();
+    try {
+      await api.post("/api/ops/expenses", form);
+      setOpen(false);
+      reload();
+      confirmSaved("تم حفظ المصروف");
+    } catch (error) {
+      confirmSaveFailed("تعذر حفظ المصروف", error.message);
+    }
   };
   return (
     <section className="ops-page">
@@ -1191,8 +1368,13 @@ function NotificationsView({ ops, reload, locale }) {
   const [draft, setDraft] = useState(ops?.notifications || {});
   useEffect(() => setDraft(ops?.notifications || {}), [ops]);
   const save = async () => {
-    await api.put("/api/ops/notifications", draft);
-    reload();
+    try {
+      await api.put("/api/ops/notifications", draft);
+      reload();
+      confirmSaved("تم حفظ إعدادات التنبيهات");
+    } catch (error) {
+      confirmSaveFailed("تعذر حفظ التنبيهات", error.message);
+    }
   };
   return (
     <section className="ops-page">
@@ -1223,7 +1405,21 @@ function PreferencesView({ ops, reload, locale }) {
   return (
     <section className="ops-page">
       <div className="ops-header"><div><h1>{t(locale, "preferences")}</h1><p>عرض التقويم</p></div>
-        <button className="primary-button" type="button" onClick={async () => { await api.put("/api/ops/calendar-preferences", draft); reload(); }}>{t(locale, "save")}</button>
+        <button
+          className="primary-button"
+          type="button"
+          onClick={async () => {
+            try {
+              await api.put("/api/ops/calendar-preferences", draft);
+              reload();
+              confirmSaved("تم حفظ التفضيلات");
+            } catch (error) {
+              confirmSaveFailed("تعذر حفظ التفضيلات", error.message);
+            }
+          }}
+        >
+          {t(locale, "save")}
+        </button>
       </div>
       <div className="panel stack-form">
         <label className="check"><input type="checkbox" checked={!!draft.showBusinessHoursOnly} onChange={(e) => setDraft({ ...draft, showBusinessHoursOnly: e.target.checked })} /> إظهار ساعات العمل فقط</label>
@@ -1323,6 +1519,8 @@ function ActivityProfileBar({ ops, reload, locale }) {
 function App() {
   const [locale, setLocale] = useState(localStorage.getItem("maw3ed.locale") || "ar");
   const [view, setView] = useState("overview");
+  const [openStaffId, setOpenStaffId] = useState("");
+  const [openStaffSection, setOpenStaffSection] = useState("history");
   const [moreOpen, setMoreOpen] = useState(false);
   const [role, setRole] = useState(localStorage.getItem("maw3ed.role") || "owner");
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -1398,8 +1596,24 @@ function App() {
       setMoreOpen((value) => !value);
       return;
     }
+    if (id !== "staff") {
+      setOpenStaffId("");
+      setOpenStaffSection("history");
+    }
     setView(id);
     setMoreOpen(false);
+  };
+
+  const openStaff = (staffId, section = "history") => {
+    setOpenStaffId(staffId);
+    setOpenStaffSection(section || "history");
+    setView("staff");
+    setMoreOpen(false);
+  };
+
+  const clearStaff = () => {
+    setOpenStaffId("");
+    setOpenStaffSection("history");
   };
 
   const switchWorkspace = (id) => {
@@ -1437,7 +1651,19 @@ function App() {
       case "overview": return <OverviewView ops={ops} appointments={appointments} locale={locale} onNavigate={navigate} />;
       case "calendar": return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={() => { reloadAppointments(); reload(); }} />;
       case "customers": return <CustomersView ops={ops} reload={reload} locale={locale} />;
-      case "staff": return <StaffView ops={ops} reload={reload} locale={locale} />;
+      case "staff": return (
+        <StaffView
+          ops={ops}
+          reload={reload}
+          locale={locale}
+          appointments={appointments}
+          reloadAppointments={reloadAppointments}
+          openStaffId={openStaffId}
+          openStaffSection={openStaffSection}
+          onOpenStaff={openStaff}
+          onClearStaff={clearStaff}
+        />
+      );
       case "services": return <ServicesView ops={ops} reload={reload} locale={locale} />;
       case "schedule": return <ScheduleView ops={ops} reload={reload} locale={locale} />;
       case "bookingPage": return <BookingPageView ops={ops} reload={reload} locale={locale} />;
@@ -1680,7 +1906,7 @@ function ClerkRoot({ publishableKey }) {
 
 function KeyboardInsetHost({ children }) {
   useKeyboardInset();
-  return children;
+  return <SaveFeedbackProvider>{children}</SaveFeedbackProvider>;
 }
 
 function Root() {

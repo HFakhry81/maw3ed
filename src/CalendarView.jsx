@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { t } from "./i18n";
+import { SmartTimePicker } from "./SmartTimePicker.jsx";
+import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 
 function startOfWeek(date) {
   const value = new Date(date);
@@ -86,8 +88,9 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
       setOpen(false);
       setForm((current) => ({ ...current, customerName: "", notes: "" }));
       onCreated?.();
+      confirmSaved("تم حفظ الموعد");
     } catch (error) {
-      alert(error.message);
+      confirmSaveFailed("تعذر حفظ الموعد", error.message);
     } finally {
       setBusy(false);
     }
@@ -160,7 +163,14 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
             </datalist>
           </label>
           <label>التاريخ<input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
-          <label>وقت البدء<input type="time" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} /></label>
+          <label>وقت البدء
+            <SmartTimePicker
+              required
+              value={form.time || "09:00"}
+              onChange={(time) => setForm({ ...form, time })}
+              aria-label="وقت بدء الموعد"
+            />
+          </label>
           <label>الخدمة<select required value={form.serviceId} onChange={(e) => {
             const serviceId = e.target.value;
             const providers = (services.find((service) => service.id === serviceId)?.providerIds || []);

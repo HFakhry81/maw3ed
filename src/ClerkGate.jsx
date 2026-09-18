@@ -302,12 +302,30 @@ export function AuthLanding({ locale = "ar", onLocaleChange }) {
 export function AuthSessionGate({ locale, onLocaleChange, children }) {
   const { isLoaded, isSignedIn } = useAuth();
   const copy = getAuthCopy(locale);
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded) {
+      setSlow(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setSlow(true), 8000);
+    return () => window.clearTimeout(timer);
+  }, [isLoaded]);
 
   if (!isLoaded) {
     return (
       <div className="auth-landing">
         <div className="auth-landing-card">
           <p>{copy.checking}</p>
+          {slow ? (
+            <>
+              <p className="muted">يستغرق التحميل وقتاً أطول من المعتاد. جرّب إعادة التحميل أو التحقق من الاتصال.</p>
+              <button type="button" className="primary-button auth-cta" onClick={() => window.location.reload()}>
+                إعادة تحميل الصفحة
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
     );

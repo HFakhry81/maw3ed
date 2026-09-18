@@ -135,6 +135,14 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         return true;
       }
 
+      const staffProMatch = requested.match(/^\/api\/ops\/staff\/([^/]+)\/(commission|payroll|reviews)$/);
+      if (staffProMatch && (req.method === "GET" || req.method === "POST")) {
+        ops.assertStaffProFeatureClosed(
+          staffProMatch[2] === "commission" ? "العمولة" : staffProMatch[2] === "payroll" ? "كشوف المرتبات" : "المراجعات"
+        );
+        return true;
+      }
+
       if (requested === "/api/ops/service-categories" && req.method === "GET") {
         sendJson(res, 200, { ok: true, categories: ops.listServiceCategories() });
         return true;

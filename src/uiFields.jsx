@@ -96,7 +96,8 @@ function ScrollableMenu({ children, className = "" }) {
 /**
  * Searchable single-select.
  * Trigger shows the selected value; opening always lists all options until the user types to filter.
- * (Previously the selected label was used as the filter query, so other categories never appeared.)
+ * Pass noneLabel (e.g. «بلا اختيار») to allow clearing to an empty value.
+ * Pass onCreateMissing to offer a create action when the search has no matches.
  */
 export function SearchableSelect({
   options = [],
@@ -105,12 +106,17 @@ export function SearchableSelect({
   placeholder = "ابحث أو اختر…",
   allowCustom = false,
   required = false,
-  emptyLabel = "لا نتائج"
+  emptyLabel = "لا نتائج",
+  noneLabel = "",
+  onCreateMissing = null,
+  createMissingLabel = "إضافة",
+  notFoundMessage = "لا توجد نتيجة مطابقة"
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const searchRef = useRef(null);
+  const hasNone = Boolean(noneLabel);
 
   useOutsideClose(rootRef, open, setOpen);
 
@@ -133,11 +139,15 @@ export function SearchableSelect({
     setQuery("");
   };
 
-  const display = value || "";
+  const trimmedQuery = String(query || "").trim();
+  const display = value ? value : (hasNone ? noneLabel : "");
+  const showNoneInList = hasNone && !trimmedQuery;
+  const showCreateMissing = Boolean(onCreateMissing) && !filtered.length && Boolean(trimmedQuery);
+  const showAllowCustom = allowCustom && !onCreateMissing && !filtered.length && Boolean(trimmedQuery);
 
   return (
     <div className={`searchable-select${open ? " is-open" : ""}`} ref={rootRef}>
-      {required ? <input type="text" className="searchable-select-required" value={display} required readOnly tabIndex={-1} aria-hidden="true" /> : null}
+      {required ? <input type="text" className="searchable-select-required" value={value || ""} required readOnly tabIndex={-1} aria-hidden="true" /> : null}
       <button
         type="button"
         className="searchable-select-trigger"
@@ -145,7 +155,7 @@ export function SearchableSelect({
         aria-haspopup="listbox"
         onClick={() => setOpen((v) => !v)}
       >
-        <span className={display ? "" : "is-placeholder"}>{display || placeholder}</span>
+        <span className={value ? "" : "is-placeholder"}>{display || placeholder}</span>
         <span className="searchable-select-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
       {open && (
@@ -153,19 +163,38 @@ export function SearchableSelect({
           <input
             ref={searchRef}
             type="search"
+            className="searchable-select-search"
             value={query}
-            placeholder={allowCustom ? "ابحث أو اكتب لإضافة…" : "ابحث في القائمة…"}
+            placeholder={allowCustom && !onCreateMissing ? "ابحث أو اكتب لإضافة…" : "ابحث…"}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
                 if (filtered[0]) commit(filtered[0]);
-                else if (allowCustom) commit(String(query || "").trim());
+                else if (showCreateMissing) {
+                  const q = trimmedQuery;
+                  setOpen(false);
+                  setQuery("");
+                  onCreateMissing(q);
+                } else if (showAllowCustom) commit(trimmedQuery);
               }
               if (e.key === "Escape") setOpen(false);
             }}
           />
           <ScrollableMenu>
+            {showNoneInList ? (
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={!value}
+                  className={!value ? "is-selected searchable-select-none" : "searchable-select-none"}
+                  onClick={() => commit("")}
+                >
+                  {noneLabel}
+                </button>
+              </li>
+            ) : null}
             {filtered.map((item) => (
               <li key={item}>
                 <button
@@ -179,18 +208,35 @@ export function SearchableSelect({
                 </button>
               </li>
             ))}
-            {!filtered.length && allowCustom && String(query || "").trim() ? (
+            {showCreateMissing ? (
+              <li className="searchable-select-missing">
+                <p>{notFoundMessage} «{trimmedQuery}»</p>
+                <button
+                  type="button"
+                  className="searchable-select-create-btn"
+                  onClick={() => {
+                    const q = trimmedQuery;
+                    setOpen(false);
+                    setQuery("");
+                    onCreateMissing(q);
+                  }}
+                >
+                  {createMissingLabel}
+                </button>
+              </li>
+            ) : null}
+            {showAllowCustom ? (
               <li>
                 <button
                   type="button"
                   className="searchable-select-create"
-                  onClick={() => commit(String(query).trim())}
+                  onClick={() => commit(trimmedQuery)}
                 >
-                  إضافة «{String(query).trim()}»
+                  إضافة «{trimmedQuery}»
                 </button>
               </li>
             ) : null}
-            {!filtered.length && !(allowCustom && String(query || "").trim()) ? (
+            {!filtered.length && !showCreateMissing && !showAllowCustom ? (
               <li className="searchable-select-empty">{emptyLabel}</li>
             ) : null}
           </ScrollableMenu>
@@ -205,13 +251,18 @@ export function SearchableMultiSelect({
   options = [],
   value = [],
   onChange,
-  placeholder = "ابحث واختر…"
+  placeholder = "ابحث واختر…",
+  noneLabel = "",
+  onCreateMissing = null,
+  createMissingLabel = "إضافة",
+  notFoundMessage = "لا توجد نتيجة مطابقة"
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const searchRef = useRef(null);
   const selected = Array.isArray(value) ? value : [];
+  const hasNone = Boolean(noneLabel);
 
   useOutsideClose(rootRef, open, setOpen);
 
@@ -233,6 +284,16 @@ export function SearchableMultiSelect({
     else onChange([...selected, id]);
   };
 
+  const clearAll = () => {
+    onChange([]);
+    setOpen(false);
+    setQuery("");
+  };
+
+  const trimmedQuery = String(query || "").trim();
+  const showNoneInList = hasNone && !trimmedQuery;
+  const showCreateMissing = Boolean(onCreateMissing) && !filtered.length && Boolean(trimmedQuery);
+
   return (
     <div className={`searchable-select multi${open ? " is-open" : ""}`} ref={rootRef}>
       <button
@@ -243,7 +304,7 @@ export function SearchableMultiSelect({
         onClick={() => setOpen((v) => !v)}
       >
         <span className={selected.length ? "" : "is-placeholder"}>
-          {selected.length ? `${selected.length} محدد` : placeholder}
+          {selected.length ? `${selected.length} محدد` : (hasNone ? noneLabel : placeholder)}
         </span>
         <span className="searchable-select-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
@@ -252,11 +313,34 @@ export function SearchableMultiSelect({
           <input
             ref={searchRef}
             type="search"
+            className="searchable-select-search"
             value={query}
-            placeholder="ابحث في الخدمات…"
+            placeholder="ابحث…"
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && showCreateMissing) {
+                e.preventDefault();
+                const q = trimmedQuery;
+                setOpen(false);
+                setQuery("");
+                onCreateMissing(q);
+              }
+            }}
           />
           <ScrollableMenu>
+            {showNoneInList ? (
+              <li>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={!selected.length}
+                  className={!selected.length ? "is-selected searchable-select-none" : "searchable-select-none"}
+                  onClick={clearAll}
+                >
+                  {noneLabel}
+                </button>
+              </li>
+            ) : null}
             {filtered.map((item) => (
               <li key={item.id}>
                 <label className={`check${selected.includes(item.id) ? " is-selected" : ""}`}>
@@ -265,7 +349,26 @@ export function SearchableMultiSelect({
                 </label>
               </li>
             ))}
-            {!filtered.length && <li className="searchable-select-empty">لا نتائج</li>}
+            {showCreateMissing ? (
+              <li className="searchable-select-missing">
+                <p>{notFoundMessage} «{trimmedQuery}»</p>
+                <button
+                  type="button"
+                  className="searchable-select-create-btn"
+                  onClick={() => {
+                    const q = trimmedQuery;
+                    setOpen(false);
+                    setQuery("");
+                    onCreateMissing(q);
+                  }}
+                >
+                  {createMissingLabel}
+                </button>
+              </li>
+            ) : null}
+            {!filtered.length && !showCreateMissing ? (
+              <li className="searchable-select-empty">لا نتائج</li>
+            ) : null}
           </ScrollableMenu>
         </div>
       )}
