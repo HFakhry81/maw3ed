@@ -271,21 +271,115 @@ function createCustomerCategory(payload) {
 }
 
 function listStaff({ search = "" } = {}) {
+  // Source of truth = service.providerIds; rebuild denormalized staff.serviceIds on read.
+  sanitizeAndSyncStaffServiceLinks();
   const q = search.trim().toLowerCase();
   return store.staff
-    .filter((person) => !q || `${person.name} ${person.title}`.toLowerCase().includes(q))
-    .map((person) => ({
-      ...person,
-      closedDays: Array.isArray(person.closedDays) ? person.closedDays : [],
-      specificDays: Array.isArray(person.specificDays) ? person.specificDays : [],
-      servicesCount: (() => {
-        const linked = new Set([
-          ...(person.serviceIds || []),
-          ...store.services.filter((service) => (service.providerIds || []).includes(person.id)).map((service) => service.id)
-        ]);
-        return linked.size;
-      })()
-    }));
+    .filter((person) => !q || `${person.name} ${person.title} ${person.servicePlace || ""}`.toLowerCase().includes(q))
+    .map((person) => {
+      const serviceIds = serviceIdsLinkedToStaff(person.id);
+      return {
+        ...person,
+        serviceIds,
+        closedDays: Array.isArray(person.closedDays) ? person.closedDays : [],
+        specificDays: Array.isArray(person.specificDays) ? person.specificDays : [],
+        servicesCount: serviceIds.length
+      };
+    });
+}
+
+/** Live link: staff ↔ services only via service.providerIds. */
+function serviceIdsLinkedToStaff(staffId) {
+  return store.services
+    .filter((service) => (service.providerIds || []).includes(staffId))
+    .map((service) => service.id);
+}
+
+function providersForService(service) {
+  const staffById = new Map(store.staff.map((person) => [person.id, person]));
+  return (service.providerIds || [])
+    .map((id) => {
+      const person = staffById.get(id);
+      if (!person) return null;
+      return { id: person.id, name: person.name, title: person.title || "", servicePlace: person.servicePlace || "" };
+    })
+    .filter(Boolean);
+}
+
+function sanitizeAndSyncStaffServiceLinks() {
+  const staffIds = new Set(store.staff.map((person) => person.id));
+  let changed = false;
+  store.services.forEach((service) => {
+    const next = (service.providerIds || []).filter((id) => staffIds.has(id));
+    if (next.length !== (service.providerIds || []).length) {
+      service.providerIds = next;
+      changed = true;
+    }
+  });
+  store.staff.forEach((person) => {
+    const next = serviceIdsLinkedToStaff(person.id);
+    const prev = Array.isArray(person.serviceIds) ? person.serviceIds : [];
+    const same = prev.length === next.length && next.every((id) => prev.includes(id));
+    if (!same) {
+      person.serviceIds = next;
+      changed = true;
+    }
+  });
+  if (changed) persist();
+  return changed;
+}
+
+/** Write staff↔service links by mutating service.providerIds, then resync mirrors. */
+function applyStaffServiceLinks(staffId, serviceIds) {
+  const wanted = new Set((serviceIds || []).map(String).filter(Boolean));
+  store.services.forEach((service) => {
+    const ids = new Set(service.providerIds || []);
+    if (wanted.has(service.id)) ids.add(staffId);
+    else ids.delete(staffId);
+    service.providerIds = [...ids];
+  });
+  sanitizeAndSyncStaffServiceLinks();
+  persist();
+}
+
+function setServiceProviders(serviceId, providerIds) {
+  const service = store.services.find((item) => item.id === serviceId);
+  if (!service) fail("الخدمة غير موجودة", 404);
+  const staffIds = new Set(store.staff.map((person) => person.id));
+  service.providerIds = (providerIds || []).map(String).filter((id) => staffIds.has(id));
+  assertServiceProviders(service);
+  sanitizeAndSyncStaffServiceLinks();
+  persist();
+  return enrichService(service);
+}
+
+function addServiceProvider(serviceId, staffId) {
+  const service = store.services.find((item) => item.id === serviceId);
+  if (!service) fail("الخدمة غير موجودة", 404);
+  const person = store.staff.find((item) => item.id === staffId);
+  if (!person) fail("الموظف غير موجود", 404);
+  const ids = new Set(service.providerIds || []);
+  ids.add(staffId);
+  service.providerIds = [...ids];
+  sanitizeAndSyncStaffServiceLinks();
+  persist();
+  return enrichService(service);
+}
+
+function removeServiceProvider(serviceId, staffId) {
+  const service = store.services.find((item) => item.id === serviceId);
+  if (!service) fail("الخدمة غير موجودة", 404);
+  service.providerIds = (service.providerIds || []).filter((id) => id !== staffId);
+  sanitizeAndSyncStaffServiceLinks();
+  persist();
+  return enrichService(service);
+}
+
+function enrichService(service) {
+  return {
+    ...service,
+    providers: providersForService(service)
+  };
 }
 
 
@@ -681,14 +775,11 @@ function createStaff(payload) {
     specificDays: normalizeStaffSpecificDays(payload.specificDays)
   };
   store.staff.unshift(person);
-  if (person.serviceIds.length) {
-    store.services.forEach((service) => {
-      if (person.serviceIds.includes(service.id) && !(service.providerIds || []).includes(person.id)) {
-        service.providerIds = [...(service.providerIds || []), person.id];
-      }
-    });
+  if (Array.isArray(payload.serviceIds)) {
+    applyStaffServiceLinks(person.id, payload.serviceIds);
+  } else {
+    persist();
   }
-  persist();
   return person;
 }
 
@@ -719,22 +810,17 @@ function updateStaff(id, payload) {
     if (payload.useBusinessHours == null) person.useBusinessHours = false;
   }
   if (person.useBusinessHours) person.workingHours = null;
-  if (Array.isArray(payload.serviceIds)) {
-    person.serviceIds = payload.serviceIds.map(String).filter(Boolean);
-    store.services.forEach((service) => {
-      const ids = new Set(service.providerIds || []);
-      if (person.serviceIds.includes(service.id)) ids.add(person.id);
-      else ids.delete(person.id);
-      service.providerIds = [...ids];
-    });
-  }
   if (Array.isArray(payload.closedDays)) {
     person.closedDays = normalizeStaffClosedDays(payload.closedDays);
   }
   if (Array.isArray(payload.specificDays)) {
     person.specificDays = normalizeStaffSpecificDays(payload.specificDays);
   }
-  persist();
+  if (Array.isArray(payload.serviceIds)) {
+    applyStaffServiceLinks(person.id, payload.serviceIds);
+  } else {
+    persist();
+  }
   return person;
 }
 
@@ -745,16 +831,17 @@ function deleteStaff(id) {
   if (blocked.length) {
     fail(`لا يمكن حذف الموظف لوجود ${blocked.length} مواعيد قادمة. ألغِ المواعيد أو أعد تعيينها أولاً.`, 409);
   }
-  const publicOrphans = store.services.filter(
-    (service) => service.publicBooking && (service.providerIds || []).includes(id) && (service.providerIds || []).filter((providerId) => providerId !== id).length === 0
-  );
-  if (publicOrphans.length) {
-    fail("لا يمكن حذف آخر موظف مرتبط بخدمة عامة. عطّل الحجز العام أو أضف موظفاً بديلاً.", 409);
-  }
-  store.staff.splice(index, 1);
+  // Unlink from services; if they were the last provider on a public service, turn public booking off.
   store.services.forEach((service) => {
-    service.providerIds = (service.providerIds || []).filter((providerId) => providerId !== id);
+    const before = service.providerIds || [];
+    if (!before.includes(id)) return;
+    service.providerIds = before.filter((providerId) => providerId !== id);
+    if (service.publicBooking && !(service.providerIds || []).length) {
+      service.publicBooking = false;
+    }
   });
+  store.staff.splice(index, 1);
+  sanitizeAndSyncStaffServiceLinks();
   persist();
 }
 
@@ -824,7 +911,10 @@ function deleteServiceCategory(id) {
 }
 
 function listServices(categoryId) {
-  return store.services.filter((service) => !categoryId || service.categoryId === categoryId);
+  sanitizeAndSyncStaffServiceLinks();
+  return store.services
+    .filter((service) => !categoryId || service.categoryId === categoryId)
+    .map((service) => enrichService(service));
 }
 
 function createService(payload) {
@@ -858,8 +948,9 @@ function createService(payload) {
   };
   assertServiceProviders(service);
   store.services.unshift(service);
+  sanitizeAndSyncStaffServiceLinks();
   persist();
-  return service;
+  return enrichService(service);
 }
 
 function updateService(id, payload) {
@@ -888,8 +979,9 @@ function updateService(id, payload) {
   if (Array.isArray(payload.providerIds)) service.providerIds = payload.providerIds.map(String).filter(Boolean);
   else if (payload.providerId != null) service.providerIds = payload.providerId ? [String(payload.providerId)] : [];
   assertServiceProviders(service);
+  sanitizeAndSyncStaffServiceLinks();
   persist();
-  return service;
+  return enrichService(service);
 }
 
 function deleteService(id) {
@@ -903,6 +995,7 @@ function deleteService(id) {
     );
   }
   store.services.splice(index, 1);
+  sanitizeAndSyncStaffServiceLinks();
   persist();
 }
 
@@ -1560,6 +1653,9 @@ module.exports = {
   createService,
   updateService,
   deleteService,
+  addServiceProvider,
+  removeServiceProvider,
+  setServiceProviders,
   getWorkingSchedule,
   saveWorkingHours,
   addClosedDay,

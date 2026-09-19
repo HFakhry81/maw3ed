@@ -10,6 +10,8 @@ data/maw3ed-holds.json
 data/slug-index.json
 data/workspaces/**
 !data/workspaces/.gitkeep
+data/backups/
+# Durable demo seed (tracked) — do not ignore data/seeds/
 data/email-outbox.jsonl
 data/development-events.jsonl
 data/local-clerk-workspaces.json

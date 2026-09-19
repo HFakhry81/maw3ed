@@ -1,0 +1,12 @@
+{
+  "name": "Maw3ed",
+  "company": "UpNexa-eg.com",
+  "builtAt": "2026-09-19T11:24:07.956Z",
+  "files": [
+    "index.html",
+    "book.html",
+    "manifest.webmanifest",
+    "sw.js",
+    "assets"
+  ]
+}

@@ -4,8 +4,25 @@ require("./load-env");
 
 const root = path.join(__dirname, "..");
 
+function backupWorkspaceOps() {
+  const workspacesRoot = path.join(root, "data", "workspaces");
+  if (!fs.existsSync(workspacesRoot)) return;
+  const backupDir = path.join(root, "data", "backups");
+  fs.mkdirSync(backupDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  for (const entry of fs.readdirSync(workspacesRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const src = path.join(workspacesRoot, entry.name, "maw3ed-ops.json");
+    if (!fs.existsSync(src)) continue;
+    const dest = path.join(backupDir, `${entry.name}-before-reset-${stamp}.json`);
+    fs.copyFileSync(src, dest);
+    console.log(`[BACKUP] ${entry.name} → ${path.relative(root, dest)}`);
+  }
+}
+
 async function main() {
   console.log("[INFO] Resetting operational data and state files...");
+  backupWorkspaceOps();
 
   const dataDir = path.join(root, "data");
   if (fs.existsSync(dataDir)) {
@@ -67,6 +84,7 @@ async function main() {
   }
 
   console.log("[SUCCESS] Operational data reset completed.");
+  console.log("[HINT] Restore medical demo anytime: npm run seed:medical:restore");
 }
 
 main()

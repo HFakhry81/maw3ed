@@ -19,7 +19,7 @@ export const LOCALES = [
 const messages = {
   ar: {
     brand: "موعد",
-    tagline: "إدارة المواعيد بوضوح",
+    tagline: "إدارة الوقت بدقة...",
     overview: "لوحة التحكم",
     account: "الحساب والإعدادات",
     calendar: "التقويم",
@@ -35,6 +35,7 @@ const messages = {
     notifications: "مركز الإشعارات",
     preferences: "تفضيلات التقويم",
     integrations: "التكاملات",
+    industry: "مجال النشاط",
     settings: "الإعدادات",
     free: "مجاني",
     add: "إضافة",
@@ -50,7 +51,7 @@ const messages = {
   },
   en: {
     brand: "Maw3ed",
-    tagline: "Appointments, clearly managed",
+    tagline: "Managing time precisely...",
     overview: "Dashboard",
     account: "Account & settings",
     calendar: "Calendar",
@@ -66,6 +67,7 @@ const messages = {
     notifications: "Notification center",
     preferences: "Calendar preferences",
     integrations: "Integrations",
+    industry: "Industry",
     settings: "Settings",
     free: "Free",
     add: "Add",

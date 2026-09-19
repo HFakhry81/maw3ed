@@ -183,6 +183,23 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         sendJson(res, 200, { ok: true });
         return true;
       }
+      const serviceProviderMatch = requested.match(/^\/api\/ops\/services\/([^/]+)\/providers\/([^/]+)$/);
+      if (serviceProviderMatch && req.method === "DELETE") {
+        sendJson(res, 200, {
+          ok: true,
+          service: ops.removeServiceProvider(serviceProviderMatch[1], serviceProviderMatch[2])
+        });
+        return true;
+      }
+      const serviceProvidersMatch = requested.match(/^\/api\/ops\/services\/([^/]+)\/providers$/);
+      if (serviceProvidersMatch && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        sendJson(res, 200, {
+          ok: true,
+          service: ops.addServiceProvider(serviceProvidersMatch[1], body.staffId || body.providerId)
+        });
+        return true;
+      }
 
       if (requested === "/api/ops/uploads/logo" && req.method === "POST") {
         sendJson(res, 201, { ok: true, ...ops.saveUploadedLogo(await parseJsonBody(req)) });

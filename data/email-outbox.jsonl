@@ -1,1 +1,11 @@
 {"createdAt":"2026-09-10T23:26:16.315Z","to":"demo@maw3ed.test","code":"116727","type":"verification","mode":"development"}
+{"createdAt":"2026-09-16T23:12:05.952Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف أخصائي · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
+{"createdAt":"2026-09-16T23:12:05.995Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
+{"createdAt":"2026-09-16T23:17:27.420Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف أخصائي · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
+{"createdAt":"2026-09-16T23:17:27.421Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
+{"createdAt":"2026-09-16T23:18:34.928Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف أخصائي · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
+{"createdAt":"2026-09-16T23:18:34.929Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
+{"createdAt":"2026-09-16T23:21:17.892Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف أخصائي · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
+{"createdAt":"2026-09-16T23:21:17.893Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
+{"createdAt":"2026-09-19T11:24:20.693Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف أخصائي · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
+{"createdAt":"2026-09-19T11:24:20.695Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}

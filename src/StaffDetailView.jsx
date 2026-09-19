@@ -4,6 +4,7 @@ import { WeekScheduleTable, ensureWeekHours, validateWeekHours } from "./WeekSch
 import { SmartTimePicker } from "./SmartTimePicker.jsx";
 import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 import { formatMoney } from "./i18n";
+import { CategoryProvidersTable } from "./ServiceProvidersTable.jsx";
 
 export const STAFF_SECTIONS = [
   { id: "history", label: "تاريخ المواعيد", icon: "⏱" },
@@ -130,7 +131,8 @@ export function StaffDetailView({
   onBack,
   onEdit,
   reload,
-  reloadAppointments
+  reloadAppointments,
+  onGoToServicesCategory
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const staffAppointments = useMemo(
@@ -146,10 +148,8 @@ export function StaffDetailView({
     [staffAppointments, today]
   );
   const linkedServices = useMemo(() => {
-    const ids = new Set(person.serviceIds || []);
-    return (ops?.services || []).filter(
-      (service) => ids.has(service.id) || (service.providerIds || []).includes(person.id)
-    );
+    // Canonical: only services that currently list this staff in providerIds.
+    return (ops?.services || []).filter((service) => (service.providerIds || []).includes(person.id));
   }, [ops, person]);
 
   const placeLabel = useMemo(() => {
@@ -160,6 +160,10 @@ export function StaffDetailView({
     const fromService = first && (ops?.serviceCategories || []).find((item) => item.id === first.categoryId);
     return fromService?.name || "غير محدد";
   }, [person, ops, linkedServices]);
+
+  const categoryIdForProviders = person.serviceCategoryId
+    || linkedServices[0]?.categoryId
+    || "";
 
   const [scheduleDays, setScheduleDays] = useState(() =>
     ensureWeekHours(person.workingHours || ops?.schedule?.general || [])
@@ -264,10 +268,18 @@ export function StaffDetailView({
   } else if (section === "services") {
     content = (
       <>
-        <h2>الخدمات المرتبطة</h2>
-        <div className="panel">
+        <h2>الخدمات والمقدمون</h2>
+        <CategoryProvidersTable
+          ops={ops}
+          categoryId={categoryIdForProviders}
+          reload={reload}
+          onGoToServicesCategory={onGoToServicesCategory}
+          title="المقدمون حسب الخدمة"
+        />
+        <div className="panel" style={{ marginTop: 12 }}>
+          <b>خدمات هذا الموظف</b>
           {!linkedServices.length ? (
-            <div className="empty-state">لا توجد خدمات مرتبطة. عدّل الموظف لربط الخدمات.</div>
+            <div className="empty-state">غير مربوط كـ مقدم حالياً.</div>
           ) : (
             linkedServices.map((service) => (
               <div className="table-row" key={service.id}>
@@ -278,7 +290,7 @@ export function StaffDetailView({
             ))
           )}
         </div>
-        <button type="button" className="ghost-button" onClick={onEdit}>تعديل الربط من بطاقة الموظف</button>
+        <button type="button" className="ghost-button" onClick={onEdit}>تعديل البطاقة</button>
       </>
     );
   } else if (section === "schedule") {

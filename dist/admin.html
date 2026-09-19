@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="author" content="UpNexa-eg.com" />
+    <title>إدارة المنصة — موعد Maw3ed</title>
+    <style>
+      :root { font-family: Arial, sans-serif; color:#071942; background:#f3f7ff; } * { box-sizing:border-box; }
+      body { margin:0; padding:24px; }.wrap{width:min(1250px,100%);margin:auto}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}.brand{display:flex;gap:12px;align-items:center}.brand img{width:48px}.brand strong{display:block;font-size:22px}.brand span{color:#72809b;font-size:11px}.back{color:#1769e8;text-decoration:none;font-size:12px;font-weight:700}
+      .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.metric,.panel{background:#fff;border:1px solid #e0e9f7;border-radius:18px;padding:18px;box-shadow:0 12px 35px rgba(28,69,130,.07)}.metric span{color:#72809b;font-size:12px}.metric strong{display:block;font-size:30px;margin-top:9px}.panels{display:grid;grid-template-columns:1.2fr .8fr;gap:16px;margin-top:16px}.panel h2{margin:0 0 16px;font-size:18px}.table{width:100%;border-collapse:collapse;font-size:12px}.table th,.table td{text-align:right;padding:11px 7px;border-bottom:1px solid #edf1f7;vertical-align:middle}.table th{color:#72809b;font-weight:400}.pill{background:#edf5ff;color:#1769e8;border-radius:99px;padding:5px 8px;font-size:10px}.pill.pending{background:#fff6df;color:#ad7200}.btn{border:0;border-radius:8px;padding:7px 10px;cursor:pointer;font-size:11px;font-weight:700;background:#1769e8;color:#fff}.btn.reject{background:#ffecee;color:#c43a54}.plan-row{display:grid;grid-template-columns:1fr 110px 90px;gap:8px;align-items:center;padding:12px 0;border-bottom:1px solid #edf1f7;font-size:13px}.plan-row input{width:100%;border:1px solid #dce6f3;border-radius:7px;padding:7px}.empty{color:#72809b;font-size:12px;padding:20px 0}.notice{color:#1769e8;font-size:12px;min-height:18px;margin:10px 0}.audit{max-height:250px;overflow:auto}.audit p{font-size:11px;border-bottom:1px solid #edf1f7;padding:8px;margin:0;color:#5e6c85}
+      @media(max-width:850px){body{padding:16px}.grid{grid-template-columns:repeat(2,1fr)}.panels{grid-template-columns:1fr}.table{min-width:650px}.panel{overflow:auto}}
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="top"><div class="brand"><img src="/assets/maw3ed-icon.svg" alt="Maw3ed" /><div><strong>مسؤولو منصة Maw3ed</strong><span>UpNexa-eg.com · إدارة الحسابات والاشتراكات</span></div></div><a class="back" href="/">العودة للمنصة</a></header>
+      <section class="grid" id="metrics"></section>
+      <div class="panels">
+        <section class="panel"><h2>طلبات الاشتراك</h2><div id="subscriptions"></div></section>
+        <section class="panel"><h2>خطط المنصة والأسعار</h2><div id="plans"></div><div class="notice" id="planNotice"></div></section>
+      </div>
+      <div class="panels">
+        <section class="panel"><h2>مساحات العمل والحسابات</h2><div id="workspaces"></div></section>
+        <section class="panel"><h2>سجل الإدارة</h2><div class="audit" id="audit"></div></section>
+      </div>
+    </main>
+    <script src="/admin.js"></script>
+  </body>
+</html>

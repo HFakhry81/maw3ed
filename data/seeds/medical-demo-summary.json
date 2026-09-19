@@ -1,0 +1,10 @@
+{
+  "name": "medical-demo",
+  "savedAt": "2026-09-19T12:14:59.803Z",
+  "staff": 230,
+  "services": 152,
+  "customers": 12,
+  "categories": 15,
+  "source": "save",
+  "workspaceId": "local-default"
+}

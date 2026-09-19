@@ -1,6 +1,6 @@
 import React, { useDeferredValue, useMemo, useState, useTransition } from "react";
 import { WEEKDAY_NAMES_AR, ensureWeekHours } from "./WeekScheduleTable.jsx";
-import { toMinutes, fromMinutes, isOvernightShift } from "./shiftHours.js";
+import { toMinutes, isOvernightShift } from "./shiftHours.js";
 
 const PROVIDER_PALETTE = [
   "#2563eb", "#0d9488", "#c026d3", "#ea580c", "#4f46e5",
@@ -8,9 +8,7 @@ const PROVIDER_PALETTE = [
   "#dc2626", "#0284c7"
 ];
 
-const TRACK_START = 6 * 60;
-const TRACK_END = 24 * 60;
-const TRACK_SPAN = TRACK_END - TRACK_START;
+const HOUR_MARKS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
 
 export function colorForStaffId(id) {
   const raw = String(id || "");
@@ -26,133 +24,240 @@ export function resolveStaffHours(person, facilityHours) {
   return ensureWeekHours(facilityHours || []);
 }
 
-function barStyle(opensAt, closesAt, overnight) {
-  const open = toMinutes(opensAt);
-  const close = toMinutes(closesAt);
-  if (!Number.isFinite(open) || !Number.isFinite(close)) return null;
-  const night = overnight === true || isOvernightShift(opensAt, closesAt);
-  if (night) {
-    const left = Math.max(0, ((open - TRACK_START) / TRACK_SPAN) * 100);
-    const width = Math.max(4, ((TRACK_END - open) / TRACK_SPAN) * 100);
-    return { left: `${left}%`, width: `${Math.min(100 - left, width)}%`, overnight: true };
+/** Split a day shift into one or two segments on a 0–24h axis. */
+function daySegments(day) {
+  if (!day || day.isOpen === false) return [];
+  const open = toMinutes(day.opensAt);
+  const close = toMinutes(day.closesAt);
+  if (!Number.isFinite(open) || !Number.isFinite(close) || open === close) return [];
+  const overnight = day.overnight === true || isOvernightShift(day.opensAt, day.closesAt);
+  if (overnight || close < open) {
+    return [
+      { start: open, end: 1440, overnight: true },
+      ...(close > 0 ? [{ start: 0, end: close, overnight: true }] : [])
+    ];
   }
-  const start = Math.max(TRACK_START, Math.min(TRACK_END, open));
-  const end = Math.max(TRACK_START, Math.min(TRACK_END, close));
-  if (end <= start) return null;
-  const left = ((start - TRACK_START) / TRACK_SPAN) * 100;
-  const width = ((end - start) / TRACK_SPAN) * 100;
-  return { left: `${left}%`, width: `${Math.max(3, width)}%`, overnight: false };
+  return [{ start: open, end: close, overnight: false }];
 }
 
-function formatShiftLabel(day) {
-  if (!day || day.isOpen === false) return "إجازة";
-  const base = `${day.opensAt}–${day.closesAt}`;
-  return day.overnight ? `${base} (ليلية)` : base;
+function pct(minutes) {
+  return `${(Math.max(0, Math.min(1440, minutes)) / 1440) * 100}%`;
+}
+
+function personIsProvider(person, services) {
+  return services.some((service) => (service.providerIds || []).includes(person.id));
+}
+
+function personMatchesCategory(person, categoryId, services) {
+  if (!categoryId) return true;
+  if (person.serviceCategoryId === categoryId) return true;
+  return services.some(
+    (service) => service.categoryId === categoryId && (service.providerIds || []).includes(person.id)
+  );
+}
+
+function roleLabel(person, services) {
+  const provider = personIsProvider(person, services);
+  const title = String(person.title || "").toLowerCase();
+  const responsible = /مشرف|مسؤول|مسئول|مدير|استقبال|reception|supervisor|manager/i.test(
+    `${person.title || ""} ${person.servicePlace || ""}`
+  ) || title.includes("reception");
+  if (provider && responsible) return "مقدم + مسئول";
+  if (responsible) return "موظف مسئول";
+  if (provider) return "مقدم خدمة";
+  return person.title || "موظف";
+}
+
+function serviceNamesForPerson(person, services, categoryId) {
+  return services
+    .filter((service) => {
+      if (categoryId && service.categoryId !== categoryId) return false;
+      return (service.providerIds || []).includes(person.id);
+    })
+    .map((service) => service.name)
+    .slice(0, 3);
 }
 
 /**
- * Weekly shifts board: category → services → colored provider timelines.
+ * Weekly 24h calendar: days × hours, colored staff shifts.
+ * Top category chips act as filters.
  */
-export function StaffShiftsBoard({ ops, onOpenStaff }) {
+export function StaffShiftsBoard({ ops, filter = { kind: "all" }, onFilterChange, onOpenStaff }) {
   const categories = ops?.serviceCategories || [];
   const services = (ops?.services || []).filter((service) => service.active !== false);
-  const staff = (ops?.staff || []).filter((person) => person.active !== false);
+  const staff = ops?.staff || [];
   const facilityHours = ops?.schedule?.general || [];
 
   const [query, setQuery] = useState("");
   const [focusStaffId, setFocusStaffId] = useState("");
-  const [collapsed, setCollapsed] = useState({});
   const [isPending, startTransition] = useTransition();
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
-  const staffById = useMemo(() => {
-    const map = new Map();
-    staff.forEach((person) => map.set(person.id, person));
-    return map;
-  }, [staff]);
+  const activeStaff = useMemo(
+    () => staff.filter((person) => person.active !== false),
+    [staff]
+  );
 
   const hoursByStaff = useMemo(() => {
     const map = new Map();
-    staff.forEach((person) => map.set(person.id, resolveStaffHours(person, facilityHours)));
+    activeStaff.forEach((person) => map.set(person.id, resolveStaffHours(person, facilityHours)));
     return map;
-  }, [staff, facilityHours]);
+  }, [activeStaff, facilityHours]);
 
-  const tree = useMemo(() => {
-    const uncategorized = { id: "__none__", name: "بدون فئة", services: [] };
-    const byCategory = new Map(categories.map((category) => [category.id, { ...category, services: [] }]));
+  const filteredPeople = useMemo(() => {
+    let list = activeStaff;
+    const kind = filter?.kind || "all";
+    if (kind === "providers") {
+      list = list.filter((person) => personIsProvider(person, services));
+    } else if (kind === "customHours") {
+      list = list.filter((person) => person.useBusinessHours === false);
+    } else if (kind === "unassigned") {
+      list = list.filter((person) => {
+        const hasCategory = Boolean(person.serviceCategoryId);
+        const hasServices = personIsProvider(person, services);
+        return !hasCategory && !hasServices;
+      });
+    } else if (kind === "category" && filter.categoryId) {
+      list = list.filter((person) => personMatchesCategory(person, filter.categoryId, services));
+    }
 
-    services.forEach((service) => {
-      const providerIds = [...new Set([
-        ...(service.providerIds || []),
-        ...staff
-          .filter((person) => (person.serviceIds || []).includes(service.id))
-          .map((person) => person.id)
-      ])].filter((id) => staffById.has(id));
+    if (deferredQuery) {
+      list = list.filter((person) => {
+        const names = serviceNamesForPerson(person, services, filter.kind === "category" ? filter.categoryId : "").join(" ");
+        return `${person.name} ${person.title || ""} ${person.servicePlace || ""} ${names}`
+          .toLowerCase()
+          .includes(deferredQuery);
+      });
+    }
+    return list;
+  }, [activeStaff, services, filter, deferredQuery]);
 
-      if (deferredQuery) {
-        const hay = `${service.name} ${(byCategory.get(service.categoryId)?.name) || ""}`.toLowerCase();
-        const providerHit = providerIds.some((id) => {
-          const person = staffById.get(id);
-          return person && `${person.name} ${person.title || ""} ${person.servicePlace || ""}`.toLowerCase().includes(deferredQuery);
-        });
-        if (!hay.includes(deferredQuery) && !providerHit) return;
-      }
+  const legend = useMemo(
+    () => filteredPeople.map((person) => ({
+      person,
+      color: colorForStaffId(person.id),
+      role: roleLabel(person, services)
+    })),
+    [filteredPeople, services]
+  );
 
-      const providers = providerIds.map((id) => {
-        const person = staffById.get(id);
-        return {
+  const dayRows = useMemo(() => (
+    WEEKDAY_NAMES_AR.map((label, weekday) => {
+      const blocks = [];
+      filteredPeople.forEach((person) => {
+        const days = hoursByStaff.get(person.id) || [];
+        const day = days.find((item) => Number(item.weekday) === weekday);
+        const segments = daySegments(day);
+        if (!segments.length) return;
+        const color = colorForStaffId(person.id);
+        const servicesLabel = serviceNamesForPerson(
           person,
-          color: colorForStaffId(id),
-          days: hoursByStaff.get(id) || ensureWeekHours([])
-        };
-      }).filter((item) => item.person);
-
-      const node = { ...service, providers };
-      const bucket = byCategory.get(service.categoryId) || uncategorized;
-      bucket.services.push(node);
-      if (!byCategory.has(service.categoryId) && bucket === uncategorized) {
-        /* keep on uncategorized */
-      }
-    });
-
-    const ranked = categories
-      .map((category) => byCategory.get(category.id))
-      .filter((item) => item && item.services.length);
-    if (uncategorized.services.length) ranked.push(uncategorized);
-    return ranked;
-  }, [categories, services, staff, staffById, hoursByStaff, deferredQuery]);
-
-  const legend = useMemo(() => {
-    const seen = new Map();
-    tree.forEach((category) => {
-      category.services.forEach((service) => {
-        service.providers.forEach(({ person, color }) => {
-          if (!seen.has(person.id)) seen.set(person.id, { person, color });
+          services,
+          filter.kind === "category" ? filter.categoryId : ""
+        ).join(" · ");
+        segments.forEach((segment, index) => {
+          blocks.push({
+            id: `${person.id}-${weekday}-${index}`,
+            person,
+            color,
+            role: roleLabel(person, services),
+            servicesLabel,
+            start: segment.start,
+            end: segment.end,
+            overnight: segment.overnight,
+            label: `${person.name} · ${day.opensAt}–${day.closesAt}${day.overnight ? " ليلية" : ""}`
+          });
         });
       });
-    });
-    return [...seen.values()];
-  }, [tree]);
 
-  const totalProviders = legend.length;
-  const totalServices = tree.reduce((sum, category) => sum + category.services.length, 0);
+      // Lane packing so overlapping shifts stay readable
+      const sorted = [...blocks].sort((a, b) => a.start - b.start || a.end - b.end);
+      const laneEnds = [];
+      sorted.forEach((block) => {
+        let lane = laneEnds.findIndex((end) => end <= block.start);
+        if (lane < 0) {
+          lane = laneEnds.length;
+          laneEnds.push(block.end);
+        } else {
+          laneEnds[lane] = block.end;
+        }
+        block.lane = lane;
+      });
+      const laneCount = Math.max(1, laneEnds.length);
+
+      return { weekday, label, blocks: sorted, laneCount };
+    })
+  ), [filteredPeople, hoursByStaff, services, filter]);
+
+  const setFilter = (next) => {
+    onFilterChange?.(next);
+    setFocusStaffId("");
+  };
+
+  const categoryTabs = useMemo(() => {
+    return categories.map((category) => {
+      const count = activeStaff.filter((person) => personMatchesCategory(person, category.id, services)).length;
+      return { ...category, count };
+    }).filter((item) => item.count > 0);
+  }, [categories, activeStaff, services]);
 
   return (
     <section className="staff-shifts-board panel">
       <header className="staff-shifts-head">
         <div>
-          <h2>توزيع ورديات العمل</h2>
+          <h2>تقويم توزيع الورديات</h2>
           <p className="muted">
-            تقويم أسبوعي حسب فئة الخدمة ومجموعة الخدمات — كل مقدم بلون ثابت
+            الأيام مقابل 24 ساعة — كل موظف بلون · مقدم خدمة / موظف مسئول
             {isPending ? " · جارٍ التصفية…" : ""}
           </p>
         </div>
         <div className="staff-shifts-meta">
-          <span>{tree.length} فئات</span>
-          <span>{totalServices} خدمات</span>
-          <span>{totalProviders} مقدّمون</span>
+          <span>{filteredPeople.length} ظاهر</span>
+          <span>{dayRows.reduce((sum, row) => sum + row.blocks.length, 0)} شرائح</span>
         </div>
       </header>
+
+      <div className="staff-filter-tabs" role="tablist" aria-label="فلاتر الورديات">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={(filter?.kind || "all") === "all"}
+          className={(filter?.kind || "all") === "all" ? "is-active" : ""}
+          onClick={() => setFilter({ kind: "all" })}
+        >
+          الكل <b>{activeStaff.length}</b>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter?.kind === "providers"}
+          className={filter?.kind === "providers" ? "is-active" : ""}
+          onClick={() => setFilter({ kind: "providers" })}
+        >
+          مقدمو خدمات <b>{activeStaff.filter((p) => personIsProvider(p, services)).length}</b>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={filter?.kind === "customHours"}
+          className={filter?.kind === "customHours" ? "is-active" : ""}
+          onClick={() => setFilter({ kind: "customHours" })}
+        >
+          ساعات خاصة <b>{activeStaff.filter((p) => p.useBusinessHours === false).length}</b>
+        </button>
+        {categoryTabs.map((category) => (
+          <button
+            key={category.id}
+            type="button"
+            role="tab"
+            aria-selected={filter?.kind === "category" && filter.categoryId === category.id}
+            className={filter?.kind === "category" && filter.categoryId === category.id ? "is-active" : ""}
+            onClick={() => setFilter({ kind: "category", categoryId: category.id })}
+          >
+            {category.name} <b>{category.count}</b>
+          </button>
+        ))}
+      </div>
 
       <div className="staff-shifts-toolbar">
         <input
@@ -162,8 +267,8 @@ export function StaffShiftsBoard({ ops, onOpenStaff }) {
             const value = event.target.value;
             startTransition(() => setQuery(value));
           }}
-          placeholder="تصفية بالفئة أو الخدمة أو اسم المقدم…"
-          aria-label="تصفية توزيع الورديات"
+          placeholder="بحث بالاسم أو المهنة أو مكان الخدمة…"
+          aria-label="بحث في التقويم"
         />
         {focusStaffId ? (
           <button type="button" className="ghost-button" onClick={() => setFocusStaffId("")}>إلغاء التركيز</button>
@@ -172,7 +277,7 @@ export function StaffShiftsBoard({ ops, onOpenStaff }) {
 
       {legend.length > 0 && (
         <div className="staff-shifts-legend" role="list">
-          {legend.map(({ person, color }) => (
+          {legend.map(({ person, color, role }) => (
             <button
               key={person.id}
               type="button"
@@ -181,111 +286,85 @@ export function StaffShiftsBoard({ ops, onOpenStaff }) {
               style={{ "--provider-color": color }}
               onClick={() => setFocusStaffId((current) => (current === person.id ? "" : person.id))}
               onDoubleClick={() => onOpenStaff?.(person.id, "schedule")}
-              title="نقرة للتركيز · نقرتان لملف الموظف"
+              title="نقرة للتركيز · نقرتان لفتح الجدول"
             >
               <i style={{ background: color }} />
               <span>{person.name}</span>
+              <em>{role}</em>
             </button>
           ))}
         </div>
       )}
 
-      <div className="staff-shifts-scale" aria-hidden="true">
-        <span>٦ ص</span>
-        <span>١٢</span>
-        <span>٦ م</span>
-        <span>١٢</span>
-      </div>
+      <div className="staff-day-calendar" dir="ltr">
+        <div className="staff-day-calendar-hours" aria-hidden="true">
+          <span className="staff-day-calendar-corner" />
+          <div className="staff-day-calendar-hour-track">
+            {HOUR_MARKS.map((hour) => (
+              <span key={hour} style={{ insetInlineStart: `${(hour / 24) * 100}%` }}>
+                {String(hour).padStart(2, "0")}
+              </span>
+            ))}
+          </div>
+        </div>
 
-      {!tree.length ? (
-        <div className="empty-state">لا توجد خدمات/مقدمون لعرض الورديات. اربط الموظفين بالخدمات أولاً.</div>
-      ) : (
-        tree.map((category) => {
-          const isCollapsed = collapsed[category.id] === true;
-          return (
-            <div className="staff-shifts-category" key={category.id}>
-              <button
-                type="button"
-                className="staff-shifts-category-toggle"
-                onClick={() => setCollapsed((current) => ({ ...current, [category.id]: !isCollapsed }))}
-                aria-expanded={!isCollapsed}
+        {!filteredPeople.length ? (
+          <div className="empty-state">لا نتائج لهذا الفلتر</div>
+        ) : (
+          dayRows.map((row, rowIndex) => (
+            <div
+              className={`staff-day-calendar-row${rowIndex % 2 ? " is-alt" : ""}`}
+              key={row.weekday}
+            >
+              <div className="staff-day-calendar-label">
+                <strong>{row.label}</strong>
+                <small>{row.blocks.length ? `${new Set(row.blocks.map((b) => b.person.id)).size} أشخاص` : "لا ورديات"}</small>
+              </div>
+              <div
+                className="staff-day-calendar-track"
+                style={{ "--lane-count": row.laneCount }}
               >
-                <strong>{category.name}</strong>
-                <span>{category.services.length} خدمات · {new Set(category.services.flatMap((s) => s.providers.map((p) => p.person.id))).size} مقدّمون</span>
-                <em>{isCollapsed ? "▾" : "▴"}</em>
-              </button>
-              {!isCollapsed && category.services.map((service) => (
-                <div className="staff-shifts-service" key={service.id}>
-                  <div className="staff-shifts-service-head">
-                    <b>{service.name}</b>
-                    <small>{service.durationMinutes || 30} د · {service.providers.length} مقدم</small>
-                  </div>
-                  {!service.providers.length ? (
-                    <p className="muted staff-shifts-empty">لا مقدّم مرتبط بهذه الخدمة</p>
-                  ) : (
-                    <>
-                      <div className="staff-shifts-week-head" aria-hidden="true">
-                        <span className="staff-shifts-provider-col">المقدم</span>
-                        {WEEKDAY_NAMES_AR.map((label) => <span key={label}>{label}</span>)}
-                      </div>
-                      {service.providers.map(({ person, color, days }) => {
-                        const dimmed = focusStaffId && focusStaffId !== person.id;
-                        return (
-                          <div
-                            className={`staff-shifts-provider-row${dimmed ? " is-dimmed" : ""}${focusStaffId === person.id ? " is-focused" : ""}`}
-                            key={`${service.id}-${person.id}`}
-                            style={{ "--provider-color": color }}
-                          >
-                            <button
-                              type="button"
-                              className="staff-shifts-provider-name"
-                              onClick={() => onOpenStaff?.(person.id, "schedule")}
-                              title="فتح جدول الموظف"
-                            >
-                              <i style={{ background: color }} />
-                              <span>
-                                <b>{person.name}</b>
-                                <small>{person.servicePlace || person.title || "—"}</small>
-                              </span>
-                            </button>
-                            {days.map((day) => {
-                              const closed = day.isOpen === false;
-                              const style = closed ? null : barStyle(day.opensAt, day.closesAt, day.overnight);
-                              return (
-                                <div className={`staff-shifts-day${closed ? " is-off" : ""}`} key={day.weekday} title={formatShiftLabel(day)}>
-                                  <div className="staff-shifts-track">
-                                    {style ? (
-                                      <span
-                                        className={`staff-shifts-bar${style.overnight ? " is-overnight" : ""}`}
-                                        style={{ left: style.left, width: style.width, background: color }}
-                                      />
-                                    ) : (
-                                      <span className="staff-shifts-off">—</span>
-                                    )}
-                                  </div>
-                                  {!closed && style ? (
-                                    <small>{fromMinutes(toMinutes(day.opensAt)).slice(0, 5)}–{day.closesAt}</small>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
-                </div>
-              ))}
+                {HOUR_MARKS.slice(1, -1).map((hour) => (
+                  <i
+                    key={hour}
+                    className="staff-day-calendar-gridline"
+                    style={{ insetInlineStart: `${(hour / 24) * 100}%` }}
+                  />
+                ))}
+                {row.blocks.map((block) => {
+                  const dimmed = focusStaffId && focusStaffId !== block.person.id;
+                  return (
+                    <button
+                      type="button"
+                      key={block.id}
+                      className={`staff-day-shift${block.overnight ? " is-overnight" : ""}${dimmed ? " is-dimmed" : ""}${focusStaffId === block.person.id ? " is-focused" : ""}`}
+                      style={{
+                        insetInlineStart: pct(block.start),
+                        width: pct(block.end - block.start),
+                        top: `calc(${block.lane} * (100% / var(--lane-count)) + 2px)`,
+                        height: `calc((100% / var(--lane-count)) - 4px)`,
+                        background: block.color,
+                        "--provider-color": block.color
+                      }}
+                      title={`${block.label}${block.servicesLabel ? ` · ${block.servicesLabel}` : ""} · ${block.role}`}
+                      onClick={() => onOpenStaff?.(block.person.id, "schedule")}
+                    >
+                      <b>{block.person.name.split(/\s+/).slice(0, 2).join(" ")}</b>
+                      <span>{block.role}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          );
-        })
-      )}
+          ))
+        )}
+      </div>
     </section>
   );
 }
 
-/** Summary cards for the staff page. */
-export function StaffStatsBar({ ops }) {
+/** Summary cards + filterable category tabs for the staff page. */
+export function StaffStatsBar({ ops, filter = { kind: "all" }, onFilterChange }) {
   const staff = ops?.staff || [];
   const categories = ops?.serviceCategories || [];
   const services = ops?.services || [];
@@ -293,28 +372,16 @@ export function StaffStatsBar({ ops }) {
   const stats = useMemo(() => {
     const active = staff.filter((person) => person.active !== false);
     const withCustomHours = active.filter((person) => person.useBusinessHours === false).length;
-    const providers = active.filter((person) => {
-      const linked = person.serviceIds?.length
-        || services.some((service) => (service.providerIds || []).includes(person.id));
-      return Boolean(linked);
-    }).length;
+    const providers = active.filter((person) => personIsProvider(person, services)).length;
     const byCategory = categories.map((category) => {
-      const count = active.filter((person) => {
-        if (person.serviceCategoryId === category.id) return true;
-        const linkedIds = person.serviceIds || [];
-        return services.some(
-          (service) => service.categoryId === category.id
-            && (linkedIds.includes(service.id) || (service.providerIds || []).includes(person.id))
-        );
-      }).length;
+      const count = active.filter((person) => personMatchesCategory(person, category.id, services)).length;
       return { id: category.id, name: category.name, count };
     }).filter((item) => item.count > 0)
       .sort((a, b) => b.count - a.count);
 
     const unassigned = active.filter((person) => {
       const hasCategory = Boolean(person.serviceCategoryId);
-      const hasServices = (person.serviceIds || []).length > 0
-        || services.some((service) => (service.providerIds || []).includes(person.id));
+      const hasServices = personIsProvider(person, services);
       return !hasCategory && !hasServices;
     }).length;
 
@@ -328,33 +395,66 @@ export function StaffStatsBar({ ops }) {
     };
   }, [staff, categories, services]);
 
+  const select = (next) => onFilterChange?.(next);
+
   return (
     <div className="staff-stats">
       <div className="stats-cards staff-stats-cards">
-        <div className="panel"><span>إجمالي الموظفين</span><b>{stats.total}</b></div>
-        <div className="panel"><span>نشطون</span><b>{stats.active}</b></div>
-        <div className="panel"><span>مقدمو خدمات</span><b>{stats.providers}</b></div>
-        <div className="panel"><span>ساعات خاصة</span><b>{stats.withCustomHours}</b></div>
+        <button
+          type="button"
+          className={`panel staff-stat-card${(filter?.kind || "all") === "all" ? " is-active" : ""}`}
+          onClick={() => select({ kind: "all" })}
+        >
+          <span>إجمالي الموظفين</span><b>{stats.total}</b>
+        </button>
+        <button
+          type="button"
+          className={`panel staff-stat-card${filter?.kind === "providers" ? " is-active" : ""}`}
+          onClick={() => select({ kind: "providers" })}
+        >
+          <span>مقدمو خدمات</span><b>{stats.providers}</b>
+        </button>
+        <button
+          type="button"
+          className={`panel staff-stat-card${filter?.kind === "customHours" ? " is-active" : ""}`}
+          onClick={() => select({ kind: "customHours" })}
+        >
+          <span>ساعات خاصة</span><b>{stats.withCustomHours}</b>
+        </button>
+        <button
+          type="button"
+          className={`panel staff-stat-card${filter?.kind === "unassigned" ? " is-active" : ""}`}
+          onClick={() => select({ kind: "unassigned" })}
+        >
+          <span>بدون قسم</span><b>{stats.unassigned}</b>
+        </button>
       </div>
       {(stats.byCategory.length > 0 || stats.unassigned > 0) && (
         <div className="staff-stats-categories panel">
           <div className="staff-stats-categories-head">
-            <strong>حسب القسم / فئة الخدمة</strong>
-            <small>{stats.byCategory.length} أقسام فيها موظفون</small>
+            <strong>فلتر حسب القسم / فئة الخدمة</strong>
+            <small>اضغط لتحديث التقويم والقائمة</small>
           </div>
-          <div className="staff-stats-chips">
+          <div className="staff-stats-chips" role="tablist">
+            <button
+              type="button"
+              className={`staff-stats-chip${(filter?.kind || "all") === "all" ? " is-active" : ""}`}
+              onClick={() => select({ kind: "all" })}
+            >
+              <b>{stats.active}</b>
+              <span>الكل</span>
+            </button>
             {stats.byCategory.map((item) => (
-              <span className="staff-stats-chip" key={item.id}>
+              <button
+                type="button"
+                className={`staff-stats-chip${filter?.kind === "category" && filter.categoryId === item.id ? " is-active" : ""}`}
+                key={item.id}
+                onClick={() => select({ kind: "category", categoryId: item.id })}
+              >
                 <b>{item.count}</b>
                 <span>{item.name}</span>
-              </span>
+              </button>
             ))}
-            {stats.unassigned > 0 ? (
-              <span className="staff-stats-chip is-muted">
-                <b>{stats.unassigned}</b>
-                <span>بدون قسم</span>
-              </span>
-            ) : null}
           </div>
         </div>
       )}

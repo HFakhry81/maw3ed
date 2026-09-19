@@ -27,7 +27,9 @@ import {
 import { WeekScheduleTable, ensureWeekHours, validateWeekHours } from "./WeekScheduleTable.jsx";
 import { SaveFeedbackProvider, confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 import { StaffDetailView } from "./StaffDetailView.jsx";
-import { StaffShiftsBoard, StaffStatsBar, colorForStaffId } from "./StaffShiftsBoard.jsx";
+import { StaffShiftsBoard } from "./StaffShiftsBoard.jsx";
+import { StaffDirectory } from "./StaffDirectory.jsx";
+import { ServicesDirectory } from "./ServicesDirectory.jsx";
 
 const NAV = [
   { id: "overview", mark: "لوحة" },
@@ -243,7 +245,7 @@ function CustomersView({ ops, reload, locale }) {
   );
 }
 
-function StaffView({ ops, reload, locale, appointments, reloadAppointments, openStaffId, openStaffSection, onOpenStaff, onClearStaff }) {
+function StaffView({ ops, reload, locale, appointments, reloadAppointments, openStaffId, openStaffSection, onOpenStaff, onClearStaff, onGoToServicesCategory }) {
   const emptyForm = {
     firstName: "",
     lastName: "",
@@ -260,6 +262,7 @@ function StaffView({ ops, reload, locale, appointments, reloadAppointments, open
   const [editingId, setEditingId] = useState("");
   const [form, setForm] = useState(emptyForm);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [staffFilter, setStaffFilter] = useState({ kind: "all" });
   const quickCreate = useQuickCreateStack();
   const categories = ops?.serviceCategories || [];
   const allServices = ops?.services || [];
@@ -277,19 +280,6 @@ function StaffView({ ops, reload, locale, appointments, reloadAppointments, open
   );
   const serviceOptions = servicesInCategory.map((service) => ({ id: service.id, label: service.name }));
   const detailPerson = (ops?.staff || []).find((person) => person.id === openStaffId) || null;
-
-  const staffPlaceLabel = (person) => {
-    const category = categories.find((item) => item.id === person.serviceCategoryId);
-    const place = String(person.servicePlace || "").trim();
-    if (place && category?.name) return `${place} · ${category.name}`;
-    if (place) return place;
-    if (category?.name) return category.name;
-    const linked = allServices.find(
-      (service) => (person.serviceIds || []).includes(service.id) || (service.providerIds || []).includes(person.id)
-    );
-    const fromService = linked && categories.find((item) => item.id === linked.categoryId);
-    return fromService?.name || "بدون مكان خدمة";
-  };
 
   const createMissingCategory = async (name) => {
     const created = await openCategoryQuickCreate(quickCreate, { initialName: name });
@@ -322,7 +312,7 @@ function StaffView({ ops, reload, locale, appointments, reloadAppointments, open
     setOpen(true);
   };
   const openEdit = (person) => {
-    const linkedIds = person.serviceIds || allServices.filter((s) => (s.providerIds || []).includes(person.id)).map((s) => s.id);
+    const linkedIds = allServices.filter((s) => (s.providerIds || []).includes(person.id)).map((s) => s.id);
     const firstService = allServices.find((service) => linkedIds.includes(service.id));
     setEditingId(person.id);
     setForm({
@@ -410,72 +400,50 @@ function StaffView({ ops, reload, locale, appointments, reloadAppointments, open
           onEdit={() => openEdit(detailPerson)}
           reload={reload}
           reloadAppointments={reloadAppointments}
+          onGoToServicesCategory={onGoToServicesCategory}
         />
       ) : (
       <section className="ops-page">
         <div className="ops-header">
-          <div><h1>{t(locale, "staff")}</h1><p>الموظفون ومقدمو الخدمات وساعات العمل</p></div>
+          <div>
+            <h1>{t(locale, "staff")}</h1>
+            <p>دليل مجمّع حسب الدور · جداول قابلة للترتيب · فجوات التعيين واضحة</p>
+          </div>
           <button className="primary-button" type="button" onClick={openCreate}>+ إضافة موظف</button>
         </div>
 
-        <StaffStatsBar ops={ops} />
+        <StaffDirectory
+          ops={ops}
+          filter={staffFilter}
+          onFilterChange={setStaffFilter}
+          onOpenStaff={onOpenStaff}
+          onEdit={openEdit}
+          onDelete={async (person) => {
+            if (!window.confirm(
+              `حذف الموظف «${person.name}»؟\nسيتم فك ربطه من الخدمات، وتعطيل الحجز العام لأي خدمة يبقى بلا مقدم.`
+            )) return;
+            try {
+              await api.del(`/api/ops/staff/${person.id}`);
+              if (openStaffId === person.id) onClearStaff?.();
+              reload();
+            } catch (error) {
+              window.alert(error.message || "تعذر الحذف");
+            }
+          }}
+        />
 
-        <StaffShiftsBoard ops={ops} onOpenStaff={onOpenStaff} />
-
-        <div className="ops-header staff-list-head">
-          <div>
-            <h2>قائمة الموظفين</h2>
-            <p className="muted">تفاصيل مقروءة مع مكان الخدمة والربط بالأقسام</p>
-          </div>
-        </div>
-        <div className="data-table panel staff-list-panel">
-          {(ops?.staff || []).map((person) => (
-            <div className="table-row staff-row" key={person.id}>
-              <button type="button" className="staff-row-main" onClick={() => onOpenStaff?.(person.id, "history")}>
-                <div
-                  className="avatar"
-                  style={{
-                    ...(person.avatarUrl ? { backgroundImage: `url(${person.avatarUrl})`, backgroundSize: "cover" } : {}),
-                    boxShadow: `inset 0 0 0 2px ${colorForStaffId(person.id)}33`
-                  }}
-                >
-                  {!person.avatarUrl && person.name.charAt(0)}
-                </div>
-                <div className="staff-row-copy">
-                  <b>{person.name}</b>
-                  <small className="staff-row-meta">
-                    <span>{person.title || "بدون مهنة"}</span>
-                    {person.phone ? <span>{person.phone}</span> : null}
-                    <span>{person.useBusinessHours === false ? "ساعات خاصة" : "ساعات المنشأة"}</span>
-                  </small>
-                  <span className="staff-row-place">مكان الخدمة: {staffPlaceLabel(person)}</span>
-                </div>
-                <span className="staff-row-count">{person.servicesCount || 0} خدمات</span>
-              </button>
-              <div className="row-actions">
-                <button type="button" className="ghost-button" onClick={() => onOpenStaff?.(person.id, "history")}>الملف</button>
-                <button type="button" className="edit-button" onClick={() => openEdit(person)}>تعديل</button>
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={async () => {
-                    if (!window.confirm(`حذف الموظف «${person.name}»؟`)) return;
-                    try {
-                      await api.del(`/api/ops/staff/${person.id}`);
-                      if (openStaffId === person.id) onClearStaff?.();
-                      reload();
-                    } catch (error) {
-                      window.alert(error.message || "تعذر الحذف");
-                    }
-                  }}
-                >
-                  حذف
-                </button>
-              </div>
-            </div>
-          ))}
-          {!(ops?.staff || []).length ? <div className="empty-state">لا يوجد موظفون بعد</div> : null}
-        </div>
+        <details className="dir-zone panel staff-shifts-fold">
+          <summary>
+            <b>جدول الورديات (أيام × 24 ساعة)</b>
+            <small>عرض تحليلي اختياري — يتبع نفس التصفية أعلاه</small>
+          </summary>
+          <StaffShiftsBoard
+            ops={ops}
+            filter={staffFilter}
+            onFilterChange={setStaffFilter}
+            onOpenStaff={onOpenStaff}
+          />
+        </details>
       </section>
       )}
       <Drawer title={editingId ? "تعديل موظف" : "موظف جديد"} open={open} onClose={() => setOpen(false)}>
@@ -612,7 +580,7 @@ function StaffView({ ops, reload, locale, appointments, reloadAppointments, open
   );
 }
 
-function ServicesView({ ops, reload, locale }) {
+function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
   const emptyForm = {
     name: "",
     categoryId: "",
@@ -623,6 +591,7 @@ function ServicesView({ ops, reload, locale }) {
     priceMax: "",
     pricingType: "fixed",
     providerId: "",
+    providerIds: [],
     publicBooking: true,
     autoAccept: true,
     autoComplete: true,
@@ -630,7 +599,7 @@ function ServicesView({ ops, reload, locale }) {
     color: "#3B82F6",
     description: ""
   };
-  const [categoryId, setCategoryId] = useState(ops?.serviceCategories?.[0]?.id || "");
+  const [categoryId, setCategoryId] = useState(focusCategoryId || "");
   const [open, setOpen] = useState(false);
   const [categoryOpen, setCategoryOpen] = useState(false);
   const [editingId, setEditingId] = useState("");
@@ -645,32 +614,32 @@ function ServicesView({ ops, reload, locale }) {
       if (categoryId) setCategoryId("");
       return;
     }
-    if (!categories.some((item) => item.id === categoryId)) {
-      setCategoryId(categories[0].id);
+    if (categoryId && !categories.some((item) => item.id === categoryId)) {
+      setCategoryId("");
     }
   }, [ops, categoryId, categories]);
 
-  const selectedCategory = categories.find((item) => item.id === categoryId) || null;
-  const services = categoryId
-    ? allServices.filter((service) => service.categoryId === categoryId)
-    : [];
-  const incompletePricing = form.pricingType === "range" || form.pricingType === "on_request";
-  const countInCategory = (id) => allServices.filter((service) => service.categoryId === id).length;
-
-  const currency = currencyForLocale(locale);
-  const formatPrice = (service) => {
-    const type = service.pricingType || "fixed";
-    if (type === "free") return "مجاني";
-    if (type === "on_request") return "عند الطلب";
-    if (type === "range") {
-      return `${formatMoney(service.priceMin ?? service.price ?? 0, locale)} – ${formatMoney(service.priceMax ?? service.price ?? 0, locale)}`;
+  useEffect(() => {
+    if (focusCategoryId && categories.some((item) => item.id === focusCategoryId)) {
+      setCategoryId(focusCategoryId);
     }
-    return Number(service.price) === 0 ? "مجاني" : formatMoney(service.price, locale);
-  };
+  }, [focusCategoryId, categories]);
+
+  const incompletePricing = form.pricingType === "range" || form.pricingType === "on_request";
+  const currency = currencyForLocale(locale);
 
   const openCreate = () => {
+    if (!categories.length) {
+      window.alert("أضف فئة خدمة أولاً");
+      return;
+    }
     setEditingId("");
-    setForm({ ...emptyForm, categoryId, durationMinutes: 30, bufferMinutes: 15 });
+    setForm({
+      ...emptyForm,
+      categoryId: categoryId || categories[0]?.id || "",
+      durationMinutes: 30,
+      bufferMinutes: 15
+    });
     setOpen(true);
   };
   const openEdit = (service) => {
@@ -685,6 +654,7 @@ function ServicesView({ ops, reload, locale }) {
       priceMax: service.priceMax != null ? service.priceMax : "",
       pricingType: service.pricingType || "fixed",
       providerId: (service.providerIds || [])[0] || "",
+      providerIds: service.providerIds || [],
       publicBooking: service.publicBooking !== false,
       autoAccept: Boolean(service.autoAccept),
       autoComplete: Boolean(service.autoComplete),
@@ -762,7 +732,8 @@ function ServicesView({ ops, reload, locale }) {
       categoryId: form.categoryId || categoryId,
       price: toMoneyNumber(form.price),
       priceMin: toMoneyNumber(form.priceMin),
-      priceMax: toMoneyNumber(form.priceMax)
+      priceMax: toMoneyNumber(form.priceMax),
+      providerIds: Array.isArray(form.providerIds) ? form.providerIds : (form.providerId ? [form.providerId] : [])
     };
     try {
       if (editingId) await api.patch(`/api/ops/services/${editingId}`, payload);
@@ -778,89 +749,33 @@ function ServicesView({ ops, reload, locale }) {
   return (
     <section className="ops-page">
       <div className="ops-header">
-        <div><h1>{t(locale, "services")}</h1><p>فئات الخدمات والتسعير وزمن التقديم</p></div>
+        <div>
+          <h1>{t(locale, "services")}</h1>
+          <p>فئة الخدمة ← الخدمة ← المقدم ← الإداري · جداول قابلة للترتيب</p>
+        </div>
         <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
       </div>
       <div className="panel incomplete-logic-note" role="note">
-        <b>منطق غير مكتمل — تذكير</b>
-        <p>تسعير «نطاق» و«عند الطلب» يُحفظ في الخدمة، لكن ربط السعر عند طلب الحجز لم يُغلق بعد. راجع docs/INCOMPLETE_LOGIC.md.</p>
+        <b>تذكير:</b>
+        <p>تسعير النطاق / عند الطلب محفوظ — ربط السعر عند الحجز غير مكتمل بعد.</p>
       </div>
-      <div className="split-panels services-split">
-        <aside className="panel category-list">
-          <div className="panel-head"><b>فئة الخدمة</b><button type="button" onClick={openCategoryCreate}>+ إضافة</button></div>
-          {categories.map((category) => {
-            const inactive = category.active === false || category.enabled === false;
-            const count = countInCategory(category.id);
-            return (
-              <div key={category.id} className={categoryId === category.id ? "cat-row active" : "cat-row"}>
-                <button type="button" className={categoryId === category.id ? "cat active" : "cat"} onClick={() => setCategoryId(category.id)}>
-                  <span className="cat-name">
-                    {category.name}
-                    {inactive ? <span className="status-soft">متوقفة</span> : null}
-                  </span>
-                  <span className="cat-count">{count} خدمة</span>
-                </button>
-                <div className="row-actions compact">
-                  <button type="button" className="edit-button" onClick={() => openCategoryEdit(category)}>تعديل</button>
-                  <button type="button" className="warn-button" onClick={() => toggleCategoryActive(category)}>{inactive ? "تفعيل" : "إيقاف"}</button>
-                  <button type="button" className="danger-button" onClick={() => deleteCategory(category)}>حذف</button>
-                </div>
-              </div>
-            );
-          })}
-        </aside>
-        <div className="panel service-list">
-          <div className="panel-head service-list-head">
-            <div>
-              <b>{selectedCategory ? `خدمات «${selectedCategory.name}»` : "الخدمات"}</b>
-              <small>{services.length} خدمة في هذه الفئة</small>
-            </div>
-            {services.length > 0 && (
-              <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
-            )}
-          </div>
-          {services.map((service) => (
-            <div className={`table-row service-row${service.active === false ? " is-inactive" : ""}`} key={service.id}>
-              <span className="color-dot" style={{ background: service.color || "#3B82F6" }} />
-              <div className="service-main">
-                <b>
-                  {service.name}
-                  {service.active === false ? <span className="service-status">متوقفة</span> : null}
-                  {!(service.providerIds || []).length ? <span className="service-status">بلا مقدم</span> : null}
-                </b>
-                <small>
-                  تقديم {service.durationMinutes} د
-                  {service.bufferMinutes ? ` · فاصل صيانة ${service.bufferMinutes} د` : ""}
-                  {" · "}
-                  حجز {(Number(service.durationMinutes) || 0) + (Number(service.bufferMinutes) || 0)} د
-                </small>
-              </div>
-              <span className="service-price">{formatPrice(service)}</span>
-              <div className="row-actions">
-                <button type="button" className="edit-button" onClick={() => openEdit(service)}>تعديل</button>
-                <button type="button" className="warn-button" onClick={() => toggleServiceActive(service)}>
-                  {service.active === false ? "تفعيل" : "إيقاف"}
-                </button>
-                <button type="button" className="danger-button" onClick={() => deleteServiceRow(service)}>حذف</button>
-              </div>
-            </div>
-          ))}
-          {!services.length && (
-            <div className="service-empty">
-              <p>
-                {selectedCategory
-                  ? `لا توجد خدمات في فئة «${selectedCategory.name}» بعد.`
-                  : "اختر فئة لعرض خدماتها."}
-              </p>
-              {selectedCategory && (
-                <button className="primary-button service-empty-cta" type="button" onClick={openCreate}>
-                  + إضافة خدمة لهذه الفئة
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+
+      <ServicesDirectory
+        ops={ops}
+        locale={locale}
+        categoryId={categoryId}
+        onCategoryChange={setCategoryId}
+        onOpenCreate={openCreate}
+        onOpenEdit={openEdit}
+        onToggleActive={toggleServiceActive}
+        onDelete={deleteServiceRow}
+        onOpenCategoryCreate={openCategoryCreate}
+        onOpenCategoryEdit={openCategoryEdit}
+        onToggleCategoryActive={toggleCategoryActive}
+        onDeleteCategory={deleteCategory}
+        reload={reload}
+      />
+
       <Drawer title={editingCategoryId ? "تعديل فئة" : "فئة جديدة"} open={categoryOpen} onClose={() => setCategoryOpen(false)}>
         <form className="stack-form" onSubmit={submitCategory}>
           <label>اسم الفئة<input required value={categoryName} onChange={(e) => setCategoryName(e.target.value)} /></label>
@@ -874,19 +789,20 @@ function ServicesView({ ops, reload, locale }) {
           <label>الفئة<select value={form.categoryId || categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
             {(ops?.serviceCategories || []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
-          <label>مقدم الخدمة (اختياري عند الإنشاء)
-            <SearchableSelect
-              options={(ops?.staff || []).map((person) => person.name)}
-              value={(ops?.staff || []).find((person) => person.id === form.providerId)?.name || ""}
-              onChange={(name) => {
-                const person = (ops?.staff || []).find((item) => item.name === name);
-                setForm({ ...form, providerId: person?.id || "" });
-              }}
-              placeholder="ابحث عن موظف أو اتركه فارغاً…"
-              allowCustom={false}
+          <label>مقدمو الخدمة (اختياري عند الإنشاء)
+            <SearchableMultiSelect
+              options={(ops?.staff || []).map((person) => ({ id: person.id, label: person.name }))}
+              value={form.providerIds || []}
+              noneLabel="بلا مقدم"
+              onChange={(providerIds) => setForm({
+                ...form,
+                providerIds,
+                providerId: providerIds[0] || ""
+              })}
+              placeholder="ابحث واختر موظفاً أو أكثر…"
             />
           </label>
-          <p className="muted">يمكن إنشاء الخدمة بلا مقدم، لكن لن يُسمح بتحديد أي موعد عليها حتى يُعيَّن مقدم خدمة واحد على الأقل.</p>
+          <p className="muted">يمكن إنشاء الخدمة بلا مقدم، لكن لن يُسمح بتحديد أي موعد عليها حتى يُعيَّن مقدم خدمة واحد على الأقل. الربط يُحدَّث من بيانات الخدمة مباشرة.</p>
           <label>نوع التسعير
             <select
               value={form.pricingType}
@@ -1521,6 +1437,7 @@ function App() {
   const [view, setView] = useState("overview");
   const [openStaffId, setOpenStaffId] = useState("");
   const [openStaffSection, setOpenStaffSection] = useState("history");
+  const [servicesFocusCategoryId, setServicesFocusCategoryId] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
   const [role, setRole] = useState(localStorage.getItem("maw3ed.role") || "owner");
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -1600,6 +1517,9 @@ function App() {
       setOpenStaffId("");
       setOpenStaffSection("history");
     }
+    if (id !== "services") {
+      setServicesFocusCategoryId("");
+    }
     setView(id);
     setMoreOpen(false);
   };
@@ -1614,6 +1534,13 @@ function App() {
   const clearStaff = () => {
     setOpenStaffId("");
     setOpenStaffSection("history");
+  };
+
+  const goToServicesCategory = (categoryId) => {
+    setServicesFocusCategoryId(categoryId || "");
+    setView("services");
+    setMoreOpen(false);
+    setOpenStaffId("");
   };
 
   const switchWorkspace = (id) => {
@@ -1662,9 +1589,17 @@ function App() {
           openStaffSection={openStaffSection}
           onOpenStaff={openStaff}
           onClearStaff={clearStaff}
+          onGoToServicesCategory={goToServicesCategory}
         />
       );
-      case "services": return <ServicesView ops={ops} reload={reload} locale={locale} />;
+      case "services": return (
+        <ServicesView
+          ops={ops}
+          reload={reload}
+          locale={locale}
+          focusCategoryId={servicesFocusCategoryId}
+        />
+      );
       case "schedule": return <ScheduleView ops={ops} reload={reload} locale={locale} />;
       case "bookingPage": return <BookingPageView ops={ops} reload={reload} locale={locale} />;
       case "industry": return <IndustryTemplatesView ops={ops} reload={reload} locale={locale} />;

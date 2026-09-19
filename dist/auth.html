@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="author" content="UpNexa-eg.com" />
+    <title>تسجيل الدخول — موعد Maw3ed</title>
+    <style>
+      :root { color-scheme: light; font-family: Arial, sans-serif; background: #f3f7ff; color: #071942; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+      .shell { width: min(100%, 480px); }
+      .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+      .brand img { width: 52px; height: 52px; }
+      .brand strong { display: block; font-size: 22px; }
+      .brand span { color: #6d7b94; font-size: 12px; }
+      .card { background: #fff; border: 1px solid #e0e9f7; border-radius: 22px; padding: 22px; box-shadow: 0 20px 60px rgba(28, 69, 130, .12); }
+      .password-rules {
+        margin: 0 0 14px;
+        padding: 12px 14px;
+        border: 1px solid #c5daf8;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #eef5ff 0%, #f7fbff 100%);
+        font-size: 13px;
+        line-height: 1.55;
+        color: #314463;
+      }
+      .password-rules strong { display: block; margin-bottom: 4px; color: #0b1f44; }
+      .password-rules ul {
+        display: flex; flex-wrap: wrap; gap: 8px;
+        margin: 10px 0 0; padding: 0; list-style: none;
+      }
+      .password-rules li {
+        padding: 4px 10px; border-radius: 999px; background: #fff;
+        border: 1px solid #d7e3f4; color: #1769e8; font-size: 12px; font-weight: 700;
+      }
+      #clerk-auth { min-height: 390px; }
+      .back { display: inline-block; margin-top: 16px; color: #246bd2; text-decoration: none; font-size: 12px; }
+      .loading { color: #6d7b94; text-align: center; padding: 80px 10px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="brand">
+        <img src="/assets/maw3ed-icon.svg" alt="Maw3ed" />
+        <div>
+          <strong id="auth-brand-title">موعد Maw3ed</strong>
+          <span>من UpNexa-eg.com</span>
+        </div>
+      </div>
+      <section class="card">
+        <div id="password-rules" class="password-rules" role="note" hidden></div>
+        <div id="clerk-auth" class="loading">جارٍ تجهيز تسجيل الدخول...</div>
+      </section>
+      <a class="back" href="/">العودة إلى الصفحة الرئيسية</a>
+    </main>
+    <script src="/auth.js?v=20260917b"></script>
+  </body>
+</html>
