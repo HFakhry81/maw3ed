@@ -245,7 +245,15 @@
               <label>الهاتف<input id="phone" value="${state.phone}" placeholder="01xxxxxxxxx" /></label>
               <label>البريد<input id="email" value="${state.email}" placeholder="optional@email.com" /></label>
               <label>ملاحظات<textarea id="notes" rows="3" placeholder="تأمين / شكوى / تفضيل...">${state.notes}</textarea></label>
-              <p class="muted">الدفع الإلكتروني/العربون سيُفعَّل لاحقاً حسب خطة المنشأة.</p>
+              <p class="muted">${
+                selected?.pricingType === "range"
+                  ? `تسعير بنطاق: يُعرض ${selected.priceMin ?? 0}–${selected.priceMax ?? 0}، ويُسجَّل عربون أولي = الحد الأدنى عند التأكيد. السعر النهائي يُثبَّت بعد المعاينة.`
+                  : selected?.pricingType === "on_request"
+                    ? "تسعير عند الطلب: الحجز بلا مبلغ مسبق. يرسل مقدّم الخدمة عرض سعر لاحقاً للموافقة."
+                    : selected?.pricingType === "free"
+                      ? "هذه الخدمة مجانية."
+                      : "الدفع الإلكتروني الكامل سيُفعَّل حسب خطة المنشأة؛ حالياً يُسجَّل المبلغ مع الموعد."
+              }</p>
               <div class="actions">
                 <button class="ghost" id="back4">رجوع</button>
                 <button class="cta" id="to6">مراجعة</button>
@@ -259,11 +267,29 @@
                 <p>المرجع: <b>${state.result.id}</b></p>
                 <p>${state.result.serviceName} · ${state.result.date} · ${state.result.time}</p>
                 <p>مع: ${state.result.staffName} · الحالة: ${state.result.status}</p>
+                <p>${
+                  state.result.pricingType === "on_request" && state.result.pricingStatus === "quote_pending"
+                    ? "السعر: عند الطلب — بانتظار عرض من المقدّم"
+                    : state.result.pricingType === "range"
+                      ? `المبلغ المسجّل: E£${state.result.amount ?? 0} (نطاق ${state.result.priceMin ?? 0}–${state.result.priceMax ?? 0})`
+                      : state.result.pricingType === "free" || Number(state.result.amount) === 0
+                        ? "المبلغ: مجاني"
+                        : `المبلغ: E£${state.result.amount ?? 0}`
+                }</p>
               ` : `
                 <p><b>${selected?.name || ""}</b></p>
                 <p>${state.date} · ${state.time}</p>
                 <p>${state.staffId === "any" ? "أي متاح" : (staffForService().find((p) => p.id === state.staffId)?.name || "")}</p>
                 <p>${state.customerName} · ${state.phone}</p>
+                <p class="muted">${
+                  selected?.pricingType === "range"
+                    ? `عربون أولي متوقع: E£${selected.priceMin ?? 0} ضمن نطاق ${selected.priceMin ?? 0}–${selected.priceMax ?? 0}`
+                    : selected?.pricingType === "on_request"
+                      ? "بدون مبلغ مسبق — عرض سعر لاحقاً"
+                      : selected?.pricingType === "free"
+                        ? "مجاني"
+                        : selected?.price != null ? `المبلغ: E£${selected.price}` : ""
+                }</p>
                 ${state.error ? `<p class="err">${state.error}</p>` : ""}
                 <div class="actions">
                   <button class="ghost" id="back5">رجوع</button>

@@ -575,7 +575,7 @@ function normalizeServicePricing(payload, current = {}) {
     if (priceMin < 0 || priceMax < priceMin) {
       fail("نطاق السعر غير صالح — يجب أن يكون «ينتهي عند» أكبر من أو يساوي «يبدأ من»", 400);
     }
-    // Incomplete: concrete price within range is chosen later at booking request.
+    // Catalog default; concrete booking amount resolved in resolveBookingPricing().
     price = priceMin;
   }
 
@@ -585,6 +585,120 @@ function normalizeServicePricing(payload, current = {}) {
     priceMin: Math.round(priceMin),
     priceMax: Math.round(priceMax)
   };
+}
+
+/**
+ * Resolve money fields at booking time.
+ * - fixed: amount = price
+ * - free: amount = 0
+ * - range: deposit = priceMin (indicator range kept); final amount set later by staff within [min,max]
+ * - on_request: amount = 0 until staff sends a quote
+ *
+ * Platform profit model (Maw3ed): SaaS subscription — not per-booking marketplace commission.
+ */
+function resolveBookingPricing(service, payload = {}) {
+  const pricingType = String(service?.pricingType || "fixed");
+  const priceMin = Math.round(Number(service?.priceMin ?? service?.price ?? 0) || 0);
+  const priceMax = Math.round(Number(service?.priceMax ?? service?.price ?? 0) || 0);
+  const catalogPrice = Math.round(Number(service?.price ?? 0) || 0);
+
+  if (pricingType === "free") {
+    return {
+      pricingType,
+      priceMin: 0,
+      priceMax: 0,
+      depositAmount: 0,
+      amount: 0,
+      pricingStatus: "free",
+      paymentStatus: "paid"
+    };
+  }
+
+  if (pricingType === "fixed") {
+    return {
+      pricingType,
+      priceMin: catalogPrice,
+      priceMax: catalogPrice,
+      depositAmount: catalogPrice,
+      amount: catalogPrice,
+      pricingStatus: "fixed",
+      paymentStatus: "unpaid"
+    };
+  }
+
+  if (pricingType === "range") {
+    const requested = payload.amount != null ? Number(payload.amount) : NaN;
+    // Optional explicit amount within range (ops-created bookings); public defaults to deposit=min.
+    let amount = priceMin;
+    let pricingStatus = "range_deposit";
+    if (Number.isFinite(requested) && requested >= priceMin && requested <= priceMax) {
+      amount = Math.round(requested);
+      pricingStatus = requested === priceMin ? "range_deposit" : "range_agreed";
+    }
+    return {
+      pricingType,
+      priceMin,
+      priceMax,
+      depositAmount: priceMin,
+      amount,
+      pricingStatus,
+      paymentStatus: "unpaid"
+    };
+  }
+
+  // on_request — quote later
+  return {
+    pricingType: "on_request",
+    priceMin: 0,
+    priceMax: 0,
+    depositAmount: 0,
+    amount: 0,
+    pricingStatus: "quote_pending",
+    paymentStatus: "unpaid"
+  };
+}
+
+function setAppointmentPricing(id, payload = {}) {
+  const appointment = store.appointments.find((item) => item.id === id);
+  if (!appointment) fail("الموعد غير موجود", 404);
+  const pricingType = String(appointment.pricingType || "fixed");
+  const nextAmount = Number(payload.amount);
+  if (!Number.isFinite(nextAmount) || nextAmount < 0) fail("المبلغ غير صالح", 400);
+
+  if (pricingType === "range") {
+    const min = Number(appointment.priceMin ?? 0);
+    const max = Number(appointment.priceMax ?? 0);
+    if (nextAmount < min || nextAmount > max) {
+      fail(`السعر النهائي يجب أن يكون ضمن النطاق ${min}–${max}`, 400);
+    }
+    appointment.amount = Math.round(nextAmount);
+    appointment.pricingStatus = "range_final";
+  } else if (pricingType === "on_request") {
+    appointment.amount = Math.round(nextAmount);
+    appointment.pricingStatus = "quoted";
+  } else if (pricingType === "fixed") {
+    appointment.amount = Math.round(nextAmount);
+    appointment.pricingStatus = "fixed";
+  } else if (pricingType === "free") {
+    appointment.amount = 0;
+    appointment.pricingStatus = "free";
+  } else {
+    fail("لا يمكن تحديث تسعير هذا الموعد", 400);
+  }
+
+  if (payload.paymentStatus != null) {
+    const allowedPay = new Set(["unpaid", "paid", "partial", "refunded"]);
+    if (!allowedPay.has(String(payload.paymentStatus))) fail("حالة الدفع غير صالحة", 400);
+    appointment.paymentStatus = String(payload.paymentStatus);
+  }
+  if (payload.notes != null) {
+    const note = String(payload.notes || "").trim();
+    if (note) appointment.notes = [appointment.notes, note].filter(Boolean).join(" · ");
+  }
+  appointment.pricedAt = new Date().toISOString();
+  appointment.updatedAt = appointment.pricedAt;
+  persist();
+  return appointment;
 }
 
 function getPlanLimits() {
@@ -1526,6 +1640,16 @@ function createAppointment(payload) {
     customer = createCustomer({ firstName, lastName: rest.join(" "), phone, email, categoryId: "cat-new" });
   }
 
+  const pricing = service ? resolveBookingPricing(service, payload) : {
+    pricingType: "fixed",
+    priceMin: 0,
+    priceMax: 0,
+    depositAmount: 0,
+    amount: Number(payload.amount || 0) || 0,
+    pricingStatus: "fixed",
+    paymentStatus: "unpaid"
+  };
+
   const appointment = {
     id: createId("appt"),
     date,
@@ -1538,8 +1662,13 @@ function createAppointment(payload) {
     serviceName: service?.name || "موعد",
     durationMinutes: service?.durationMinutes || 30,
     paymentMethod: payload.paymentMethod || "cash",
-    paymentStatus: "unpaid",
-    amount: Number(service?.price || payload.amount || 0),
+    paymentStatus: pricing.paymentStatus,
+    pricingType: pricing.pricingType,
+    priceMin: pricing.priceMin,
+    priceMax: pricing.priceMax,
+    depositAmount: pricing.depositAmount,
+    amount: pricing.amount,
+    pricingStatus: pricing.pricingStatus,
     notes: String(payload.notes || ""),
     status: service?.autoAccept ? "confirmed" : "pending",
     createdAt: new Date().toISOString()
@@ -1675,6 +1804,7 @@ module.exports = {
   createExpense,
   listAppointments,
   createAppointment,
+  setAppointmentPricing,
   getStatsSummary,
   resetOpsData
 };

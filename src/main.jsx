@@ -625,7 +625,6 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
     }
   }, [focusCategoryId, categories]);
 
-  const incompletePricing = form.pricingType === "range" || form.pricingType === "on_request";
   const currency = currencyForLocale(locale);
 
   const openCreate = () => {
@@ -756,8 +755,11 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
         <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
       </div>
       <div className="panel incomplete-logic-note" role="note">
-        <b>تذكير:</b>
-        <p>تسعير النطاق / عند الطلب محفوظ — ربط السعر عند الحجز غير مكتمل بعد.</p>
+        <b>التسعير:</b>
+        <p>
+          ثابت / مجاني فوري. النطاق يحجز بعربون = الحد الأدنى ثم يُثبَّت السعر النهائي من لوحة المواعيد.
+          عند الطلب يحجز بلا مبلغ ثم يُرسل عرض سعر من الموظف. أرباح المنصة عبر اشتراك SaaS وليس عمولة على كل حجز.
+        </p>
       </div>
 
       <ServicesDirectory
@@ -824,30 +826,33 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
             </label>
           )}
           {form.pricingType === "range" && (
-            <div className="form-row">
-              <label>يبدأ من ({currency.symbol})
-                <MoneyInput
-                  required
-                  currencySymbol={currency.symbol}
-                  value={form.priceMin}
-                  onChange={(priceMin) => setForm({ ...form, priceMin })}
-                />
-              </label>
-              <label>ينتهي عند ({currency.symbol})
-                <MoneyInput
-                  required
-                  currencySymbol={currency.symbol}
-                  value={form.priceMax}
-                  onChange={(priceMax) => setForm({ ...form, priceMax })}
-                />
-              </label>
-            </div>
+            <>
+              <div className="form-row">
+                <label>يبدأ من ({currency.symbol})
+                  <MoneyInput
+                    required
+                    currencySymbol={currency.symbol}
+                    value={form.priceMin}
+                    onChange={(priceMin) => setForm({ ...form, priceMin })}
+                  />
+                </label>
+                <label>ينتهي عند ({currency.symbol})
+                  <MoneyInput
+                    required
+                    currencySymbol={currency.symbol}
+                    value={form.priceMax}
+                    onChange={(priceMax) => setForm({ ...form, priceMax })}
+                  />
+                </label>
+              </div>
+              <p className="muted">يُعرض النطاق للعميل. عند الحجز يُسجَّل عربون = الحد الأدنى، ويُثبَّت السعر النهائي لاحقاً ضمن النطاق من ملف الموظف/الموعد.</p>
+            </>
           )}
-          {(form.pricingType === "free" || form.pricingType === "on_request") && (
-            <p className="muted">{form.pricingType === "free" ? "بدون قيمة — حقل المبلغ مخفي." : "يُحدَّد السعر عند طلب الخدمة (منطق غير مكتمل بعد)."}</p>
+          {form.pricingType === "free" && (
+            <p className="muted">بدون قيمة — حقل المبلغ مخفي.</p>
           )}
-          {incompletePricing && (
-            <div className="plan-warning">تسعير «{form.pricingType === "range" ? "نطاق" : "عند الطلب"}» محفوظ شكلياً — منطق الربط عند الحجز غير مكتمل.</div>
+          {form.pricingType === "on_request" && (
+            <p className="muted">الحجز بلا مبلغ مسبق. بعد المعاينة يُدخل الموظف عرض السعر من قائمة المواعيد.</p>
           )}
           <div className="form-row">
             <label title="المدة الفعلية لتقديم الخدمة مع العميل. تُختار بمضاعفات ربع ساعة.">

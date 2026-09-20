@@ -338,6 +338,16 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         return true;
       }
 
+      const appointmentPricingMatch = requested.match(/^\/api\/ops\/appointments\/([^/]+)\/pricing$/);
+      if (appointmentPricingMatch && req.method === "PATCH") {
+        const payload = await parseJsonBody(req);
+        sendJson(res, 200, {
+          ok: true,
+          appointment: ops.setAppointmentPricing(appointmentPricingMatch[1], payload)
+        });
+        return true;
+      }
+
       if (requested === "/api/ops/activity-profile" && req.method === "PUT") {
         sendJson(res, 200, { ok: true, activity: ops.updateActivityProfile(await parseJsonBody(req)) });
         return true;

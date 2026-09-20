@@ -30,7 +30,33 @@ function ProGate({ title, children }) {
   );
 }
 
-function AppointmentTable({ rows, locale, empty }) {
+function AppointmentTable({ rows, locale, empty, onSetPrice }) {
+  const statusLabel = (item) => {
+    const ps = item.pricingStatus || "";
+    if (ps === "quote_pending") return "بانتظار عرض سعر";
+    if (ps === "quoted") return "عرض سعر";
+    if (ps === "range_deposit") return "عربون (حد أدنى)";
+    if (ps === "range_agreed") return "متفق ضمن النطاق";
+    if (ps === "range_final") return "نهائي ضمن النطاق";
+    if (ps === "free") return "مجاني";
+    return item.status || "—";
+  };
+
+  const priceLabel = (item) => {
+    if (item.pricingType === "on_request" && item.pricingStatus === "quote_pending") return "عند الطلب";
+    if (item.pricingType === "range" && (item.priceMin != null || item.priceMax != null)) {
+      const base = item.amount != null ? formatMoney(item.amount, locale) : "—";
+      return `${base} (${formatMoney(item.priceMin, locale)}–${formatMoney(item.priceMax, locale)})`;
+    }
+    if (item.amount != null) return formatMoney(item.amount, locale);
+    if (item.price != null) return formatMoney(item.price, locale);
+    return "—";
+  };
+
+  const needsPrice = (item) =>
+    item.pricingType === "on_request" && item.pricingStatus === "quote_pending"
+    || item.pricingType === "range" && (item.pricingStatus === "range_deposit" || item.pricingStatus === "range_agreed");
+
   return (
     <div className="staff-appt-table panel">
       <div className="staff-appt-head">
@@ -38,8 +64,9 @@ function AppointmentTable({ rows, locale, empty }) {
         <span>الوقت</span>
         <span>الخدمة</span>
         <span>العميل</span>
-        <span>الحالة</span>
-        <span>السعر</span>
+        <span>التسعير</span>
+        <span>المبلغ</span>
+        <span></span>
       </div>
       {!rows.length ? (
         <div className="empty-state">{empty}</div>
@@ -50,8 +77,19 @@ function AppointmentTable({ rows, locale, empty }) {
             <span className="staff-appt-time">{item.time}</span>
             <span>{item.serviceName || item.serviceId || "—"}</span>
             <span>{item.customerName || item.patientName || "—"}</span>
-            <span>{item.status || "—"}</span>
-            <span>{item.price != null ? formatMoney(item.price, locale) : item.amount != null ? formatMoney(item.amount, locale) : "—"}</span>
+            <span>{statusLabel(item)}</span>
+            <span>{priceLabel(item)}</span>
+            <span>
+              {needsPrice(item) && onSetPrice ? (
+                <button
+                  type="button"
+                  className="edit-button"
+                  onClick={() => onSetPrice(item)}
+                >
+                  {item.pricingType === "on_request" ? "عرض سعر" : "تأكيد السعر"}
+                </button>
+              ) : null}
+            </span>
           </div>
         ))
       )}
@@ -239,19 +277,40 @@ export function StaffDetailView({
     }
   };
 
+  const setAppointmentPrice = async (item) => {
+    const isRange = item.pricingType === "range";
+    const hint = isRange
+      ? `السعر النهائي ضمن ${item.priceMin}–${item.priceMax}`
+      : "أدخل عرض السعر للعميل";
+    const raw = window.prompt(hint, String(item.amount ?? item.priceMin ?? ""));
+    if (raw == null || raw === "") return;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount < 0) {
+      window.alert("مبلغ غير صالح");
+      return;
+    }
+    try {
+      await api.patch(`/api/ops/appointments/${item.id}/pricing`, { amount });
+      reloadAppointments?.();
+      confirmSaved(isRange ? "تم تأكيد السعر ضمن النطاق" : "تم إرسال عرض السعر");
+    } catch (error) {
+      confirmSaveFailed("تعذر تحديث السعر", error.message);
+    }
+  };
+
   let content = null;
   if (section === "history") {
     content = (
       <>
         <h2>تاريخ المواعيد</h2>
-        <AppointmentTable rows={history} locale={locale} empty="لا يوجد سجل مواعيد." />
+        <AppointmentTable rows={history} locale={locale} empty="لا يوجد سجل مواعيد." onSetPrice={setAppointmentPrice} />
       </>
     );
   } else if (section === "upcoming") {
     content = (
       <>
         <h2>المواعيد القادمة</h2>
-        <AppointmentTable rows={upcoming} locale={locale} empty="لا توجد مواعيد قادمة." />
+        <AppointmentTable rows={upcoming} locale={locale} empty="لا توجد مواعيد قادمة." onSetPrice={setAppointmentPrice} />
       </>
     );
   } else if (section === "newAppointment") {
