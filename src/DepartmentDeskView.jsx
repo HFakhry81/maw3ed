@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { formatMoney } from "./i18n";
 import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 import { staffRoleGroupId } from "./staffRoleGroups.js";
+import { QrCodeScanner } from "./QrCodeScanner.jsx";
 
 /**
  * Department attendance desk: QR / token check-in + active visit add-ons.
@@ -14,12 +15,9 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
   const [desk, setDesk] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [tokenInput, setTokenInput] = useState("");
   const [activeId, setActiveId] = useState("");
-  const [scanning, setScanning] = useState(false);
+  const [checkInBusy, setCheckInBusy] = useState(false);
   const [addonOpen, setAddonOpen] = useState(false);
-  const scannerRef = useRef(null);
-  const html5Ref = useRef(null);
 
   const deskStaff = useMemo(() => {
     return (ops?.staff || []).filter((person) => {
@@ -77,27 +75,9 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
     if (!actorStaffId && deskStaff[0]?.id) setActorStaffId(deskStaff[0].id);
   }, [deskStaff, actorStaffId]);
 
-  const stopScanner = useCallback(async () => {
-    setScanning(false);
-    try {
-      if (html5Ref.current) {
-        await html5Ref.current.stop();
-        html5Ref.current.clear();
-        html5Ref.current = null;
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  useEffect(() => () => {
-    stopScanner();
-  }, [stopScanner]);
-
-  const doCheckIn = async (rawToken) => {
+  const doCheckIn = useCallback(async (rawToken) => {
     const token = String(rawToken || "").trim();
     if (!token) return;
-    // Accept full pass URL or raw token
     let checkToken = token;
     try {
       if (token.includes("token=")) {
@@ -110,53 +90,24 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
     } catch {
       checkToken = token;
     }
+    setCheckInBusy(true);
     try {
       const result = await api.post("/api/ops/desk/check-in", {
         token: checkToken,
         categoryId,
         actorStaffId
       });
-      setTokenInput("");
       setActiveId(result.appointment?.id || "");
       confirmSaved("تم تسجيل الحضور");
       await loadDesk();
       reloadAppointments?.();
-      await stopScanner();
     } catch (err) {
       confirmSaveFailed("تعذر تسجيل الحضور", err.message);
+      throw err;
+    } finally {
+      setCheckInBusy(false);
     }
-  };
-
-  const startScanner = async () => {
-    setError("");
-    setScanning(true);
-    try {
-      if (!window.Html5Qrcode) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js";
-          script.onload = resolve;
-          script.onerror = () => reject(new Error("تعذر تحميل مكتبة الماسح"));
-          document.head.appendChild(script);
-        });
-      }
-      await stopScanner();
-      setScanning(true);
-      const scanner = new window.Html5Qrcode("desk-qr-reader");
-      html5Ref.current = scanner;
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 8, qrbox: { width: 220, height: 220 } },
-        (decoded) => {
-          doCheckIn(decoded);
-        },
-        () => {}
-      );
-    } catch (err) {
-      setScanning(false);
-      setError(err.message || "تعذر تشغيل الكاميرا — استخدم إدخال الرمز يدوياً");
-    }
-  };
+  }, [actorStaffId, categoryId, loadDesk, reloadAppointments]);
 
   const addAddon = async (serviceId) => {
     if (!activeVisit?.id) return;
@@ -202,7 +153,7 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
       <div className="ops-header">
         <div>
           <h1>حضور وتشغيل القسم</h1>
-          <p>مسح QR · تسجيل حضور · خدمات إضافية أثناء الزيارة · عزل حسب الفئة</p>
+          <p>QR Code Scanner · ماسح USB/كاميرا · خدمات إضافية · عزل حسب الفئة</p>
         </div>
         <button type="button" className="secondary-button" onClick={loadDesk} disabled={loading}>
           تحديث
@@ -242,32 +193,10 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
       <div className="desk-grid">
         <section className="panel desk-zone">
           <div className="dir-zone-head">
-            <b>مسح الحضور</b>
+            <b>QR Code Scanner</b>
             <small>{desk?.date || ""}</small>
           </div>
-          <div className="desk-scan-actions">
-            {!scanning ? (
-              <button type="button" className="primary-button" onClick={startScanner}>تشغيل الكاميرا</button>
-            ) : (
-              <button type="button" className="warn-button" onClick={stopScanner}>إيقاف المسح</button>
-            )}
-          </div>
-          <div id="desk-qr-reader" ref={scannerRef} className={`desk-qr-box${scanning ? " is-on" : ""}`} />
-          <form
-            className="desk-token-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              doCheckIn(tokenInput);
-            }}
-          >
-            <input
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              placeholder="الصق رمز الحضور أو رابط البطاقة…"
-            />
-            <button type="submit" className="primary-button">تسجيل حضور</button>
-          </form>
-          <p className="muted">الرمز غير قابل للتخمين · التحقق: نفس اليوم + انتماء للقسم المحدد</p>
+          <QrCodeScanner busy={checkInBusy} onScan={doCheckIn} />
         </section>
 
         <section className="panel desk-zone">

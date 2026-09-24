@@ -8,6 +8,14 @@
 2. صفحة التأكيد تعرض QR يفتح `/pass.html?slug=…&token=…`.
 3. البطاقة العامة: `GET /api/public/booking/:slug/pass/:token`.
 
+## مسح QR (QrCodeScanner)
+ثلاثة أوضاع على شاشة الحضور:
+1. **ماسح USB / بلوتوث (HID):** يعمل كلوحة مفاتيح — ركّز الحقل وامسح مباشرة.
+2. **كاميرا QR:** مكتبة `html5-qrcode` مع اختيار الكاميرا.
+3. **إدخال يدوي:** لصق الرمز أو رابط البطاقة.
+
+الوضع المفضّل يُحفظ في `localStorage` تحت `maw3ed.desk.scanMode`.
+
 ## تدفق الاستقبال
 1. قائمة اليوم: `GET /api/ops/desk/today?categoryId=`
 2. مسح QR أو لصق الرمز → `POST /api/ops/desk/check-in`  
