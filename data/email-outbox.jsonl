@@ -11,3 +11,5 @@
 {"createdAt":"2026-09-19T11:24:20.695Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
 {"createdAt":"2026-09-19T13:03:47.871Z","to":"البريد","subject":"تأكيد حجزك — متابعة ضغط · مستشفيات - داوي","type":"booking-confirmation","mode":"development"}
 {"createdAt":"2026-09-19T13:03:47.873Z","to":"hello@maw3ed.app","subject":"حجز جديد — اسمك · مستشفيات - داوي","type":"booking-confirmation-business","mode":"development"}
+{"createdAt":"2026-09-24T17:37:08.382Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف أخصائي · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
+{"createdAt":"2026-09-24T17:37:08.383Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
