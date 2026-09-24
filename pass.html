@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>بطاقة حضور — موعد</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <style>
+    :root { --ink:#0d1b2a; --blue:#1a6deb; --muted:#6b7d8e; --line:#e2e8f0; --olive:#a8c73a; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; font-family: Cairo, Tahoma, sans-serif;
+      background: linear-gradient(180deg, #eef3fa, #f4f7fb);
+      color: var(--ink); display: grid; place-items: center; padding: 24px;
+    }
+    .card {
+      width: min(420px, 100%); background: #fff; border: 1px solid var(--line);
+      border-radius: 16px; padding: 22px; box-shadow: 0 12px 28px rgba(13,27,42,.08);
+      text-align: center; display: grid; gap: 10px;
+    }
+    h1 { margin: 0; font-size: 1.25rem; }
+    .muted { color: var(--muted); font-size: .9rem; }
+    #qr { margin: 12px auto; width: 220px; height: 220px; }
+    .badge {
+      display: inline-block; padding: 4px 10px; border-radius: 999px;
+      background: #e8f1ff; color: var(--blue); font-weight: 700; font-size: .8rem;
+    }
+    .badge.ok { background: #f3f7e6; color: #5c7a18; }
+    code { font-size: .72rem; word-break: break-all; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <article class="card" id="root">
+    <p class="muted">جارٍ تحميل بطاقة الحضور…</p>
+  </article>
+  <script>
+    (async function () {
+      const params = new URLSearchParams(location.search);
+      const slug = params.get("slug") || "";
+      const token = params.get("token") || "";
+      const root = document.getElementById("root");
+      if (!slug || !token) {
+        root.innerHTML = "<h1>رابط غير صالح</h1><p class='muted'>بطاقة الحضور تحتاج slug و token.</p>";
+        return;
+      }
+      try {
+        const res = await fetch(`/api/public/booking/${encodeURIComponent(slug)}/pass/${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "تعذر تحميل البطاقة");
+        const appt = data.appointment;
+        const passUrl = `${location.origin}/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(token)}`;
+        const checked = Boolean(appt.checkedInAt);
+        root.innerHTML = `
+          <div class="badge ${checked ? "ok" : ""}">${checked ? "تم الحضور" : "بطاقة حضور"}</div>
+          <h1>${data.businessName || "موعد"}</h1>
+          <p><b>${appt.customerName}</b></p>
+          <p class="muted">${appt.serviceName || ""} · ${appt.categoryName || ""}</p>
+          <p>${appt.date} · ${appt.time}</p>
+          <p class="muted">مع: ${appt.staffName || "—"}</p>
+          <canvas id="qr" width="220" height="220"></canvas>
+          <p class="muted">أبرِز هذا الرمز عند الاستقبال</p>
+          <code>${token}</code>
+        `;
+        await QRCode.toCanvas(document.getElementById("qr"), passUrl, {
+          width: 220,
+          margin: 1,
+          color: { dark: "#0d1b2a", light: "#ffffff" }
+        });
+      } catch (error) {
+        root.innerHTML = `<h1>تعذر العرض</h1><p class="muted">${error.message || error}</p>`;
+      }
+    })();
+  </script>
+</body>
+</html>

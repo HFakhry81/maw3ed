@@ -3677,4 +3677,217 @@ html.keyboard-open .auth-landing {
   }
 }
 
+/* —— Department desk (attendance) —— */
+.desk-toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.desk-toolbar label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--ops-muted);
+}
+
+.desk-toolbar select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ops-line);
+  background: #fff;
+  color: var(--ops-ink);
+}
+
+.desk-counts {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.86rem;
+  color: var(--ops-muted);
+}
+
+.desk-counts b {
+  color: var(--ops-blue-deep);
+  font-size: 1.1rem;
+  margin-inline-end: 4px;
+}
+
+.desk-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.9fr) minmax(280px, 1fr) minmax(240px, 0.9fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.desk-zone {
+  display: grid;
+  gap: 10px;
+  min-height: 280px;
+}
+
+.desk-qr-box {
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #0b1220;
+}
+
+.desk-qr-box.is-on {
+  min-height: 240px;
+}
+
+.desk-token-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.desk-token-form input {
+  padding: 10px 12px;
+  border: 1px solid var(--ops-line);
+  border-radius: 8px;
+}
+
+.desk-active-head {
+  display: grid;
+  gap: 4px;
+}
+
+.desk-active-head strong {
+  font-size: 1.15rem;
+}
+
+.desk-amount {
+  color: var(--ops-blue-deep);
+  font-weight: 800;
+  font-size: 1.2rem;
+}
+
+.desk-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.desk-lines li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--ops-row-alt);
+  font-size: 0.88rem;
+}
+
+.desk-active-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.desk-active-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.desk-queue-list {
+  display: grid;
+  gap: 6px;
+  max-height: 520px;
+  overflow: auto;
+}
+
+.desk-queue-row {
+  display: grid;
+  grid-template-columns: 52px 1fr 1fr auto;
+  gap: 8px;
+  text-align: start;
+  padding: 8px 10px;
+  border: 1px solid var(--ops-line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+
+.desk-queue-row.status-checked_in {
+  border-color: var(--ops-olive);
+  background: var(--ops-olive-soft);
+}
+
+.desk-queue-row.status-completed {
+  opacity: 0.7;
+}
+
+.desk-queue-row em {
+  font-style: normal;
+  font-size: 0.75rem;
+  color: var(--ops-muted);
+}
+
+.desk-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(13, 27, 42, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 80;
+  padding: 16px;
+}
+
+.desk-modal {
+  width: min(480px, 100%);
+  max-height: min(80vh, 640px);
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.desk-modal header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.desk-modal header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.desk-addon-list {
+  display: grid;
+  gap: 6px;
+}
+
+.desk-addon-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--ops-line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: start;
+}
+
+.desk-addon-row:hover {
+  border-color: var(--ops-blue);
+  background: var(--ops-blue-soft);
+}
+
+@media (max-width: 1100px) {
+  .desk-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 

@@ -11,6 +11,7 @@
     <link rel="icon" type="image/svg+xml" href="/assets/maw3ed-icon.svg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
     <style>
       :root { --ink:#13233f; --muted:#7b889e; --line:#e7edf5; --blue:#1a6deb; --card:#fff; --keyboard-inset:0px; }
       * { box-sizing: border-box; }
@@ -276,6 +277,14 @@
                         ? "المبلغ: مجاني"
                         : `المبلغ: E£${state.result.amount ?? 0}`
                 }</p>
+                ${state.result.checkInToken ? `
+                  <div style="margin-top:14px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;text-align:center">
+                    <b>بطاقة الحضور</b>
+                    <p class="muted" style="margin:6px 0">أبرز هذا الرمز عند الاستقبال</p>
+                    <canvas id="checkin-qr" width="180" height="180" style="margin:0 auto;display:block"></canvas>
+                    <p style="margin-top:8px"><a class="cta" style="display:inline-block;text-decoration:none;padding:8px 12px" href="${state.passUrl || `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(state.result.checkInToken)}`}" target="_blank" rel="noopener">فتح البطاقة / حفظها</a></p>
+                  </div>
+                ` : ""}
               ` : `
                 <p><b>${selected?.name || ""}</b></p>
                 <p>${state.date} · ${state.time}</p>
@@ -383,11 +392,21 @@
             const payload = await response.json();
             if (!response.ok) throw new Error(payload.error || "فشل التأكيد");
             state.result = payload.appointment;
+            state.passUrl = payload.passUrl || (payload.appointment?.checkInToken
+              ? `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(payload.appointment.checkInToken)}`
+              : "");
             state.error = "";
           } catch (error) {
             state.error = error.message;
           }
           render();
+          if (state.result?.checkInToken && window.QRCode) {
+            const canvas = document.getElementById("checkin-qr");
+            if (canvas) {
+              const passAbs = `${location.origin}${state.passUrl || `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(state.result.checkInToken)}`}`;
+              QRCode.toCanvas(canvas, passAbs, { width: 180, margin: 1, color: { dark: "#0d1b2a", light: "#ffffff" } }).catch(() => {});
+            }
+          }
         });
       }
 

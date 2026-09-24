@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const opsPg = require("./opsPg");
 const opsWorkspace = require("./opsWorkspace");
 const shiftHours = require("./shiftHours");
+const opsDesk = require("./opsDesk");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -1525,12 +1526,18 @@ async function createPublicAppointment(slug, payload = {}) {
 }
 
 function updateAppointmentStatus(id, status) {
-  const allowed = new Set(["pending", "confirmed", "completed", "cancelled", "no_show"]);
+  const allowed = new Set(["pending", "confirmed", "checked_in", "completed", "cancelled", "no_show"]);
   if (!allowed.has(String(status || ""))) fail("حالة الموعد غير صالحة");
   const appointment = store.appointments.find((item) => item.id === id);
   if (!appointment) fail("الموعد غير موجود", 404);
   appointment.status = status;
   appointment.updatedAt = new Date().toISOString();
+  if (status === "checked_in" && !appointment.checkedInAt) {
+    appointment.checkedInAt = appointment.updatedAt;
+  }
+  if (status === "completed" && !appointment.completedAt) {
+    appointment.completedAt = appointment.updatedAt;
+  }
   persist();
   return appointment;
 }
@@ -1660,6 +1667,7 @@ function createAppointment(payload) {
     staffName: staff.name,
     serviceId: service?.id || null,
     serviceName: service?.name || "موعد",
+    categoryId: service?.categoryId || "",
     durationMinutes: service?.durationMinutes || 30,
     paymentMethod: payload.paymentMethod || "cash",
     paymentStatus: pricing.paymentStatus,
@@ -1671,11 +1679,207 @@ function createAppointment(payload) {
     pricingStatus: pricing.pricingStatus,
     notes: String(payload.notes || ""),
     status: service?.autoAccept ? "confirmed" : "pending",
+    checkInToken: opsDesk.createCheckInToken(),
+    checkedInAt: null,
+    checkedInByStaffId: null,
+    completedAt: null,
+    lineItems: [opsDesk.buildPrimaryLineItem(service, pricing)],
+    visitLog: [],
     createdAt: new Date().toISOString()
   };
   store.appointments.push(appointment);
   persist();
   return appointment;
+}
+
+function listDeskToday({ categoryId = "", date = "" } = {}) {
+  const tz = store.bookingPage?.timezone || "Africa/Cairo";
+  const day = date || opsDesk.todayInTimezone(tz);
+  const rows = store.appointments
+    .filter((item) => item.date === day && item.status !== "cancelled" && item.status !== "canceled")
+    .map((item) => opsDesk.enrichAppointmentForDesk(item, store))
+    .filter((item) => !categoryId || item.categoryId === categoryId)
+    .sort((a, b) => String(a.time).localeCompare(String(b.time)));
+
+  const waiting = rows.filter((item) => item.status === "pending" || item.status === "confirmed");
+  const active = rows.filter((item) => item.status === "checked_in");
+  const done = rows.filter((item) => item.status === "completed" || item.status === "no_show");
+
+  return {
+    date: day,
+    categoryId: categoryId || null,
+    counts: { waiting: waiting.length, active: active.length, done: done.length, total: rows.length },
+    waiting,
+    active,
+    done,
+    appointments: rows
+  };
+}
+
+function findAppointmentByCheckInToken(token) {
+  const clean = String(token || "").trim();
+  if (!clean) return null;
+  return store.appointments.find((item) => item.checkInToken === clean) || null;
+}
+
+function getPublicPass(slug, token) {
+  if (store.bookingPage.slug !== slug) fail("صفحة الحجز غير متاحة", 404);
+  const appointment = findAppointmentByCheckInToken(token);
+  if (!appointment) fail("رمز الحضور غير صالح", 404);
+  const enriched = opsDesk.enrichAppointmentForDesk(appointment, store);
+  return {
+    businessName: store.bookingPage.businessName,
+    slug,
+    appointment: {
+      id: enriched.id,
+      date: enriched.date,
+      time: enriched.time,
+      serviceName: enriched.serviceName,
+      staffName: enriched.staffName,
+      customerName: enriched.customerName,
+      status: enriched.status,
+      categoryName: enriched.categoryName,
+      amount: enriched.amount,
+      pricingType: enriched.pricingType,
+      pricingStatus: enriched.pricingStatus,
+      checkInToken: enriched.checkInToken,
+      checkedInAt: enriched.checkedInAt || null
+    }
+  };
+}
+
+/**
+ * Check-in by unguessable token. Validates same-day + optional department scope.
+ */
+function checkInByToken({ token, categoryId = "", actorStaffId = "" } = {}) {
+  const appointment = findAppointmentByCheckInToken(token);
+  if (!appointment) fail("رمز الحضور غير معروف أو منتهي", 404);
+  if (appointment.status === "cancelled" || appointment.status === "canceled") {
+    fail("هذا الموعد ملغى", 400);
+  }
+  if (appointment.status === "completed") fail("الزيارة مكتملة مسبقاً", 400);
+
+  const service = store.services.find((item) => item.id === appointment.serviceId) || null;
+  opsDesk.ensureVisitFields(appointment, service, {
+    amount: appointment.amount,
+    pricingType: appointment.pricingType
+  });
+
+  const day = opsDesk.todayInTimezone(store.bookingPage?.timezone || "Africa/Cairo");
+  if (appointment.date !== day) {
+    fail(`هذا الموعد بتاريخ ${appointment.date} وليس لليوم (${day})`, 400);
+  }
+
+  if (categoryId) {
+    const apptCategory = appointment.categoryId || service?.categoryId || "";
+    if (apptCategory && apptCategory !== categoryId) {
+      fail("هذا الموعد لا يتبع القسم المحدد على شاشة الحضور", 403);
+    }
+  }
+
+  if (appointment.status === "checked_in") {
+    return opsDesk.enrichAppointmentForDesk(appointment, store);
+  }
+
+  let actor = null;
+  if (actorStaffId) {
+    actor = store.staff.find((person) => person.id === actorStaffId) || null;
+  }
+
+  appointment.status = "checked_in";
+  appointment.checkedInAt = new Date().toISOString();
+  appointment.checkedInByStaffId = actor?.id || null;
+  appointment.checkedInByName = actor?.name || "";
+  appointment.updatedAt = appointment.checkedInAt;
+  opsDesk.pushVisitLog(appointment, {
+    type: "check_in",
+    byStaffId: actor?.id || null,
+    byStaffName: actor?.name || "",
+    meta: { categoryId: categoryId || appointment.categoryId || null }
+  });
+  persist();
+  return opsDesk.enrichAppointmentForDesk(appointment, store);
+}
+
+function addAppointmentAddon(appointmentId, { serviceId, actorStaffId = "", amount = null } = {}) {
+  const appointment = store.appointments.find((item) => item.id === appointmentId);
+  if (!appointment) fail("الموعد غير موجود", 404);
+  if (appointment.status !== "checked_in") {
+    fail("إضافة الخدمات متاحة فقط أثناء زيارة نشطة (تم الحضور)", 400);
+  }
+  const addon = store.services.find((item) => item.id === serviceId && item.active !== false);
+  if (!addon) fail("الخدمة الإضافية غير موجودة", 404);
+
+  const primary = store.services.find((item) => item.id === appointment.serviceId) || null;
+  const primaryCategory = appointment.categoryId || primary?.categoryId || "";
+  if (primaryCategory && addon.categoryId !== primaryCategory) {
+    fail("يُسمح فقط بخدمات نفس القسم/الفئة أثناء الزيارة", 400);
+  }
+
+  opsDesk.ensureVisitFields(appointment, primary, { amount: appointment.amount });
+
+  let addonAmount = amount != null ? Number(amount) : null;
+  if (!Number.isFinite(addonAmount)) {
+    const pricing = resolveBookingPricing(addon, {});
+    if (pricing.pricingType === "on_request") addonAmount = 0;
+    else if (pricing.pricingType === "range") addonAmount = pricing.priceMin;
+    else addonAmount = pricing.amount;
+  }
+  if (addonAmount < 0) fail("مبلغ الخدمة الإضافية غير صالح", 400);
+
+  const actor = actorStaffId
+    ? store.staff.find((person) => person.id === actorStaffId) || null
+    : null;
+
+  const line = {
+    id: createId("line"),
+    kind: "addon",
+    serviceId: addon.id,
+    name: addon.name,
+    amount: Math.round(addonAmount),
+    addedAt: new Date().toISOString(),
+    addedByStaffId: actor?.id || null,
+    addedByName: actor?.name || ""
+  };
+  appointment.lineItems.push(line);
+  appointment.amount = opsDesk.sumLineItems(appointment.lineItems);
+  if (appointment.paymentStatus === "paid" && line.amount > 0) {
+    appointment.paymentStatus = "partial";
+  }
+  appointment.updatedAt = line.addedAt;
+  opsDesk.pushVisitLog(appointment, {
+    type: "addon",
+    byStaffId: actor?.id || null,
+    byStaffName: actor?.name || "",
+    meta: { serviceId: addon.id, name: addon.name, amount: line.amount }
+  });
+  persist();
+  return opsDesk.enrichAppointmentForDesk(appointment, store);
+}
+
+function completeDeskVisit(appointmentId, { actorStaffId = "", notes = "" } = {}) {
+  const appointment = store.appointments.find((item) => item.id === appointmentId);
+  if (!appointment) fail("الموعد غير موجود", 404);
+  if (appointment.status !== "checked_in" && appointment.status !== "confirmed") {
+    fail("لا يمكن إنهاء زيارة بهذه الحالة", 400);
+  }
+  const actor = actorStaffId
+    ? store.staff.find((person) => person.id === actorStaffId) || null
+    : null;
+  appointment.status = "completed";
+  appointment.completedAt = new Date().toISOString();
+  appointment.updatedAt = appointment.completedAt;
+  if (notes) {
+    appointment.notes = [appointment.notes, notes].filter(Boolean).join(" · ");
+  }
+  opsDesk.pushVisitLog(appointment, {
+    type: "complete",
+    byStaffId: actor?.id || null,
+    byStaffName: actor?.name || "",
+    meta: { amount: appointment.amount }
+  });
+  persist();
+  return opsDesk.enrichAppointmentForDesk(appointment, store);
 }
 
 function getStatsSummary(fallbackAppointments = []) {
@@ -1805,6 +2009,11 @@ module.exports = {
   listAppointments,
   createAppointment,
   setAppointmentPricing,
+  listDeskToday,
+  getPublicPass,
+  checkInByToken,
+  addAppointmentAddon,
+  completeDeskVisit,
   getStatsSummary,
   resetOpsData
 };

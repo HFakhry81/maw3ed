@@ -30,10 +30,12 @@ import { StaffDetailView } from "./StaffDetailView.jsx";
 import { StaffShiftsBoard } from "./StaffShiftsBoard.jsx";
 import { StaffDirectory } from "./StaffDirectory.jsx";
 import { ServicesDirectory } from "./ServicesDirectory.jsx";
+import { DepartmentDeskView } from "./DepartmentDeskView.jsx";
 
 const NAV = [
   { id: "overview", mark: "لوحة" },
   { id: "calendar", mark: "تق" },
+  { id: "desk", mark: "حضور" },
   { id: "customers", mark: "عم" },
   { id: "staff", mark: "مو" },
   { id: "schedule", mark: "جد" },
@@ -1582,6 +1584,7 @@ function App() {
     switch (view) {
       case "overview": return <OverviewView ops={ops} appointments={appointments} locale={locale} onNavigate={navigate} />;
       case "calendar": return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={() => { reloadAppointments(); reload(); }} />;
+      case "desk": return <DepartmentDeskView ops={ops} locale={locale} reloadAppointments={reloadAppointments} />;
       case "customers": return <CustomersView ops={ops} reload={reload} locale={locale} />;
       case "staff": return (
         <StaffView

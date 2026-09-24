@@ -51,11 +51,13 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     const publicSlotsMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/slots$/);
     const publicHoldMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/hold$/);
     const publicBookMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/appointments$/);
+    const publicPassMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/pass\/([^/]+)$/);
     const isPublic =
       (publicBookingMatch && req.method === "GET") ||
       (publicSlotsMatch && req.method === "GET") ||
       (publicHoldMatch && req.method === "POST") ||
-      (publicBookMatch && req.method === "POST");
+      (publicBookMatch && req.method === "POST") ||
+      (publicPassMatch && req.method === "GET");
 
     const isOps = requested.startsWith("/api/ops/");
     if (!isOps && !isPublic) return false;
@@ -63,7 +65,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     let workspaceId = ops.DEFAULT_WORKSPACE_ID;
     if (isPublic) {
       const slug = decodeURIComponent(
-        (publicBookingMatch || publicSlotsMatch || publicHoldMatch || publicBookMatch)[1]
+        (publicBookingMatch || publicSlotsMatch || publicHoldMatch || publicBookMatch || publicPassMatch)[1]
       );
       workspaceId = publicWorkspaceId(slug);
     } else {
@@ -282,7 +284,66 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
             console.warn("[ops] booking confirmation email failed:", error.message);
           }
         }
-        sendJson(res, 201, { ok: true, appointment, workspaceId: ops.getCurrentWorkspaceId() });
+        sendJson(res, 201, {
+          ok: true,
+          appointment,
+          passUrl: appointment?.checkInToken
+            ? `/pass.html?slug=${encodeURIComponent(publicBookMatch[1])}&token=${encodeURIComponent(appointment.checkInToken)}`
+            : null,
+          workspaceId: ops.getCurrentWorkspaceId()
+        });
+        return true;
+      }
+
+      if (publicPassMatch && req.method === "GET") {
+        assertPublicRateLimit(req, "pass", 60);
+        const slug = decodeURIComponent(publicPassMatch[1]);
+        const token = decodeURIComponent(publicPassMatch[2]);
+        sendJson(res, 200, { ok: true, ...ops.getPublicPass(slug, token) });
+        return true;
+      }
+
+      if (requested === "/api/ops/desk/today" && req.method === "GET") {
+        sendJson(res, 200, {
+          ok: true,
+          desk: ops.listDeskToday({
+            categoryId: requestUrl.searchParams.get("categoryId") || "",
+            date: requestUrl.searchParams.get("date") || ""
+          })
+        });
+        return true;
+      }
+
+      if (requested === "/api/ops/desk/check-in" && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        sendJson(res, 200, {
+          ok: true,
+          appointment: ops.checkInByToken({
+            token: body.token || body.checkInToken,
+            categoryId: body.categoryId || "",
+            actorStaffId: body.actorStaffId || ""
+          })
+        });
+        return true;
+      }
+
+      const deskAddonMatch = requested.match(/^\/api\/ops\/desk\/appointments\/([^/]+)\/addons$/);
+      if (deskAddonMatch && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        sendJson(res, 200, {
+          ok: true,
+          appointment: ops.addAppointmentAddon(deskAddonMatch[1], body)
+        });
+        return true;
+      }
+
+      const deskCompleteMatch = requested.match(/^\/api\/ops\/desk\/appointments\/([^/]+)\/complete$/);
+      if (deskCompleteMatch && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        sendJson(res, 200, {
+          ok: true,
+          appointment: ops.completeDeskVisit(deskCompleteMatch[1], body)
+        });
         return true;
       }
 
