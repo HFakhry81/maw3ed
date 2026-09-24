@@ -180,6 +180,12 @@ function updateBackend(steps) {
 
   steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js"], { soft: true, capture: true }));
   steps.push(
+    run("seed-medical-restore", nodeBin(), ["scripts/seed-medical-demo.js", "--restore", "--no-backup"], {
+      soft: true,
+      capture: true
+    })
+  );
+  steps.push(
     run("migrate", nodeBin(), ["scripts/migrate.js"], {
       soft: true,
       capture: true,

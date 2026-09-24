@@ -98,6 +98,13 @@ function main() {
   }
 
   steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js"], { soft: true, capture: true }));
+  // Restore durable medical demo seed so update:all / refresh does not wipe local test data
+  steps.push(
+    run("seed-medical-restore", nodeBin(), ["scripts/seed-medical-demo.js", "--restore", "--no-backup"], {
+      soft: true,
+      capture: true
+    })
+  );
 
   // Run Postgres migrations & seeding with environment variables loaded
   steps.push(
