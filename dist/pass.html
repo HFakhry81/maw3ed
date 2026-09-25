@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>بطاقة حضور — موعد</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <style>
     :root { --ink:#0d1b2a; --blue:#1a6deb; --muted:#6b7d8e; --line:#e2e8f0; --olive:#a8c73a; }
     * { box-sizing: border-box; }
@@ -57,15 +57,14 @@
           <p class="muted">${appt.serviceName || ""} · ${appt.categoryName || ""}</p>
           <p>${appt.date} · ${appt.time}</p>
           <p class="muted">مع: ${appt.staffName || "—"}</p>
-          <canvas id="qr" width="220" height="220"></canvas>
+          <div id="qr"></div>
           <p class="muted">أبرِز هذا الرمز عند الاستقبال</p>
           <code>${token}</code>
         `;
-        await QRCode.toCanvas(document.getElementById("qr"), passUrl, {
-          width: 220,
-          margin: 1,
-          color: { dark: "#0d1b2a", light: "#ffffff" }
-        });
+        if (typeof QRCode !== "function") throw new Error("تعذر تحميل مولد QR");
+        const qrHost = document.getElementById("qr");
+        qrHost.innerHTML = "";
+        new QRCode(qrHost, { text: passUrl, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
       } catch (error) {
         root.innerHTML = `<h1>تعذر العرض</h1><p class="muted">${error.message || error}</p>`;
       }
