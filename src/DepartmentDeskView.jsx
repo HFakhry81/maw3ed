@@ -306,8 +306,6 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
         </section>
       </div>
 
-      </div>
-
       {review && reviewForm ? (
         <div className="desk-modal-backdrop" role="presentation">
           <div className="desk-modal panel" role="dialog" aria-labelledby="desk-review-title">
