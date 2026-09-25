@@ -51,7 +51,7 @@ const LAST_NAMES = [
 
 const SERVICE_COLORS = ["#1a6deb", "#0d4bb8", "#16ae7c", "#a8c73a", "#f5a623", "#e85d04", "#5b4a9e", "#db2777", "#0891b2", "#64748b"];
 
-/** Specialty-specific service catalogs (10 each). */
+/** Specialty catalogs (base 10; padded to 15 in catalogFor). */
 const SERVICES_BY_DEPT = {
   "العيادات الخارجية": [
     "كشف عام", "متابعة دورية", "استشارة طبية", "تحويل تخصصي", "فحص ما قبل العمليات",
@@ -115,17 +115,87 @@ const SERVICES_BY_DEPT = {
   ]
 };
 
-function weekHoursForShift(shift) {
+/** Clinic doctors + clinic nursing: 08:00–22:00 split into two shifts. */
+const CLINIC_SHIFTS = [
+  { id: "am", label: "08–15", opensAt: "08:00", closesAt: "15:00", overnight: false },
+  { id: "pm", label: "15–22", opensAt: "15:00", closesAt: "22:00", overnight: false }
+];
+const ER_SHIFTS = [
+  { id: "day", label: "نهارية", opensAt: "08:00", closesAt: "20:00", overnight: false },
+  { id: "night", label: "ليلية", opensAt: "20:00", closesAt: "08:00", overnight: true }
+];
+/** On-duty minimums. Headcount is minimum + 1 so a weekly day off never empties the shift. */
+const RECEPTION_PLAN = [
+  { shift: SHIFTS[0], minOnDuty: 2 },
+  { shift: SHIFTS[1], minOnDuty: 2 },
+  { shift: SHIFTS[2], minOnDuty: 1 }
+];
+const DAY_NAMES = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+
+function isEmergency(name) {
+  return /طوارئ/.test(String(name || ""));
+}
+
+function weekHoursForShift(shift, offWeekday = -1) {
   return [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
     weekday,
-    isOpen: true,
+    isOpen: weekday !== offWeekday,
     opensAt: shift.opensAt,
     closesAt: shift.closesAt,
-    overnight: shift.overnight,
+    overnight: Boolean(shift.overnight),
     breakEnabled: false,
     breakStartsAt: "13:00",
     breakEndsAt: "14:00"
   }));
+}
+
+function offDaysForHeadcount(minOnDuty, seed) {
+  const headcount = minOnDuty + 1;
+  const offs = [];
+  for (let i = 0; i < headcount; i += 1) {
+    offs.push((seed + i * 3) % 7);
+  }
+  return offs;
+}
+
+function catalogFor(specialty) {
+  const base = [...(SERVICES_BY_DEPT[specialty] || [])];
+  const extras = [
+    `متابعة استشاري ${specialty}`,
+    `متابعة أخصائي ${specialty}`,
+    `كشف ممارس عام ${specialty}`,
+    `توعية مجانية ${specialty}`,
+    `تقدير عند الطلب ${specialty}`
+  ];
+  while (base.length < 15) base.push(extras[base.length % extras.length] || `خدمة ${specialty} ${base.length + 1}`);
+  return base.slice(0, 15);
+}
+
+function pricingFor(name, index) {
+  if (/مجاني/.test(name)) return { pricingType: "free", price: 0, priceMin: 0, priceMax: 0 };
+  if (/عند الطلب/.test(name)) return { pricingType: "on_request", price: 0, priceMin: 0, priceMax: 0 };
+  if (/قسطرة|ليزر|هولتر|نطاق/.test(name)) {
+    const priceMin = 250 + (index % 3) * 50;
+    return { pricingType: "range", price: priceMin, priceMin, priceMax: priceMin + 450 };
+  }
+  let price = 200 + index * 20;
+  if (/استشاري/.test(name)) price = 700 + (index % 3) * 50;
+  else if (/أخصائي|اخصائي/.test(name)) price = 420 + (index % 3) * 30;
+  else if (/عام|ممارس/.test(name)) price = 180 + (index % 3) * 20;
+  else if (/تحليل|أشعة|صورة دم|سكر|وظائف|سونار|رسم/.test(name)) price = 90 + index * 12;
+  else if (/صرف|صيدل|فيتامين/.test(name)) price = 50 + index * 8;
+  return { pricingType: "fixed", price, priceMin: price, priceMax: price };
+}
+
+function providerIdsFor(name, team) {
+  const allDoctors = [...team.consultants, ...team.specialists, ...team.gps];
+  if (/استشاري/.test(name) && team.consultants.length) return team.consultants.map((p) => p.id);
+  if (/أخصائي|اخصائي/.test(name) && team.specialists.length) return team.specialists.map((p) => p.id);
+  if (/ممارس|كشف عام|عام /.test(name) && team.gps.length) return team.gps.map((p) => p.id);
+  if (/تمريض|تطعيم|غسيل|قياس ضغط|صرف وصفة|توعية/.test(name) && team.nurses.length) {
+    return [...new Set([...team.nurses, ...team.gps].map((p) => p.id))];
+  }
+  return allDoctors.map((p) => p.id);
 }
 
 function pickName(index) {
@@ -232,127 +302,179 @@ function generateDemo() {
       throw new Error("لا توجد فئات خدمة — فعّل الأقسام الطبية أولاً");
     }
 
+    if (!keep) {
+      // Drop placeholder staff/services/customers from the default store so the seed is the full roster.
+      ops.listStaff().forEach((person) => {
+        try { ops.deleteStaff(person.id); } catch { /* ignore */ }
+      });
+      ops.listServices().forEach((service) => {
+        try { ops.deleteService(service.id); } catch { /* ignore */ }
+      });
+      const live = opsWorkspace.getContext(() => ({}));
+      if (live?.data) live.data.customers = [];
+    }
+
     let nameIndex = 0;
     let staffCreated = 0;
     let servicesCreated = 0;
     const roleCounts = { consultant: 0, specialist: 0, gp: 0, nurse: 0, admin: 0 };
 
+    const roster = [];
+    const hire = (fields, slot) => {
+      const person = ops.createStaff({
+        active: true,
+        useBusinessHours: false,
+        serviceIds: [],
+        ...fields,
+        phone: phoneFor(nameIndex)
+      });
+      nameIndex += 1;
+      staffCreated += 1;
+      if (slot) roster.push({ ...slot, staffId: person.id });
+      return person;
+    };
+
+    const hireCovered = ({ shift, minOnDuty, seed, roleKey, categoryId, make }) => {
+      const offs = offDaysForHeadcount(minOnDuty, seed);
+      return offs.map((offWeekday, index) => {
+        const cover = index > 0;
+        const person = hire(make({
+          offWeekday,
+          cover,
+          workingHours: weekHoursForShift(shift, offWeekday),
+          placeExtra: cover ? "تغطية إجازة" : "أساسي"
+        }), {
+          roleKey,
+          categoryId,
+          opensAt: shift.opensAt,
+          closesAt: shift.closesAt,
+          overnight: Boolean(shift.overnight),
+          minOnDuty
+        });
+        if (roleKey === "consultant" || roleKey === "specialist" || roleKey === "gp" || roleKey === "nurse") {
+          roleCounts[roleKey] += 1;
+        } else if (roleKey === "reception") {
+          roleCounts.admin += 1;
+        }
+        return person;
+      });
+    };
+
     for (const category of categories) {
       const specialty = category.name;
-      const serviceNames = SERVICES_BY_DEPT[specialty] || Array.from({ length: 10 }, (_, i) => `خدمة ${specialty} ${i + 1}`);
+      const er = isEmergency(specialty);
+      const shifts = er ? ER_SHIFTS : CLINIC_SHIFTS;
+      const team = { consultants: [], specialists: [], gps: [], nurses: [] };
+      const femaleNurse = /أطفال|نساء|جلد|عيون/.test(specialty);
 
-      // Create 10 services first (providers filled after staff)
-      const createdServices = [];
-      for (let i = 0; i < 10; i += 1) {
-        const svc = ops.createService({
-          name: serviceNames[i] || `خدمة ${i + 1}`,
+      shifts.forEach((shift, shiftIndex) => {
+        ["consultant", "specialist", "gp"].forEach((rank, rankIndex) => {
+          const people = hireCovered({
+            shift,
+            minOnDuty: 1,
+            seed: shiftIndex * 3 + rankIndex,
+            roleKey: rank,
+            categoryId: category.id,
+            make: ({ offWeekday, cover, workingHours, placeExtra }) => {
+              const names = pickName(nameIndex);
+              return {
+                ...names,
+                title: doctorTitle(rank, specialty),
+                servicePlace: `${specialty} · ${shift.label} · ${placeExtra} · إجازة ${DAY_NAMES[offWeekday]}`,
+                serviceCategoryId: category.id,
+                workingHours
+              };
+            }
+          });
+          team[rank === "gp" ? "gps" : rank === "consultant" ? "consultants" : "specialists"].push(...people);
+        });
+
+        const nurses = hireCovered({
+          shift,
+          minOnDuty: 1,
+          seed: 1 + shiftIndex,
+          roleKey: "nurse",
           categoryId: category.id,
-          durationMinutes: i % 3 === 0 ? 45 : 30,
+          make: ({ offWeekday, cover, workingHours, placeExtra }) => {
+            const names = pickName(nameIndex + (femaleNurse || cover ? 10 : 0));
+            const title = er
+              ? (femaleNurse || cover ? "ممرضة طوارئ" : "ممرض طوارئ")
+              : (femaleNurse || cover ? `ممرضة ${specialty}` : `ممرض ${specialty}`);
+            return {
+              ...names,
+              title,
+              servicePlace: `${specialty} · تمريض · ${shift.label} · ${placeExtra} · إجازة ${DAY_NAMES[offWeekday]}`,
+              serviceCategoryId: category.id,
+              workingHours
+            };
+          }
+        });
+        team.nurses.push(...nurses);
+      });
+
+      const serviceNames = catalogFor(specialty);
+      serviceNames.forEach((name, index) => {
+        const pricing = pricingFor(name, index);
+        ops.createService({
+          name,
+          categoryId: category.id,
+          durationMinutes: /استشاري/.test(name) ? 45 : 30,
           bufferMinutes: 15,
-          pricingType: i % 5 === 4 ? "range" : "fixed",
-          price: 150 + i * 40,
-          priceMin: 120 + i * 20,
-          priceMax: 400 + i * 50,
-          color: SERVICE_COLORS[i % SERVICE_COLORS.length],
+          ...pricing,
+          color: SERVICE_COLORS[index % SERVICE_COLORS.length],
           publicBooking: true,
           autoAccept: true,
           autoComplete: false,
-          providerIds: [],
-          description: `${specialty} · ${serviceNames[i] || ""}`
+          providerIds: providerIdsFor(name, team),
+          description: `${specialty} · ${pricing.pricingType}`
         });
-        createdServices.push(svc);
         servicesCreated += 1;
-      }
+      });
+    }
 
-      // Per shift: consultant, specialist, GP, nurse, admin
-      const shiftDoctors = { morning: [], evening: [], night: [] };
-
-      for (const shift of SHIFTS) {
-        const ranks = [
-          { rank: "consultant", key: "consultant" },
-          { rank: "specialist", key: "specialist" },
-          { rank: "gp", key: "gp" }
-        ];
-
-        for (const { rank, key } of ranks) {
-          const names = pickName(nameIndex++);
-          const person = ops.createStaff({
+    RECEPTION_PLAN.forEach(({ shift, minOnDuty }, shiftIndex) => {
+      hireCovered({
+        shift,
+        minOnDuty,
+        seed: shiftIndex * 2,
+        roleKey: "reception",
+        categoryId: "",
+        make: ({ offWeekday, cover, workingHours, placeExtra }) => {
+          const names = pickName(nameIndex + 12);
+          return {
             ...names,
-            phone: phoneFor(nameIndex),
-            title: doctorTitle(rank, specialty),
-            servicePlace: `${specialty} · وردية ${shift.label}`,
-            serviceCategoryId: category.id,
-            serviceIds: [],
-            active: true,
-            useBusinessHours: false,
-            workingHours: weekHoursForShift(shift)
-          });
-          shiftDoctors[shift.id].push(person);
-          roleCounts[key] += 1;
-          staffCreated += 1;
+            title: "استقبال",
+            servicePlace: `الاستقبال الرئيسي · ${shift.label} · ${placeExtra} · إجازة ${DAY_NAMES[offWeekday]}`,
+            serviceCategoryId: "",
+            workingHours
+          };
         }
+      });
+    });
 
-        const nurseNames = pickName(nameIndex++);
-        ops.createStaff({
-          ...nurseNames,
-          phone: phoneFor(nameIndex),
-          title: specialty.includes("أطفال") || specialty.includes("نساء") ? `ممرضة ${specialty}` : `ممرض ${specialty}`,
-          servicePlace: `${specialty} · تمريض · ${shift.label}`,
-          serviceCategoryId: category.id,
-          serviceIds: [],
-          active: true,
-          useBusinessHours: false,
-          workingHours: weekHoursForShift(shift)
+    const staffById = new Map(ops.listStaff().map((person) => [person.id, person]));
+    const groups = new Map();
+    roster.forEach((slot) => {
+      const key = [slot.roleKey, slot.categoryId || "reception", slot.opensAt, slot.closesAt].join("|");
+      if (!groups.has(key)) groups.set(key, { minOnDuty: slot.minOnDuty, ids: new Set() });
+      groups.get(key).ids.add(slot.staffId);
+      groups.get(key).minOnDuty = Math.max(groups.get(key).minOnDuty, slot.minOnDuty);
+    });
+    const gaps = [];
+    groups.forEach((group, key) => {
+      for (let weekday = 0; weekday < 7; weekday += 1) {
+        let onDuty = 0;
+        group.ids.forEach((id) => {
+          const day = (staffById.get(id)?.workingHours || []).find((item) => item.weekday === weekday);
+          if (day && day.isOpen !== false) onDuty += 1;
         });
-        roleCounts.nurse += 1;
-        staffCreated += 1;
-
-        const adminNames = pickName(nameIndex++);
-        const adminTitle = shift.id === "morning" ? "استقبال" : shift.id === "evening" ? "منسق حجوزات" : "مشرف قسم";
-        ops.createStaff({
-          ...adminNames,
-          phone: phoneFor(nameIndex),
-          title: adminTitle,
-          servicePlace: `${specialty} · إداري · ${shift.label}`,
-          serviceCategoryId: category.id,
-          serviceIds: [],
-          active: true,
-          useBusinessHours: false,
-          workingHours: weekHoursForShift(shift)
-        });
-        roleCounts.admin += 1;
-        staffCreated += 1;
+        if (onDuty < group.minOnDuty) gaps.push(`${key} · ${DAY_NAMES[weekday]} → ${onDuty}/${group.minOnDuty}`);
       }
-
-      // Link services to doctors: rotate consultants/specialists/GPs across shifts
-      const allDoctors = [...shiftDoctors.morning, ...shiftDoctors.evening, ...shiftDoctors.night];
-      createdServices.forEach((svc, idx) => {
-        const primary = allDoctors[idx % allDoctors.length];
-        const secondary = allDoctors[(idx + 3) % allDoctors.length];
-        const providerIds = [...new Set([primary.id, secondary.id])];
-        ops.updateService(svc.id, { providerIds });
-      });
+    });
+    if (gaps.length) {
+      throw new Error(`فجوات تغطية بعد توزيع الإجازات:\n${gaps.slice(0, 12).join("\n")}`);
     }
 
-    // Shared front-desk pool (covers booking beyond single dept)
-    for (const shift of SHIFTS) {
-      const names = pickName(nameIndex++);
-      ops.createStaff({
-        ...names,
-        phone: phoneFor(nameIndex),
-        title: "استقبال عام",
-        servicePlace: `الاستقبال الرئيسي · ${shift.label}`,
-        serviceCategoryId: "",
-        serviceIds: [],
-        active: true,
-        useBusinessHours: false,
-        workingHours: weekHoursForShift(shift)
-      });
-      roleCounts.admin += 1;
-      staffCreated += 1;
-    }
-
-    // Sample customers for booking tests
     const customerSeeds = [
       ["حسام", "مكرم", "cat-regular"],
       ["هيثم", "وحيدة", "cat-new"],
@@ -381,6 +503,7 @@ function generateDemo() {
       servicesCreated,
       customersCreated,
       roleCounts,
+      coverageOk: gaps.length === 0,
       staffTotal: ops.listStaff().length,
       servicesTotal: ops.listServices().length,
       customersTotal: ops.listCustomers().length
