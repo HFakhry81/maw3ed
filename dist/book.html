@@ -278,11 +278,11 @@
                         : `المبلغ: E£${state.result.amount ?? 0}`
                 }</p>
                 ${state.result.checkInToken ? `
-                  <div style="margin-top:14px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;text-align:center">
-                    <b>بطاقة الحضور</b>
-                    <p class="muted" style="margin:6px 0">أبرز هذا الرمز عند الاستقبال</p>
+                  <div style="margin-top:14px;padding:12px;border:1px solid #fdba74;background:#fff7ed;border-radius:12px;text-align:center">
+                    <b>يجب تحميل وحفظ رمز QR</b>
+                    <p style="margin:8px 0;color:#9a3412;font-weight:700">لا يتم تسجيل الحضور عند الاستقبال بدون إظهار هذا الرمز. احفظ الملف على جهازك ثم أظهره لموظف الاستقبال.</p>
                     <div id="checkin-qr" style="width:180px;margin:0 auto"></div>
-                    <p style="margin-top:8px"><a class="cta" style="display:inline-block;text-decoration:none;padding:8px 12px" href="${state.passUrl || `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(state.result.checkInToken)}`}" target="_blank" rel="noopener">فتح البطاقة / حفظها</a></p>
+                    <p style="margin-top:8px"><a class="cta" style="display:inline-block;text-decoration:none;padding:10px 14px" href="${state.passUrl || `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(state.result.checkInToken)}`}" target="_blank" rel="noopener">فتح البطاقة وتحميل PDF</a></p>
                   </div>
                 ` : ""}
               ` : `
