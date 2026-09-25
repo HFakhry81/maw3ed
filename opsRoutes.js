@@ -314,14 +314,23 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         return true;
       }
 
+      if (requested === "/api/ops/desk/preview" && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        sendJson(res, 200, {
+          ok: true,
+          ...ops.previewCheckIn(body.token || body.checkInToken)
+        });
+        return true;
+      }
+
       if (requested === "/api/ops/desk/check-in" && req.method === "POST") {
         const body = await parseJsonBody(req);
         sendJson(res, 200, {
           ok: true,
           appointment: ops.checkInByToken({
             token: body.token || body.checkInToken,
-            categoryId: body.categoryId || "",
-            actorStaffId: body.actorStaffId || ""
+            actorStaffId: body.actorStaffId || "",
+            updates: body.updates || null
           })
         });
         return true;

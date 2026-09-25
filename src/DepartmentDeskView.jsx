@@ -17,6 +17,9 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
   const [error, setError] = useState("");
   const [activeId, setActiveId] = useState("");
   const [checkInBusy, setCheckInBusy] = useState(false);
+  const [scanToken, setScanToken] = useState("");
+  const [review, setReview] = useState(null);
+  const [reviewForm, setReviewForm] = useState(null);
   const [addonOpen, setAddonOpen] = useState(false);
 
   const deskStaff = useMemo(() => {
@@ -75,39 +78,73 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
     if (!actorStaffId && deskStaff[0]?.id) setActorStaffId(deskStaff[0].id);
   }, [deskStaff, actorStaffId]);
 
-  const doCheckIn = useCallback(async (rawToken) => {
+  const extractToken = (rawToken) => {
     const token = String(rawToken || "").trim();
-    if (!token) return;
-    let checkToken = token;
+    if (!token) return "";
     try {
       if (token.includes("token=")) {
         const url = new URL(token, window.location.origin);
-        checkToken = url.searchParams.get("token") || token;
-      } else if (token.includes("/pass/")) {
+        return url.searchParams.get("token") || token;
+      }
+      if (token.includes("/pass/")) {
         const parts = token.split("/pass/");
-        checkToken = decodeURIComponent((parts[1] || "").split(/[?#]/)[0]);
+        return decodeURIComponent((parts[1] || "").split(/[?#]/)[0]);
       }
     } catch {
-      checkToken = token;
+      return token;
     }
+    return token;
+  };
+
+  const doCheckIn = useCallback(async (rawToken) => {
+    const checkToken = extractToken(rawToken);
+    if (!checkToken) return;
     setCheckInBusy(true);
     try {
-      const result = await api.post("/api/ops/desk/check-in", {
-        token: checkToken,
-        categoryId,
-        actorStaffId
+      const result = await api.post("/api/ops/desk/preview", { token: checkToken });
+      const appointment = result.appointment;
+      setScanToken(checkToken);
+      setReview(result);
+      setReviewForm({
+        customerName: appointment.customerName || "",
+        categoryId: appointment.categoryId || "",
+        serviceId: appointment.serviceId || "",
+        staffId: appointment.staffId || "",
+        date: appointment.date || "",
+        time: appointment.time || "",
+        amount: appointment.amount ?? 0
       });
-      setActiveId(result.appointment?.id || "");
-      confirmSaved("تم تسجيل الحضور");
-      await loadDesk();
-      reloadAppointments?.();
+      if (appointment.categoryId) setCategoryId(appointment.categoryId);
     } catch (err) {
-      confirmSaveFailed("تعذر تسجيل الحضور", err.message);
+      confirmSaveFailed("تعذر قراءة رمز الحضور", err.message);
       throw err;
     } finally {
       setCheckInBusy(false);
     }
-  }, [actorStaffId, categoryId, loadDesk, reloadAppointments]);
+  }, []);
+
+  const confirmCheckIn = async () => {
+    if (!scanToken || !reviewForm) return;
+    setCheckInBusy(true);
+    try {
+      const result = await api.post("/api/ops/desk/check-in", {
+        token: scanToken,
+        actorStaffId,
+        updates: reviewForm
+      });
+      const saved = result.appointment;
+      if (saved?.categoryId) setCategoryId(saved.categoryId);
+      setActiveId(saved?.id || "");
+      setReview(null);
+      setReviewForm(null);
+      confirmSaved("تم تسجيل الحضور وضبط شاشة القسم");
+      reloadAppointments?.();
+    } catch (err) {
+      confirmSaveFailed("تعذر تسجيل الحضور", err.message);
+    } finally {
+      setCheckInBusy(false);
+    }
+  };
 
   const addAddon = async (serviceId) => {
     if (!activeVisit?.id) return;
@@ -268,6 +305,103 @@ export function DepartmentDeskView({ ops, locale, reloadAppointments }) {
           </div>
         </section>
       </div>
+
+      </div>
+
+      {review && reviewForm ? (
+        <div className="desk-modal-backdrop" role="presentation">
+          <div className="desk-modal panel" role="dialog" aria-labelledby="desk-review-title">
+            <header>
+              <h3 id="desk-review-title">تأكيد حضور من QR</h3>
+              <button type="button" className="ghost-button" onClick={() => { setReview(null); setReviewForm(null); }}>إلغاء</button>
+            </header>
+            <p className="notice-inline">
+              تم ضبط فئة الشاشة على حجز الرمز. راجع البيانات ثم أكّد، أو عدّلها قبل التسجيل.
+              {review.sameDay ? "" : ` تنبيه: الموعد ليس اليوم (${review.today}).`}
+            </p>
+            <label>اسم العميل
+              <input value={reviewForm.customerName} onChange={(e) => setReviewForm({ ...reviewForm, customerName: e.target.value })} />
+            </label>
+            <label>فئة الخدمة
+              <select
+                value={reviewForm.categoryId}
+                onChange={(e) => {
+                  const nextCategory = e.target.value;
+                  const nextService = (ops?.services || []).find((service) => service.categoryId === nextCategory && service.active !== false);
+                  const providers = nextService?.providerIds || [];
+                  setReviewForm({
+                    ...reviewForm,
+                    categoryId: nextCategory,
+                    serviceId: nextService?.id || "",
+                    staffId: providers.includes(reviewForm.staffId) ? reviewForm.staffId : (providers[0] || "")
+                  });
+                  setCategoryId(nextCategory);
+                }}
+              >
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>{category.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>الخدمة المحجوزة
+              <select
+                value={reviewForm.serviceId}
+                onChange={(e) => {
+                  const service = (ops?.services || []).find((item) => item.id === e.target.value);
+                  const providers = service?.providerIds || [];
+                  setReviewForm({
+                    ...reviewForm,
+                    serviceId: e.target.value,
+                    categoryId: service?.categoryId || reviewForm.categoryId,
+                    staffId: providers.includes(reviewForm.staffId) ? reviewForm.staffId : (providers[0] || "")
+                  });
+                  if (service?.categoryId) setCategoryId(service.categoryId);
+                }}
+              >
+                {(ops?.services || [])
+                  .filter((service) => service.categoryId === reviewForm.categoryId && service.active !== false)
+                  .map((service) => (
+                    <option key={service.id} value={service.id}>{service.name}</option>
+                  ))}
+              </select>
+            </label>
+            <label>مقدم الخدمة
+              <select
+                value={reviewForm.staffId}
+                onChange={(e) => setReviewForm({ ...reviewForm, staffId: e.target.value })}
+              >
+                {((ops?.services || []).find((service) => service.id === reviewForm.serviceId)?.providerIds || [])
+                  .map((id) => (ops?.staff || []).find((person) => person.id === id))
+                  .filter(Boolean)
+                  .map((person) => (
+                    <option key={person.id} value={person.id}>{person.name} · {person.title || ""}</option>
+                  ))}
+              </select>
+            </label>
+            <div className="form-row">
+              <label>التاريخ
+                <input type="date" value={reviewForm.date} onChange={(e) => setReviewForm({ ...reviewForm, date: e.target.value })} />
+              </label>
+              <label>الوقت
+                <input type="time" value={reviewForm.time} onChange={(e) => setReviewForm({ ...reviewForm, time: e.target.value })} />
+              </label>
+            </div>
+            <label>المبلغ {review.appointment?.paymentStatus === "paid" ? "المدفوع" : "المسجّل"}
+              <input
+                type="number"
+                min="0"
+                value={reviewForm.amount}
+                onChange={(e) => setReviewForm({ ...reviewForm, amount: e.target.value })}
+              />
+            </label>
+            <div className="desk-active-actions">
+              <button type="button" className="primary-button" disabled={checkInBusy} onClick={confirmCheckIn}>
+                تأكيد تسجيل الحضور
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {addonOpen && activeVisit ? (
         <div className="desk-modal-backdrop" role="presentation" onClick={() => setAddonOpen(false)}>

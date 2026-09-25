@@ -1748,10 +1748,85 @@ function getPublicPass(slug, token) {
   };
 }
 
+function previewCheckIn(token) {
+  const appointment = findAppointmentByCheckInToken(token);
+  if (!appointment) fail("رمز الحضور غير معروف", 404);
+  if (appointment.status === "cancelled" || appointment.status === "canceled") {
+    fail("هذا الموعد ملغى", 400);
+  }
+  const service = store.services.find((item) => item.id === appointment.serviceId) || null;
+  const enriched = opsDesk.enrichAppointmentForDesk(appointment, store);
+  const today = opsDesk.todayInTimezone(store.bookingPage?.timezone || "Africa/Cairo");
+  return {
+    today,
+    sameDay: enriched.date === today,
+    appointment: enriched,
+    providers: service
+      ? (service.providerIds || [])
+        .map((id) => store.staff.find((person) => person.id === id))
+        .filter(Boolean)
+        .map((person) => ({ id: person.id, name: person.name, title: person.title || "" }))
+      : []
+  };
+}
+
+function applyCheckInUpdates(appointment, updates = {}) {
+  if (!updates || typeof updates !== "object") return appointment;
+  if (updates.customerName != null) {
+    const name = String(updates.customerName || "").trim();
+    if (!name) fail("اسم العميل مطلوب", 400);
+    appointment.customerName = name;
+  }
+  if (updates.serviceId) {
+    const service = store.services.find((item) => item.id === updates.serviceId && item.active !== false);
+    if (!service) fail("الخدمة المحددة غير موجودة", 404);
+    appointment.serviceId = service.id;
+    appointment.serviceName = service.name;
+    appointment.categoryId = service.categoryId;
+    const primary = (appointment.lineItems || []).find((item) => item.kind === "primary");
+    if (primary) primary.name = service.name;
+  }
+  const service = store.services.find((item) => item.id === appointment.serviceId) || null;
+  if (updates.staffId) {
+    const staff = store.staff.find((person) => person.id === updates.staffId && person.active !== false);
+    if (!staff) fail("مقدم الخدمة غير موجود", 404);
+    const providers = service?.providerIds || [];
+    if (providers.length && !providers.includes(staff.id)) {
+      fail("مقدم الخدمة المحدد غير مربوط بهذه الخدمة", 400);
+    }
+    appointment.staffId = staff.id;
+    appointment.staffName = staff.name;
+  }
+  if (updates.date) {
+    const date = String(updates.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) fail("تاريخ الحجز غير صالح", 400);
+    appointment.date = date;
+  }
+  if (updates.time) {
+    const time = String(updates.time);
+    if (!/^\d{2}:\d{2}$/.test(time)) fail("وقت الحجز غير صالح", 400);
+    appointment.time = time;
+  }
+  if (updates.amount != null && updates.amount !== "") {
+    const amount = Number(updates.amount);
+    if (!Number.isFinite(amount) || amount < 0) fail("المبلغ غير صالح", 400);
+    const rounded = Math.round(amount);
+    const primary = (appointment.lineItems || []).find((item) => item.kind === "primary");
+    if (primary) primary.amount = rounded;
+    appointment.amount = Array.isArray(appointment.lineItems) && appointment.lineItems.length
+      ? opsDesk.sumLineItems(appointment.lineItems)
+      : rounded;
+    if (appointment.pricingStatus === "quote_pending") appointment.pricingStatus = "quoted";
+  }
+  appointment.updatedAt = new Date().toISOString();
+  return appointment;
+}
+
 /**
- * Check-in by unguessable token. Validates same-day + optional department scope.
+ * Check-in by unguessable token.
+ * The scanned booking sets the department; a previously selected desk category must not block it.
  */
-function checkInByToken({ token, categoryId = "", actorStaffId = "" } = {}) {
+function checkInByToken({ token, actorStaffId = "", updates = null } = {}) {
   const appointment = findAppointmentByCheckInToken(token);
   if (!appointment) fail("رمز الحضور غير معروف أو منتهي", 404);
   if (appointment.status === "cancelled" || appointment.status === "canceled") {
@@ -1759,25 +1834,24 @@ function checkInByToken({ token, categoryId = "", actorStaffId = "" } = {}) {
   }
   if (appointment.status === "completed") fail("الزيارة مكتملة مسبقاً", 400);
 
-  const service = store.services.find((item) => item.id === appointment.serviceId) || null;
-  opsDesk.ensureVisitFields(appointment, service, {
+  const beforeService = store.services.find((item) => item.id === appointment.serviceId) || null;
+  opsDesk.ensureVisitFields(appointment, beforeService, {
     amount: appointment.amount,
     pricingType: appointment.pricingType
   });
+  if (updates) applyCheckInUpdates(appointment, updates);
+
+  const service = store.services.find((item) => item.id === appointment.serviceId) || null;
+  if (service?.categoryId) appointment.categoryId = service.categoryId;
 
   const day = opsDesk.todayInTimezone(store.bookingPage?.timezone || "Africa/Cairo");
   if (appointment.date !== day) {
-    fail(`هذا الموعد بتاريخ ${appointment.date} وليس لليوم (${day})`, 400);
-  }
-
-  if (categoryId) {
-    const apptCategory = appointment.categoryId || service?.categoryId || "";
-    if (apptCategory && apptCategory !== categoryId) {
-      fail("هذا الموعد لا يتبع القسم المحدد على شاشة الحضور", 403);
-    }
+    persist();
+    fail(`تم حفظ التعديل، لكن الحضور متاح فقط في يوم الموعد (${appointment.date}). اليوم هو ${day}.`, 400);
   }
 
   if (appointment.status === "checked_in") {
+    persist();
     return opsDesk.enrichAppointmentForDesk(appointment, store);
   }
 
@@ -1795,7 +1869,7 @@ function checkInByToken({ token, categoryId = "", actorStaffId = "" } = {}) {
     type: "check_in",
     byStaffId: actor?.id || null,
     byStaffName: actor?.name || "",
-    meta: { categoryId: categoryId || appointment.categoryId || null }
+    meta: { categoryId: appointment.categoryId || null, edited: Boolean(updates) }
   });
   persist();
   return opsDesk.enrichAppointmentForDesk(appointment, store);
@@ -2011,6 +2085,7 @@ module.exports = {
   setAppointmentPricing,
   listDeskToday,
   getPublicPass,
+  previewCheckIn,
   checkInByToken,
   addAppointmentAddon,
   completeDeskVisit,

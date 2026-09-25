@@ -3975,9 +3975,31 @@ html.keyboard-open .auth-landing {
   gap: 8px;
 }
 
-.desk-modal header h3 {
+.desk-modal label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: var(--ops-muted);
+}
+
+.desk-modal input,
+.desk-modal select {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ops-line);
+  background: #fff;
+  color: var(--ops-ink);
+}
+
+.notice-inline {
   margin: 0;
-  font-size: 1rem;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  font-weight: 700;
+  line-height: 1.6;
 }
 
 .desk-addon-list {

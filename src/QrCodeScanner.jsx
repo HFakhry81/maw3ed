@@ -94,6 +94,7 @@ export function QrCodeScanner({
     } finally {
       setTimeout(() => {
         lockRef.current = false;
+        setLastScan("");
       }, 900);
     }
   }, [busy, lastScan, onScan]);
