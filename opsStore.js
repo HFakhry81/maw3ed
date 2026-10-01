@@ -641,6 +641,18 @@ function setAppointmentPricing(id, payload = {}) {
   }
   appointment.pricedAt = new Date().toISOString();
   appointment.updatedAt = appointment.pricedAt;
+  if (Array.isArray(appointment.lineItems) && appointment.lineItems.length) {
+    const primary = appointment.lineItems.find((item) => item.kind === "primary") || appointment.lineItems[0];
+    if (primary) {
+      primary.amount = appointment.amount;
+      primary.pricingType = appointment.pricingType;
+      primary.priceMin = appointment.priceMin;
+      primary.priceMax = appointment.priceMax;
+      primary.pricingStatus = appointment.pricingStatus;
+      primary.pricedAt = appointment.pricedAt;
+    }
+    appointment.amount = opsDesk.sumLineItems(appointment.lineItems);
+  }
   persist();
   return appointment;
 }
@@ -1801,7 +1813,7 @@ function checkInByToken({ token, actorStaffId = "", updates = null } = {}) {
   opsDesk.ensureVisitFields(appointment, beforeService, {
     amount: appointment.amount,
     pricingType: appointment.pricingType
-  });
+  }, store);
   if (updates) applyCheckInUpdates(appointment, updates);
 
   const service = store.services.find((item) => item.id === appointment.serviceId) || null;
@@ -1828,11 +1840,23 @@ function checkInByToken({ token, actorStaffId = "", updates = null } = {}) {
   appointment.checkedInByStaffId = actor?.id || null;
   appointment.checkedInByName = actor?.name || "";
   appointment.updatedAt = appointment.checkedInAt;
+  opsDesk.ensureVisitFields(appointment, service, {
+    amount: appointment.amount,
+    pricingType: appointment.pricingType,
+    priceMin: appointment.priceMin,
+    priceMax: appointment.priceMax,
+    pricingStatus: appointment.pricingStatus,
+    durationMinutes: appointment.durationMinutes || service?.durationMinutes
+  }, store);
   opsDesk.pushVisitLog(appointment, {
     type: "check_in",
     byStaffId: actor?.id || null,
     byStaffName: actor?.name || "",
-    meta: { categoryId: appointment.categoryId || null, edited: Boolean(updates) }
+    meta: {
+      categoryId: appointment.categoryId || null,
+      edited: Boolean(updates),
+      expectedEndAt: appointment.expectedEndAt || null
+    }
   });
   persist();
   return opsDesk.enrichAppointmentForDesk(appointment, store);
@@ -1853,33 +1877,30 @@ function addAppointmentAddon(appointmentId, { serviceId, actorStaffId = "", amou
     fail("يُسمح فقط بخدمات نفس القسم/الفئة أثناء الزيارة", 400);
   }
 
-  opsDesk.ensureVisitFields(appointment, primary, { amount: appointment.amount });
+  opsDesk.ensureVisitFields(appointment, primary, {
+    amount: appointment.amount,
+    pricingType: appointment.pricingType,
+    priceMin: appointment.priceMin,
+    priceMax: appointment.priceMax,
+    pricingStatus: appointment.pricingStatus,
+    durationMinutes: appointment.durationMinutes
+  }, store);
 
-  let addonAmount = amount != null ? Number(amount) : null;
-  if (!Number.isFinite(addonAmount)) {
-    const pricing = resolveBookingPricing(addon, {});
-    if (pricing.pricingType === "on_request") addonAmount = 0;
-    else if (pricing.pricingType === "range") addonAmount = pricing.priceMin;
-    else addonAmount = pricing.amount;
-  }
-  if (addonAmount < 0) fail("مبلغ الخدمة الإضافية غير صالح", 400);
-
+  const pricing = resolveBookingPricing(addon, amount != null ? { amount } : {});
   const actor = actorStaffId
     ? store.staff.find((person) => person.id === actorStaffId) || null
     : null;
 
-  const line = {
-    id: createId("line"),
-    kind: "addon",
-    serviceId: addon.id,
-    name: addon.name,
-    amount: Math.round(addonAmount),
-    addedAt: new Date().toISOString(),
-    addedByStaffId: actor?.id || null,
-    addedByName: actor?.name || ""
-  };
+  const line = opsDesk.buildAddonLineItem(addon, {
+    ...pricing,
+    amount: amount != null && Number.isFinite(Number(amount))
+      ? Math.round(Number(amount))
+      : pricing.amount,
+    durationMinutes: addon.durationMinutes
+  }, { id: createId("line"), actor });
+
   appointment.lineItems.push(line);
-  appointment.amount = opsDesk.sumLineItems(appointment.lineItems);
+  opsDesk.syncAppointmentTotalsFromLines(appointment);
   if (appointment.paymentStatus === "paid" && line.amount > 0) {
     appointment.paymentStatus = "partial";
   }
@@ -1888,24 +1909,148 @@ function addAppointmentAddon(appointmentId, { serviceId, actorStaffId = "", amou
     type: "addon",
     byStaffId: actor?.id || null,
     byStaffName: actor?.name || "",
-    meta: { serviceId: addon.id, name: addon.name, amount: line.amount }
+    meta: {
+      serviceId: addon.id,
+      name: addon.name,
+      amount: line.amount,
+      pricingType: line.pricingType,
+      expectedEndAt: appointment.expectedEndAt || null
+    }
   });
   persist();
   return opsDesk.enrichAppointmentForDesk(appointment, store);
 }
 
-function completeDeskVisit(appointmentId, { actorStaffId = "", notes = "" } = {}) {
+/**
+ * Set / finalize a single provided-service line price during an active desk visit.
+ * Used for range (within min–max) and on_request quotes before or at session end.
+ */
+function setDeskLinePricing(appointmentId, lineId, { amount, actorStaffId = "" } = {}) {
+  const appointment = store.appointments.find((item) => item.id === appointmentId);
+  if (!appointment) fail("الموعد غير موجود", 404);
+  if (appointment.status !== "checked_in") {
+    fail("تسعير بنود الزيارة متاح فقط أثناء جلسة حضور نشطة", 400);
+  }
+  const primary = store.services.find((item) => item.id === appointment.serviceId) || null;
+  opsDesk.ensureVisitFields(appointment, primary, {
+    amount: appointment.amount,
+    pricingType: appointment.pricingType,
+    priceMin: appointment.priceMin,
+    priceMax: appointment.priceMax,
+    pricingStatus: appointment.pricingStatus
+  }, store);
+  const line = (appointment.lineItems || []).find((item) => item.id === lineId);
+  if (!line) fail("بند الخدمة غير موجود في الزيارة", 404);
+
+  const normalized = opsDesk.normalizeLineItem(line, store);
+  Object.assign(line, {
+    pricingType: normalized.pricingType,
+    priceMin: normalized.priceMin,
+    priceMax: normalized.priceMax,
+    pricingStatus: normalized.pricingStatus,
+    durationMinutes: normalized.durationMinutes
+  });
+
+  try {
+    opsDesk.applyLineFinalPrice(line, amount);
+  } catch (err) {
+    fail(err.message || "تعذر تثبيت سعر البند", err.status || 400);
+  }
+
+  opsDesk.syncAppointmentTotalsFromLines(appointment);
+  const actor = actorStaffId
+    ? store.staff.find((person) => person.id === actorStaffId) || null
+    : null;
+  appointment.updatedAt = new Date().toISOString();
+  opsDesk.pushVisitLog(appointment, {
+    type: "line_pricing",
+    byStaffId: actor?.id || null,
+    byStaffName: actor?.name || "",
+    meta: {
+      lineId: line.id,
+      name: line.name,
+      amount: line.amount,
+      pricingStatus: line.pricingStatus
+    }
+  });
+  persist();
+  return opsDesk.enrichAppointmentForDesk(appointment, store);
+}
+
+/**
+ * End desk visit: apply optional per-line final prices, require all range/on_request
+ * lines to be finalized, then mark completed. autoEnded=true when timer elapsed.
+ */
+function completeDeskVisit(appointmentId, {
+  actorStaffId = "",
+  notes = "",
+  linePrices = null,
+  autoEnded = false
+} = {}) {
   const appointment = store.appointments.find((item) => item.id === appointmentId);
   if (!appointment) fail("الموعد غير موجود", 404);
   if (appointment.status !== "checked_in" && appointment.status !== "confirmed") {
     fail("لا يمكن إنهاء زيارة بهذه الحالة", 400);
   }
+  const primary = store.services.find((item) => item.id === appointment.serviceId) || null;
+  opsDesk.ensureVisitFields(appointment, primary, {
+    amount: appointment.amount,
+    pricingType: appointment.pricingType,
+    priceMin: appointment.priceMin,
+    priceMax: appointment.priceMax,
+    pricingStatus: appointment.pricingStatus
+  }, store);
+
+  // Persist normalized meta onto live lines before applying prices.
+  appointment.lineItems = (appointment.lineItems || []).map((line) => {
+    const normalized = opsDesk.normalizeLineItem(line, store);
+    Object.assign(line, {
+      pricingType: normalized.pricingType,
+      priceMin: normalized.priceMin,
+      priceMax: normalized.priceMax,
+      pricingStatus: normalized.pricingStatus,
+      durationMinutes: normalized.durationMinutes,
+      amount: normalized.amount
+    });
+    return line;
+  });
+
+  const priceMap = new Map();
+  if (Array.isArray(linePrices)) {
+    for (const entry of linePrices) {
+      if (!entry?.lineId) continue;
+      priceMap.set(String(entry.lineId), entry.amount);
+    }
+  }
+
+  for (const line of appointment.lineItems) {
+    if (priceMap.has(line.id)) {
+      try {
+        opsDesk.applyLineFinalPrice(line, priceMap.get(line.id));
+      } catch (err) {
+        fail(err.message || "تعذر تثبيت سعر البند", err.status || 400);
+      }
+    }
+  }
+
+  const pending = appointment.lineItems.filter((line) => opsDesk.lineNeedsFinalPrice(line));
+  if (pending.length) {
+    const names = pending.map((line) => line.name).join("، ");
+    fail(
+      `يجب إدخال السعر النهائي للخدمات غير المسعّرة أو ذات النطاق قبل إنهاء الجلسة: ${names}`,
+      400
+    );
+  }
+
+  opsDesk.syncAppointmentTotalsFromLines(appointment);
+
   const actor = actorStaffId
     ? store.staff.find((person) => person.id === actorStaffId) || null
     : null;
   appointment.status = "completed";
   appointment.completedAt = new Date().toISOString();
   appointment.updatedAt = appointment.completedAt;
+  appointment.completedAuto = Boolean(autoEnded);
   if (notes) {
     appointment.notes = [appointment.notes, notes].filter(Boolean).join(" · ");
   }
@@ -1913,7 +2058,18 @@ function completeDeskVisit(appointmentId, { actorStaffId = "", notes = "" } = {}
     type: "complete",
     byStaffId: actor?.id || null,
     byStaffName: actor?.name || "",
-    meta: { amount: appointment.amount }
+    meta: {
+      amount: appointment.amount,
+      autoEnded: Boolean(autoEnded),
+      lineCount: appointment.lineItems.length,
+      lines: appointment.lineItems.map((line) => ({
+        id: line.id,
+        name: line.name,
+        amount: line.amount,
+        pricingType: line.pricingType,
+        pricingStatus: line.pricingStatus
+      }))
+    }
   });
   persist();
   return opsDesk.enrichAppointmentForDesk(appointment, store);
@@ -2052,6 +2208,7 @@ module.exports = {
   previewCheckIn,
   checkInByToken,
   addAppointmentAddon,
+  setDeskLinePricing,
   completeDeskVisit,
   getStatsSummary,
   resetOpsData

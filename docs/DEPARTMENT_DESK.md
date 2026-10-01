@@ -1,7 +1,7 @@
 # حضور وتشغيل القسم (Department Desk)
 
 ## الهدف
-شاشة تشغيل سريعة لمشرف القسم/الاستقبال: تسجيل حضور عبر QR، زيارة نشطة، وإضافة خدمات أثناء التواجد — مع عزل حسب فئة الخدمة.
+شاشة تشغيل سريعة لمشرف القسم/الاستقبال: تسجيل حضور عبر QR، زيارة نشطة، إضافة خدمات أثناء التواجد، وتثبيت أسعار النطاق / عند الطلب عند إنهاء الجلسة — مع عزل حسب فئة الخدمة.
 
 ## تدفق العميل
 1. بعد تأكيد الحجز يُنشأ `checkInToken` غير قابل للتخمين (`chk_` + عشوائي).
@@ -19,15 +19,24 @@
 ## تدفق الاستقبال
 1. قائمة اليوم: `GET /api/ops/desk/today?categoryId=`
 2. مسح QR أو لصق الرمز → `POST /api/ops/desk/check-in`  
-   يتحقق من: الرمز · نفس اليوم (Asia/Cairo افتراضياً) · انتماء القسم إن حُدّد · يحوّل الحالة إلى `checked_in` ويسجّل `checkedInAt` + سجل زيارة.
-3. إضافة خدمة: `POST /api/ops/desk/appointments/:id/addons` (خدمات نفس الفئة فقط) → تحديث `lineItems` والمبلغ الإجمالي.
-4. إنهاء الزيارة: `POST /api/ops/desk/appointments/:id/complete` → `completed`.
+   يتحقق من: الرمز · نفس اليوم · يحوّل الحالة إلى `checked_in` ويسجّل `checkedInAt` + يحسب `expectedEndAt` من مجموع مدد `lineItems`.
+3. إضافة خدمة: `POST /api/ops/desk/appointments/:id/addons` (خدمات نفس الفئة فقط) → تحديث قائمة الخدمات المقدَّمة فوراً وتمديد `expectedEndAt`.
+4. تسعير بند أثناء الجلسة (اختياري): `PATCH /api/ops/desk/appointments/:id/lines/:lineId/pricing` مع `{ amount }`.
+5. إنهاء الزيارة (زر أو تلقائي بعد انتهاء المدة): تقرير بكل البنود → `POST /api/ops/desk/appointments/:id/complete` مع `{ linePrices, autoEnded? }` → `completed`.
+
+## تسعير الجلسة (range / on_request)
+- كل بند في `lineItems` يحمل: `pricingType`, `priceMin`, `priceMax`, `pricingStatus`, `durationMinutes`, `needsFinalPrice`.
+- **نطاق:** يبقى `range_deposit` حتى يُدخل السعر النهائي ضمن النطاق → `range_final`.
+- **عند الطلب:** يبقى `quote_pending` حتى إدخال العرض → `quoted`.
+- الإنهاء مرفوض إن بقي أي بند `needsFinalPrice`.
+- عند انتهاء `expectedEndAt` تفتح الواجهة تقرير التسعير تلقائياً (`autoEnded`); لا يُغلق الموعد صامتاً دون أسعار.
 
 ## البيانات على الموعد
-- `checkInToken`, `checkedInAt`, `checkedInByStaffId`
-- `lineItems[]` (primary + addon)
-- `visitLog[]` (check_in / addon / complete)
+- `checkInToken`, `checkedInAt`, `checkedInByStaffId`, `expectedEndAt`, `completedAt`, `completedAuto`
+- `lineItems[]` (primary + addon) مع حقول التسعير والمدة
+- `visitLog[]` (check_in / addon / line_pricing / complete)
 - `status`: يشمل `checked_in`
+- حقول مشتقة في استجابة المكتب: `pricingPending`, `autoEndDue`, `visitDurationMinutes`, `remainingMinutes`
 
 ## الصلاحيات (مرحلة حالية)
 - عزل تشغيلي عبر اختيار القسم على الشاشة + فلترة الحجوزات.
@@ -36,5 +45,4 @@
 
 ## مفتوح لاحقاً
 - إرسال بطاقة QR تلقائياً عبر WhatsApp/SMS بعد الحجز.
-- رابط دفع سريع للمبلغ الإضافي.
-- تمديد تلقائي لشريحة الوقت عند إضافة خدمة طويلة.
+- رابط دفع سريع للمبلغ الإضافي / عرض السعر للعميل.

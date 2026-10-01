@@ -3896,11 +3896,122 @@ html.keyboard-open .auth-landing {
 .desk-lines li {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
   padding: 8px 10px;
   border-radius: 8px;
   background: var(--ops-row-alt);
   font-size: 0.88rem;
+}
+
+.desk-lines li.needs-price {
+  border: 1px solid color-mix(in srgb, var(--ops-accent, #0f766e) 35%, transparent);
+  background: color-mix(in srgb, var(--ops-accent, #0f766e) 6%, #fff);
+}
+
+.desk-line-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.desk-line-tag {
+  font-style: normal;
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+.desk-line-price-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.desk-line-price-edit input {
+  width: 96px;
+  padding: 4px 6px;
+  border: 1px solid var(--ops-line);
+  border-radius: 6px;
+}
+
+.desk-visit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin: 4px 0 8px;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.desk-timer.due {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.desk-price-pending {
+  color: #b45309;
+}
+
+.desk-complete-modal {
+  max-width: 560px;
+  width: min(96vw, 560px);
+}
+
+.desk-report-list {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  max-height: 42vh;
+  overflow: auto;
+}
+
+.desk-report-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--ops-row-alt);
+}
+
+.desk-report-row.needs-price {
+  border: 1px solid color-mix(in srgb, var(--ops-accent, #0f766e) 35%, transparent);
+}
+
+.desk-report-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.desk-report-row small {
+  opacity: 0.7;
+}
+
+.desk-report-row label {
+  display: grid;
+  gap: 4px;
+  font-size: 0.78rem;
+  min-width: 140px;
+}
+
+.desk-report-row input {
+  padding: 6px 8px;
+  border: 1px solid var(--ops-line);
+  border-radius: 6px;
+}
+
+.desk-report-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  margin-bottom: 8px;
+  border-top: 1px solid var(--ops-line);
+  font-size: 1.05rem;
 }
 
 .desk-active-actions {

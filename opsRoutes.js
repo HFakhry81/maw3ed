@@ -1,4 +1,8 @@
 const ops = require("./opsStore");
+const { createPlatformAdmin } = require("./platformAdmin");
+const { query, databaseConfigured } = require("./db");
+
+const platformAdmin = createPlatformAdmin({ query, databaseConfigured, sendJson: () => {} });
 
 const rateBuckets = new Map();
 
@@ -70,6 +74,10 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       workspaceId = publicWorkspaceId(slug);
     } else {
       workspaceId = adminWorkspaceId(req, requestUrl);
+    }
+
+    if (isOps || isPublic) {
+      await platformAdmin.assertWorkspaceNotSuspended(workspaceId);
     }
 
     return await ops.withWorkspaceAsync(workspaceId, async () => {
@@ -342,6 +350,18 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         sendJson(res, 200, {
           ok: true,
           appointment: ops.addAppointmentAddon(deskAddonMatch[1], body)
+        });
+        return true;
+      }
+
+      const deskLinePriceMatch = requested.match(
+        /^\/api\/ops\/desk\/appointments\/([^/]+)\/lines\/([^/]+)\/pricing$/
+      );
+      if (deskLinePriceMatch && req.method === "PATCH") {
+        const body = await parseJsonBody(req);
+        sendJson(res, 200, {
+          ok: true,
+          appointment: ops.setDeskLinePricing(deskLinePriceMatch[1], deskLinePriceMatch[2], body)
         });
         return true;
       }

@@ -1,13 +1,17 @@
 ---
-description: Remind about open incomplete Maw3ed logic until closed
+description: Incomplete Maw3ed logic status — pricing closed via desk
 alwaysApply: true
 ---
 
 # Incomplete logic reminders
 
-Before finishing any Maw3ed task response, if work touches booking, services, or pricing, briefly remind the user of still-open items from `docs/INCOMPLETE_LOGIC.md`:
+**Closed (desk session):** range final price and on_request quote are finalized in Department Desk during/after the visit (live line list + end-session pricing report, or auto-prompt when `expectedEndAt` elapses). See `docs/INCOMPLETE_LOGIC.md` and `docs/DEPARTMENT_DESK.md`.
 
-1. **range pricing** — `priceMin`/`priceMax` saved, but choosing a concrete price within the range at booking request/confirm is NOT done.
-2. **on_request pricing** — amount hidden, but setting price when the service is requested is NOT done.
+Before finishing Maw3ed work that touches booking, payments, or desk, briefly remind only if still open:
 
-Do not mark these closed until the booking flow actually applies the price. When closed, update `docs/INCOMPLETE_LOGIC.md` and the agent-store `incomplete-logic` notes.
+1. **Stripe / live payment capture** — accounting hooks exist; gateway not wired.
+2. **Customer quote approval / pay link** — staff can set amount; client notify/pay link not done.
+3. **QR pass via WhatsApp/SMS** after booking.
+4. **Strict desk RBAC** by identity (current: category filter on desk UI).
+
+Do not re-open range/on_request as incomplete unless the desk complete path regresses.
