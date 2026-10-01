@@ -356,15 +356,9 @@ function saveLocalClerkWorkspaces(data) {
   fs.writeFileSync(localClerkWorkspacesPath, JSON.stringify(data, null, 2), "utf8");
 }
 
-function localActivityMeta(activityType) {
-  const catalog = {
-    medical: { display_name: "طبي", labels: { customer: "المرضى", staff: "الأطباء", department: "الأقسام والعيادات", service: "الخدمات", appointment: "المواعيد" } },
-    salon: { display_name: "صالون", labels: { customer: "العملاء", staff: "الفريق", department: "الأقسام", service: "الخدمات", appointment: "المواعيد" } },
-    education: { display_name: "تعليمي", labels: { customer: "الطلاب", staff: "المعلمون", department: "الأقسام", service: "الدورات", appointment: "الحصص" } },
-    fitness: { display_name: "رياضي", labels: { customer: "الأعضاء", staff: "المدربون", department: "الأقسام", service: "الباقات", appointment: "الجلسات" } },
-    other: { display_name: "أخرى", labels: { customer: "العملاء", staff: "الفريق", department: "الأقسام", service: "الخدمات", appointment: "المواعيد" } }
-  };
-  return catalog[activityType] || catalog.other;
+function localActivityMeta(activityType, locale = "ar") {
+  const activityTemplates = require("./activityTemplatesCatalog");
+  return activityTemplates.templateMeta(activityType, locale);
 }
 
 async function requireAppUser(req) {
@@ -620,10 +614,9 @@ async function createWorkspace(user, payload) {
   }
 
   if (!databaseConfigured) {
-    const meta = localActivityMeta(activityType);
-    const resolvedActivityType = ["medical", "salon", "education", "fitness", "billiards", "other"].includes(activityType)
-      ? activityType
-      : "other";
+    const activityTemplates = require("./activityTemplatesCatalog");
+    const meta = localActivityMeta(activityType, locale);
+    const resolvedActivityType = activityTemplates.resolveTemplateId(activityType);
     const registry = loadLocalClerkWorkspaces();
     const takenList = Object.values(registry).flat().map((item) => item.slug);
     let slug = baseSlug;
@@ -648,7 +641,8 @@ async function createWorkspace(user, payload) {
       opsStore.seedWorkspaceStore(workspaceId, {
         slug,
         businessName: name,
-        activityType: resolvedActivityType
+        activityType: resolvedActivityType,
+        locale
       });
     } catch (error) {
       console.warn("[workspace] local ops seed failed:", error.message);
@@ -677,14 +671,26 @@ async function createWorkspace(user, payload) {
     return workspace;
   }
 
-  const template = (await query("SELECT * FROM activity_templates WHERE activity_type = $1", [activityType])).rows[0]
-    || (await query("SELECT * FROM activity_templates WHERE activity_type = 'other'")).rows[0];
+  const activityTemplates = require("./activityTemplatesCatalog");
+  const resolvedActivityType = activityTemplates.resolveTemplateId(activityType);
+  const catalogMeta = activityTemplates.templateMeta(resolvedActivityType, locale);
+  let template = (await query("SELECT * FROM activity_templates WHERE activity_type = $1", [resolvedActivityType])).rows[0];
   if (!template) {
-    const error = new Error("Unsupported activity type");
-    error.statusCode = 400;
-    throw error;
+    template = {
+      activity_type: resolvedActivityType,
+      display_name: catalogMeta.displayName,
+      description: catalogMeta.description,
+      labels: catalogMeta.labels,
+      defaults: catalogMeta.defaults
+    };
+  } else {
+    template = {
+      ...template,
+      display_name: catalogMeta.displayName || template.display_name,
+      labels: catalogMeta.labels || template.labels,
+      defaults: catalogMeta.defaults || template.defaults
+    };
   }
-  const resolvedActivityType = template.activity_type;
   const availability = await nextAvailableSlug(baseSlug);
   let slug = baseSlug;
   if (availability.taken) {
@@ -737,20 +743,26 @@ async function createWorkspace(user, payload) {
        VALUES ($1, $2, $3, $4)`,
       [organizationId, slug, `احجز خدمات ${name} بسهولة`, true]
     );
-    await client.query(
-      `INSERT INTO departments (id, organization_id, name, default_service)
-       VALUES ($1, $2, $3, $4)`,
-      [`department-${workspace.id}-main`, organizationId, template.labels.department, template.labels.service]
-    );
+    const catalogSeed = activityTemplates.buildSeedFromTemplate(resolvedActivityType, locale, { replaceStaff: true });
+    const departmentRows = catalogSeed.serviceCategories.length
+      ? catalogSeed.serviceCategories
+      : [{ id: `department-${workspace.id}-main`, name: catalogMeta.labels.department || "الأقسام" }];
+    for (const department of departmentRows) {
+      await client.query(
+        `INSERT INTO departments (id, organization_id, name, default_service)
+         VALUES ($1, $2, $3, $4)`,
+        [department.id || `department-${workspace.id}-${Math.random().toString(36).slice(2, 8)}`, organizationId, department.name, catalogMeta.labels.service || "الخدمات"]
+      );
+    }
     await client.query(
       `INSERT INTO doctors (id, organization_id, name, specialty)
        VALUES ($1, $2, $3, $4)`,
-      [`staff-${workspace.id}-main`, organizationId, template.labels.staff, template.display_name]
+      [`staff-${workspace.id}-main`, organizationId, catalogMeta.defaults?.staff_singular || catalogMeta.labels.staff || "الموظفون", catalogMeta.displayName]
     );
     await client.query(
       `INSERT INTO customer_categories (id, organization_id, name, color)
        VALUES ($1, $2, $3, $4)`,
-      [`customer-category-${workspace.id}-standard`, organizationId, template.labels.customer, "#2474df"]
+      [`customer-category-${workspace.id}-standard`, organizationId, catalogMeta.labels.customer || "العملاء", "#2474df"]
     );
     for (let weekday = 0; weekday <= 6; weekday += 1) {
       await client.query(
@@ -778,7 +790,8 @@ async function createWorkspace(user, payload) {
     opsStore.seedWorkspaceStore(workspace.id, {
       slug: workspace.slug,
       businessName: name,
-      activityType: resolvedActivityType
+      activityType: resolvedActivityType,
+      locale
     });
   } catch (error) {
     console.warn("[workspace] ops seed failed:", error.message);

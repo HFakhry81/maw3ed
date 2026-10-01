@@ -231,7 +231,7 @@ async function runWithWorkspaceAsync(workspaceId, defaultStoreFactory, fn) {
   return als.run({ workspaceId: id }, fn);
 }
 
-function seedWorkspace(workspaceId, { slug, businessName, activityType } = {}, defaultStoreFactory) {
+function seedWorkspace(workspaceId, { slug, businessName, activityType, locale } = {}, defaultStoreFactory) {
   const id = sanitizeWorkspaceId(workspaceId);
   cache.delete(id);
   const data = defaultStoreFactory();
@@ -239,13 +239,17 @@ function seedWorkspace(workspaceId, { slug, businessName, activityType } = {}, d
   data.appointments = [];
   data.expenses = [];
   if (businessName) data.bookingPage.businessName = businessName;
-  if (activityType === "medical" || !activityType) {
-    data.activityMode = "medical";
-    data.activityTemplateId = "medical";
-  } else {
-    data.activityMode = "flexible";
-    data.activityTemplateId = activityType;
+
+  const activityTemplates = require("./activityTemplatesCatalog");
+  const resolvedType = activityTemplates.resolveTemplateId(activityType || "medical");
+  const lang = activityTemplates.normalizeLocale(locale || "ar");
+  activityTemplates.applyTemplateToStoreData(data, resolvedType, lang, { replaceStaff: true });
+  data.activityModeLocked = false;
+  if (data.bookingPage) {
+    data.bookingPage.locale = lang;
+    if (businessName) data.bookingPage.businessName = businessName;
   }
+
   const desiredSlug = String(slug || data.bookingPage.slug)
     .trim()
     .toLowerCase()

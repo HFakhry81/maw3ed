@@ -1069,11 +1069,14 @@ function IndustryTemplatesView({ ops, reload, locale }) {
       window.alert("تم قفل نوع النشاط ولا يمكن تغييره.");
       return;
     }
+    const emptyNote = template.empty
+      ? "\nهذا قالب فارغ: لن تُضاف فئات أو خدمات جاهزة."
+      : `\nسيتم استبدال الفئات والخدمات بكتالوج «${template.displayName}».`;
     const confirmed = window.confirm(
-      `تأكيد اختيار «${template.displayName}»؟\nبعد التأكيد لن يمكن تغيير نوع النشاط أو الوضع المرن.`
+      `تأكيد اختيار «${template.displayName}»؟${emptyNote}\nبعد التأكيد لن يمكن تغيير نوع النشاط أو الوضع المرن.`
     );
     if (!confirmed) return;
-    await api.put("/api/ops/activity-profile", { templateId: template.id, mode: template.mode, lock: true });
+    await api.put("/api/ops/activity-profile", { templateId: template.id, mode: template.mode, lock: true, locale });
     reload();
   };
   return (
@@ -1095,7 +1098,7 @@ function IndustryTemplatesView({ ops, reload, locale }) {
               disabled={locked}
               onClick={() => choose(template)}
             >
-              <b>{template.displayName}</b>
+              <b>{template.displayName}{template.empty ? " · فارغ" : ""}</b>
               <small>{template.description}</small>
             </button>
           ))}
@@ -1559,14 +1562,12 @@ function App() {
   const createWorkspace = async () => {
     const name = window.prompt("اسم مساحة العمل الجديدة");
     if (!name) return;
-    const activityType = ops?.activity?.templateId || "other";
+    const activityType = ops?.activity?.templateId || "custom";
     try {
       const result = await api.post("/api/workspaces", {
         name,
         slug: name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || `ws-${Date.now()}`,
-        activityType: ["medical", "education", "billiards", "salon", "fitness", "other"].includes(activityType)
-          ? activityType
-          : "other"
+        activityType
       });
       const id = result.workspace?.id;
       if (id) switchWorkspace(id);

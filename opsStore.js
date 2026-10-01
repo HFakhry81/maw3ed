@@ -5,28 +5,16 @@ const opsPg = require("./opsPg");
 const opsWorkspace = require("./opsWorkspace");
 const shiftHours = require("./shiftHours");
 const opsDesk = require("./opsDesk");
+const activityTemplates = require("./activityTemplatesCatalog");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
 }
 
-const MEDICAL_DEPARTMENTS = [
-  { id: "dept-outpatient", name: "العيادات الخارجية" },
-  { id: "dept-internal", name: "الباطنية" },
-  { id: "dept-pediatrics", name: "الأطفال" },
-  { id: "dept-obgyn", name: "النساء والولادة" },
-  { id: "dept-dental", name: "الأسنان" },
-  { id: "dept-radiology", name: "الأشعة" },
-  { id: "dept-lab", name: "المختبر" },
-  { id: "dept-dermatology", name: "الجلدية" },
-  { id: "dept-ophthalmology", name: "العيون" },
-  { id: "dept-cardiology", name: "القلب" },
-  { id: "dept-orthopedics", name: "العظام" },
-  { id: "dept-ent", name: "الأنف والأذن" },
-  { id: "dept-er", name: "الطوارئ" },
-  { id: "dept-physio", name: "العلاج الطبيعي" },
-  { id: "dept-pharmacy", name: "الصيدلية" }
-];
+const MEDICAL_DEPARTMENTS = activityTemplates.MEDICAL_DEPARTMENTS.map((department) => ({
+  id: department.id,
+  name: activityTemplates.localizeText(department.name, "ar")
+}));
 
 const PLAN_LIMITS = {
   free: { staff: 2, services: 10, appointmentsPerMonth: 100 },
@@ -40,7 +28,7 @@ function planLimitsEnforced() {
 }
 
 function defaultStore() {
-  return {
+  const base = {
     customerCategories: [
       { id: "cat-vip", name: "VIP", color: "#f5a623" },
       { id: "cat-regular", name: "عادي", color: "#1967e8" },
@@ -54,44 +42,8 @@ function defaultStore() {
       { id: "staff-hf", name: "هيثم فخري", title: "مشرف حجز", active: true },
       { id: "staff-rec", name: "أحمد استقبال", title: "Reception", active: true }
     ],
-    serviceCategories: MEDICAL_DEPARTMENTS.map((department, sort) => ({
-      id: department.id,
-      name: department.name,
-      sort,
-      enabled: true
-    })),
-    services: [
-      {
-        id: "svc-1",
-        categoryId: "dept-er",
-        name: "كشف أخصائي",
-        durationMinutes: 30,
-        bufferMinutes: 30,
-        pricingType: "fixed",
-        price: 150,
-        color: "#1967e8",
-        providerIds: ["staff-hf"],
-        publicBooking: true,
-        autoAccept: true,
-        autoComplete: false,
-        description: ""
-      },
-      {
-        id: "svc-2",
-        categoryId: "dept-er",
-        name: "تذكرة دخول طوارئ",
-        durationMinutes: 30,
-        bufferMinutes: 15,
-        pricingType: "fixed",
-        price: 150,
-        color: "#16ae7c",
-        providerIds: ["staff-rec"],
-        publicBooking: true,
-        autoAccept: true,
-        autoComplete: true,
-        description: ""
-      }
-    ],
+    serviceCategories: [],
+    services: [],
     workingHours: [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
       weekday,
       isOpen: true,
@@ -137,30 +89,19 @@ function defaultStore() {
     activityMode: "medical",
     activityModeLocked: false,
     activityTemplateId: "medical",
-    medicalDepartments: MEDICAL_DEPARTMENTS.map((department) => ({ ...department, enabled: true })),
+    medicalDepartments: [],
+    activityLabels: {},
+    activityLabelsI18n: null,
     planKey: "free"
   };
+  // Local default / demo workspace stays medical; new workspaces re-seed via applyTemplateToStoreData.
+  activityTemplates.applyTemplateToStoreData(base, "medical", "ar", { replaceStaff: false });
+  const erServices = (base.services || []).filter((item) => item.categoryId === "dept-er");
+  erServices.forEach((item, index) => {
+    item.providerIds = [index === 0 ? "staff-hf" : "staff-rec"];
+  });
+  return base;
 }
-
-const ACTIVITY_TEMPLATES = [
-  { id: "medical", mode: "medical", displayName: "مركز طبي", description: "عيادات ومستشفيات ومراكز رعاية صحية" },
-  { id: "clinic", mode: "flexible", displayName: "عيادة", description: "عيادات تخصصية ومراكز كشف" },
-  { id: "dentist", mode: "flexible", displayName: "طبيب أسنان", description: "عيادات طب الأسنان" },
-  { id: "salon", mode: "flexible", displayName: "صالون الشعر", description: "قص وتصفيف وعناية بالشعر" },
-  { id: "barber", mode: "flexible", displayName: "صالون الحلاقة", description: "حلاقة رجالية" },
-  { id: "beauty", mode: "flexible", displayName: "التجميل", description: "مراكز التجميل والعناية" },
-  { id: "massage", mode: "flexible", displayName: "تدليك", description: "مساج وعلاج طبيعي خفيف" },
-  { id: "spa", mode: "flexible", displayName: "منتجع صحي", description: "سبا وعافية" },
-  { id: "consultant", mode: "flexible", displayName: "استشاري", description: "استشارات مهنية" },
-  { id: "education", mode: "flexible", displayName: "مركز تعليمي", description: "دروس وتدريب" },
-  { id: "school", mode: "flexible", displayName: "مدرسة", description: "مدارس وحلقات تعليم" },
-  { id: "fitness", mode: "flexible", displayName: "مركز رياضي", description: "جيم وحصص تدريب" },
-  { id: "carwash", mode: "flexible", displayName: "غسيل سيارة", description: "غسيل وتلميع سيارات" },
-  { id: "events", mode: "flexible", displayName: "تنظيم الأحداث", description: "فعاليات وحجوزات" },
-  { id: "pets", mode: "flexible", displayName: "رعاية حيوانات أليفة", description: "عيادات وخدمات حيوانات" },
-  { id: "billiards", mode: "flexible", displayName: "صالة بلياردو", description: "طاولات وألعاب بالساعة" },
-  { id: "custom", mode: "flexible", displayName: "صناعة مخصصة", description: "نشاط مرن قابل للتخصيص بالكامل" }
-];
 
 function loadStore() {
   return opsWorkspace.getContext(defaultStore).data;
@@ -748,31 +689,47 @@ function assertPlanCapacity(kind) {
   }
 }
 
-function listActivityTemplates() {
-  return ACTIVITY_TEMPLATES.map((item) => ({ ...item }));
+function listActivityTemplates(locale = "ar") {
+  return activityTemplates.listTemplates(locale);
 }
 
-function getActivityProfile() {
+function getActivityProfile(locale = "ar") {
   const templateId = store.activityTemplateId || (store.activityMode === "flexible" ? "custom" : "medical");
-  const template = ACTIVITY_TEMPLATES.find((item) => item.id === templateId) || ACTIVITY_TEMPLATES[0];
+  const template = activityTemplates.getTemplate(templateId);
+  const lang = activityTemplates.normalizeLocale(locale || store.bookingPage?.locale || "ar");
   return {
     mode: store.activityMode || "medical",
     locked: Boolean(store.activityModeLocked),
-    templateId,
-    templateDisplayName: template.displayName,
-    medicalDepartments: store.medicalDepartments || MEDICAL_DEPARTMENTS.map((department) => ({ ...department, enabled: true })),
+    templateId: template.id,
+    templateDisplayName: activityTemplates.localizeText(template.displayName, lang),
+    templateDescription: activityTemplates.localizeText(template.description, lang),
+    labels: store.activityLabels || activityTemplates.templateMeta(template.id, lang).labels,
+    labelsI18n: store.activityLabelsI18n || template.labels,
+    medicalDepartments: store.medicalDepartments || [],
+    emptyCatalog: !(store.serviceCategories || []).length,
     flexibleHint: "في الوضع المرن يمكن تخصيص الحقول والخدمات لأي نشاط: تدريب، صالونات، استشارات، أو مؤسسات خدمية.",
-    templates: listActivityTemplates()
+    templates: listActivityTemplates(lang)
   };
 }
 
 function applyMedicalCategories() {
-  store.serviceCategories = (store.medicalDepartments || MEDICAL_DEPARTMENTS).filter((department) => department.enabled !== false).map((department, sort) => ({
+  store.serviceCategories = (store.medicalDepartments || []).filter((department) => department.enabled !== false).map((department, sort) => ({
     id: department.id,
     name: department.name,
+    nameI18n: department.nameI18n || undefined,
     sort,
     enabled: true
   }));
+}
+
+function applyActivityTemplate(templateId, locale = "ar", options = {}) {
+  const lang = activityTemplates.normalizeLocale(locale);
+  activityTemplates.applyTemplateToStoreData(store, templateId, lang, {
+    replaceStaff: options.replaceStaff === true
+  });
+  if (store.activityMode === "medical") applyMedicalCategories();
+  if (options.persist !== false) persist();
+  return getActivityProfile(lang);
 }
 
 function updateActivityProfile(payload = {}) {
@@ -782,31 +739,24 @@ function updateActivityProfile(payload = {}) {
   const requestingTemplateChange =
     payload.templateId != null && payload.templateId !== store.activityTemplateId;
   const requestingLock = payload.lock === true;
+  const locale = activityTemplates.normalizeLocale(payload.locale || store.bookingPage?.locale || "ar");
 
   if (locked && (requestingModeChange || requestingTemplateChange)) {
     fail("تم قفل نوع النشاط ولا يمكن تعديله بعد التأكيد.", 403);
   }
 
   if (!locked && payload.templateId) {
-    const template = ACTIVITY_TEMPLATES.find((item) => item.id === payload.templateId);
-    if (!template) fail("القالب غير موجود", 404);
-    store.activityTemplateId = template.id;
-    store.activityMode = template.mode;
-    if (template.mode === "flexible" && template.id !== "medical") {
-      const categoryName = template.displayName;
-      if (!store.serviceCategories.some((item) => item.name === categoryName)) {
-        store.serviceCategories.unshift({
-          id: createId("svc-cat"),
-          name: `فئة ${categoryName}`,
-          sort: 0,
-          enabled: true
-        });
-      }
-      if (store.bookingPage) {
-        store.bookingPage.industry = template.id;
-        if (!store.bookingPage.businessName || store.bookingPage.businessName.includes("تجريب")) {
-          store.bookingPage.businessName = template.displayName;
-        }
+    const requestedId = String(payload.templateId).trim().toLowerCase();
+    const knownIds = new Set(activityTemplates.allTemplateIds());
+    if (!knownIds.has(requestedId) && requestedId !== "other") {
+      fail("القالب غير موجود", 404);
+    }
+    const template = activityTemplates.getTemplate(requestedId);
+    // Replace categories/services with the selected industry catalog (custom/other = empty).
+    applyActivityTemplate(requestedId, locale, { replaceStaff: false, persist: false });
+    if (store.bookingPage) {
+      if (!store.bookingPage.businessName || store.bookingPage.businessName.includes("تجريب")) {
+        store.bookingPage.businessName = activityTemplates.localizeText(template.displayName, locale);
       }
     }
   }
@@ -814,8 +764,18 @@ function updateActivityProfile(payload = {}) {
   if (!locked && payload.mode != null) {
     const mode = payload.mode === "flexible" ? "flexible" : payload.mode === "medical" ? "medical" : store.activityMode;
     store.activityMode = mode;
-    if (mode === "medical") store.activityTemplateId = store.activityTemplateId || "medical";
-    if (mode === "flexible" && store.activityTemplateId === "medical") store.activityTemplateId = "custom";
+    if (mode === "medical") {
+      store.activityTemplateId = store.activityTemplateId || "medical";
+      if (requestingModeChange && !payload.templateId) {
+        applyActivityTemplate("medical", locale, { replaceStaff: false, persist: false });
+      }
+    }
+    if (mode === "flexible" && store.activityTemplateId === "medical") {
+      store.activityTemplateId = "custom";
+      if (requestingModeChange && !payload.templateId) {
+        applyActivityTemplate("custom", locale, { replaceStaff: false, persist: false });
+      }
+    }
   }
 
   if (Array.isArray(payload.medicalDepartments)) {
@@ -823,6 +783,7 @@ function updateActivityProfile(payload = {}) {
     store.medicalDepartments = payload.medicalDepartments.map((department) => ({
       id: String(department.id || createId("dept")),
       name: String(department.name || "").trim() || "قسم",
+      nameI18n: department.nameI18n || undefined,
       enabled: department.enabled !== false
     }));
   }
@@ -833,7 +794,7 @@ function updateActivityProfile(payload = {}) {
 
   if (store.activityMode === "medical") applyMedicalCategories();
   persist();
-  return getActivityProfile();
+  return getActivityProfile(locale);
 }
 
 function saveUploadedLogo(payload = {}) {
@@ -2040,6 +2001,7 @@ module.exports = {
   listActivityTemplates,
   getActivityProfile,
   updateActivityProfile,
+  applyActivityTemplate,
   saveUploadedLogo,
   saveUploadedImage,
   getPlanUsage,

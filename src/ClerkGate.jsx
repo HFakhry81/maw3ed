@@ -553,11 +553,24 @@ export function WorkspaceOnboarding({ onCreated }) {
         <label>
           نوع النشاط
           <select id="workspace-activity" name="activityType" value={activityType} onChange={(e) => setActivityType(e.target.value)}>
-            <option value="medical">طبي</option>
-            <option value="salon">صالون</option>
-            <option value="education">تعليمي</option>
-            <option value="fitness">رياضي</option>
-            <option value="other">أخرى</option>
+            <option value="medical">مركز طبي</option>
+            <option value="clinic">عيادة</option>
+            <option value="dentist">طبيب أسنان</option>
+            <option value="salon">صالون الشعر</option>
+            <option value="barber">صالون الحلاقة</option>
+            <option value="beauty">التجميل</option>
+            <option value="massage">تدليك</option>
+            <option value="spa">منتجع صحي</option>
+            <option value="consultant">استشاري</option>
+            <option value="education">مركز تعليمي</option>
+            <option value="school">مدرسة</option>
+            <option value="fitness">مركز رياضي</option>
+            <option value="carwash">غسيل سيارة</option>
+            <option value="events">تنظيم الأحداث</option>
+            <option value="pets">رعاية حيوانات أليفة</option>
+            <option value="billiards">صالة بلياردو</option>
+            <option value="custom">صناعة مخصصة (فارغ)</option>
+            <option value="other">نشاط مخصص (فارغ)</option>
           </select>
         </label>
         {error && <div className="error-banner">{error}</div>}
