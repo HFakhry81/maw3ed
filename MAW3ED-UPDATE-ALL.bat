@@ -24,7 +24,9 @@ if not "%ERR%"=="0" (
 
 color 0A
 echo [OK] Full project update complete.
+echo Session data was backed up then restored automatically.
 echo Report: data\last-update-report.json  ^(and last-refresh-report.json^)
+echo Backups: data\backups\sessions\
 echo Admin:   http://127.0.0.1:7000/
 echo Booking: http://127.0.0.1:7000/book.html?slug=maw3ed-demo
 if /i not "%MAW3ED_UPDATE_NOPAUSE%"=="1" pause

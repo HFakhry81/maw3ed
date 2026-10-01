@@ -108,6 +108,26 @@ function ensureInstall(steps) {
 }
 
 function fail(steps, startedAt, reason) {
+  const skipSessionRestore = process.env.MAW3ED_SKIP_SESSION_RESTORE === "1";
+  const backedUp = (steps || []).some((step) => step.label === "ops-session-backup" && step.ok);
+  const alreadyRestored = (steps || []).some((step) => step.label === "ops-session-restore");
+  if (!skipSessionRestore && backedUp && !alreadyRestored) {
+    try {
+      const restoreEntry = run("ops-session-restore", nodeBin(), ["scripts/ops-session-backup.js", "--restore-latest"], {
+        soft: true,
+        capture: true
+      });
+      steps.push(restoreEntry);
+      if (restoreEntry.ok) {
+        console.error("[INFO] Restored pre-update session backup after failure.");
+      } else {
+        console.error("[WARN] Could not restore session backup after failure. Run: npm run ops:restore");
+      }
+    } catch (error) {
+      console.error(`[WARN] Session restore after failure threw: ${error.message}`);
+    }
+  }
+
   const report = {
     ok: false,
     target: rawTarget || target,
@@ -125,7 +145,7 @@ function fail(steps, startedAt, reason) {
         ok: false,
         target: rawTarget || target,
         reason,
-        steps: steps.map((step) => ({ label: step.label, ok: step.ok, soft: step.soft || false }))
+        steps: steps.map((step) => ({ label: step.label, ok: step.ok, soft: step.soft || false, skipped: step.skipped || false }))
       },
       null,
       2
@@ -178,7 +198,16 @@ function succeed(steps, startedAt) {
 function updateBackend(steps) {
   if (!ensureInstall(steps)) fail(steps, steps.startedAt, "install failed");
 
-  steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js"], { soft: true, capture: true }));
+  const skipSessionRestore = process.env.MAW3ED_SKIP_SESSION_RESTORE === "1";
+  steps.push(
+    run("ops-session-backup", nodeBin(), ["scripts/ops-session-backup.js", "--backup", "--reason=update-backend"], {
+      soft: false,
+      capture: true
+    })
+  );
+  if (!steps[steps.length - 1].ok) fail(steps, steps.startedAt, "ops-session-backup failed");
+
+  steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js", "--skip-session-backup"], { soft: true, capture: true }));
   steps.push(
     run("seed-medical-restore", nodeBin(), ["scripts/seed-medical-demo.js", "--restore", "--no-backup"], {
       soft: true,
@@ -200,6 +229,25 @@ function updateBackend(steps) {
     })
   );
   steps.push(run("check-isolation", nodeBin(), ["scripts/check-isolation.js"], { soft: true, capture: true }));
+
+  if (skipSessionRestore) {
+    steps.push({
+      label: "ops-session-restore",
+      ok: true,
+      status: 0,
+      ms: 0,
+      skipped: true,
+      soft: true
+    });
+  } else {
+    steps.push(
+      run("ops-session-restore", nodeBin(), ["scripts/ops-session-backup.js", "--restore-latest"], {
+        soft: false,
+        capture: true
+      })
+    );
+    if (!steps[steps.length - 1].ok) fail(steps, steps.startedAt, "ops-session-restore failed");
+  }
 }
 
 function updateFrontend(steps) {
@@ -257,11 +305,16 @@ function printUsage() {
 Or:    npm run update:backend|api|frontend|web|mobile|all
 
 Targets:
-  backend|api  install + ops reset + migrate/seed (soft) + isolation check
+  backend|api  backup → ops reset → migrate/seed (soft) → isolation → restore session
   frontend     install + React/Vite build → dist/
   web          install + build + HTTP smoke (API + pages)
   mobile       npm install in mobile/
-  all          full refresh + smoke tests + mobile install (soft)`);
+  all          full refresh (backup → tests → restore) + mobile install (soft)
+
+Session data:
+  Before wipe: npm run ops:backup
+  After wipe:  npm run ops:restore
+  Skip restore: MAW3ED_SKIP_SESSION_RESTORE=1`);
 }
 
 function main() {

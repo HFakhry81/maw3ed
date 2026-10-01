@@ -27,22 +27,24 @@ echo.
 echo  [ DATABASE ^& OPS ]
 echo    9. Migrate
 echo   10. Seed
-echo   11. Reset ops data
+echo   11. Reset ops data       (auto session backup first)
+echo   12. Backup ops session
+echo   13. Restore latest session
 echo.
 echo  [ QA ]
-echo   12. Isolation check
-echo   13. Smoke public booking
-echo   14. Smoke HTTP
-echo   15. QA suite (all tests)
+echo   14. Isolation check
+echo   15. Smoke public booking
+echo   16. Smoke HTTP
+echo   17. QA suite (all tests)
 echo.
 echo  [ RELEASE ]
-echo   16. Build dist only
-echo   17. Prepare release      (refresh + Git/VPS commands)
+echo   18. Build dist only
+echo   19. Prepare release      (refresh + Git/VPS commands)
 echo.
-echo   18. Exit
+echo   20. Exit
 echo =======================================================================
 set "choice="
-set /p choice="Select [1-18]: "
+set /p choice="Select [1-20]: "
 
 if "%choice%"=="1" goto upd_all
 if "%choice%"=="2" goto upd_backend
@@ -55,13 +57,15 @@ if "%choice%"=="8" goto run_all
 if "%choice%"=="9" goto run_migrate
 if "%choice%"=="10" goto run_seed
 if "%choice%"=="11" goto run_reset
-if "%choice%"=="12" goto run_isolation
-if "%choice%"=="13" goto run_smoke_booking
-if "%choice%"=="14" goto run_smoke_http
-if "%choice%"=="15" goto run_qa
-if "%choice%"=="16" goto run_build
-if "%choice%"=="17" goto run_release
-if "%choice%"=="18" exit /b 0
+if "%choice%"=="12" goto run_backup
+if "%choice%"=="13" goto run_restore
+if "%choice%"=="14" goto run_isolation
+if "%choice%"=="15" goto run_smoke_booking
+if "%choice%"=="16" goto run_smoke_http
+if "%choice%"=="17" goto run_qa
+if "%choice%"=="18" goto run_build
+if "%choice%"=="19" goto run_release
+if "%choice%"=="20" exit /b 0
 echo Invalid option.
 pause
 goto menu
@@ -130,7 +134,18 @@ pause & goto menu
 
 :run_reset
 cls & color 0C
+echo [RESET] Creates a session backup first, then resets local-default ops.
 call node scripts\reset-ops-data.js
+pause & goto menu
+
+:run_backup
+cls & color 0A
+call node scripts\ops-session-backup.js --backup --reason=toolbox
+pause & goto menu
+
+:run_restore
+cls & color 0E
+call node scripts\ops-session-backup.js --restore-latest
 pause & goto menu
 
 :run_isolation

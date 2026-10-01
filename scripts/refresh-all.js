@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 /**
- * Full Maw3ed refresh: install → reset ops → optional migrate/seed → build → smoke tests.
+ * Full Maw3ed refresh: install → session backup → reset ops → migrate/seed →
+ * build → smoke tests → restore session data.
  * Usage:
  *   node scripts/refresh-all.js
  *   npm run refresh
  *   npm run update:all
+ *
+ * Set MAW3ED_SKIP_SESSION_RESTORE=1 to keep the wiped/demo state after refresh.
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
@@ -91,14 +94,24 @@ function npmOrYarnInstall() {
 function main() {
   const steps = [];
   const startedAt = new Date().toISOString();
+  const skipSessionRestore = process.env.MAW3ED_SKIP_SESSION_RESTORE === "1";
 
   steps.push(npmOrYarnInstall());
   if (!steps[steps.length - 1].ok) {
     fail(steps, startedAt, "install failed");
   }
 
-  steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js"], { soft: true, capture: true }));
-  // Restore durable medical demo seed so update:all / refresh does not wipe local test data
+  // Snapshot all workspaces + indexes before any wipe/reset so we can put them back after smokes.
+  steps.push(
+    run("ops-session-backup", nodeBin(), ["scripts/ops-session-backup.js", "--backup", "--reason=refresh-all"], {
+      soft: false,
+      capture: true
+    })
+  );
+  if (!steps[steps.length - 1].ok) fail(steps, startedAt, "ops-session-backup failed");
+
+  steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js", "--skip-session-backup"], { soft: true, capture: true }));
+  // Temporary medical demo for smoke tests; user session is restored at the end.
   steps.push(
     run("seed-medical-restore", nodeBin(), ["scripts/seed-medical-demo.js", "--restore", "--no-backup"], {
       soft: true,
@@ -149,6 +162,26 @@ function main() {
     }
   }
 
+  if (skipSessionRestore) {
+    steps.push({
+      label: "ops-session-restore",
+      ok: true,
+      status: 0,
+      ms: 0,
+      skipped: true,
+      soft: true,
+      stdout: "Skipped via MAW3ED_SKIP_SESSION_RESTORE=1"
+    });
+  } else {
+    steps.push(
+      run("ops-session-restore", nodeBin(), ["scripts/ops-session-backup.js", "--restore-latest"], {
+        soft: false,
+        capture: true
+      })
+    );
+    if (!steps[steps.length - 1].ok) fail(steps, startedAt, "ops-session-restore failed");
+  }
+
   const report = {
     ok: true,
     startedAt,
@@ -167,10 +200,28 @@ function main() {
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   console.log(`\n✅ Maw3ed refresh complete → ${path.relative(root, reportPath)}`);
-  console.log(JSON.stringify({ ok: true, steps: steps.map((step) => ({ label: step.label, ok: step.ok, soft: step.soft || false, ms: step.ms })) }, null, 2));
+  console.log(JSON.stringify({ ok: true, steps: steps.map((step) => ({ label: step.label, ok: step.ok, soft: step.soft || false, ms: step.ms, skipped: step.skipped || false })) }, null, 2));
 }
 
 function fail(steps, startedAt, reason) {
+  const skipSessionRestore = process.env.MAW3ED_SKIP_SESSION_RESTORE === "1";
+  if (!skipSessionRestore) {
+    try {
+      const restoreEntry = run("ops-session-restore", nodeBin(), ["scripts/ops-session-backup.js", "--restore-latest"], {
+        soft: true,
+        capture: true
+      });
+      steps.push(restoreEntry);
+      if (restoreEntry.ok) {
+        console.error("[INFO] Restored pre-refresh session backup after failure.");
+      } else {
+        console.error("[WARN] Could not restore session backup after failure. Run: npm run ops:restore");
+      }
+    } catch (error) {
+      console.error(`[WARN] Session restore after failure threw: ${error.message}`);
+    }
+  }
+
   const report = {
     ok: false,
     reason,
@@ -181,7 +232,7 @@ function fail(steps, startedAt, reason) {
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });
   fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   console.error(`\n❌ Maw3ed refresh failed: ${reason}`);
-  console.error(JSON.stringify({ ok: false, reason, steps: steps.map((step) => ({ label: step.label, ok: step.ok, soft: step.soft || false })) }, null, 2));
+  console.error(JSON.stringify({ ok: false, reason, steps: steps.map((step) => ({ label: step.label, ok: step.ok, soft: step.soft || false, skipped: step.skipped || false })) }, null, 2));
   process.exit(1);
 }
 

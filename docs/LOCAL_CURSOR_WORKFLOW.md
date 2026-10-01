@@ -37,7 +37,8 @@ npm run env:local
 | `npm run update:frontend` | اعتماديات + بناء React |
 | `npm run update:web` | بناء `dist` + smoke HTTP |
 | `npm run update:mobile` | تثبيت اعتماديات مجلد `mobile/` |
-| `npm run update:all` أو `npm run refresh` | تحديث كامل + اختبارات smoke + mobile |
+| `npm run update:all` أو `npm run refresh` | تحديث كامل + اختبارات smoke + mobile (مع backup/restore تلقائي للبيانات) |
+| `npm run ops:backup` / `ops:restore` | نسخ/استرجاع جلسة مساحات العمل يدوياً |
 | `MAW3ED-UPDATE-ALL.bat` أو `scripts\update-all.cmd` | نفس المسار الكامل من Windows |
 | `MAW3ED-TOOLBOX.bat` | قائمة تفاعلية لكل العمليات |
 

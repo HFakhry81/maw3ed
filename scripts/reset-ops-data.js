@@ -1,28 +1,24 @@
 const fs = require("fs");
 const path = require("path");
 require("./load-env");
+const { createSessionBackup } = require("./ops-session-backup");
 
 const root = path.join(__dirname, "..");
-
-function backupWorkspaceOps() {
-  const workspacesRoot = path.join(root, "data", "workspaces");
-  if (!fs.existsSync(workspacesRoot)) return;
-  const backupDir = path.join(root, "data", "backups");
-  fs.mkdirSync(backupDir, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  for (const entry of fs.readdirSync(workspacesRoot, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const src = path.join(workspacesRoot, entry.name, "maw3ed-ops.json");
-    if (!fs.existsSync(src)) continue;
-    const dest = path.join(backupDir, `${entry.name}-before-reset-${stamp}.json`);
-    fs.copyFileSync(src, dest);
-    console.log(`[BACKUP] ${entry.name} → ${path.relative(root, dest)}`);
-  }
-}
+const args = process.argv.slice(2);
+const skipSessionBackup = args.includes("--skip-session-backup");
 
 async function main() {
   console.log("[INFO] Resetting operational data and state files...");
-  backupWorkspaceOps();
+
+  if (!skipSessionBackup) {
+    try {
+      createSessionBackup({ reason: "reset-ops-data" });
+    } catch (error) {
+      console.warn(`[WARN] Session backup failed: ${error.message}`);
+    }
+  } else {
+    console.log("[INFO] Session backup skipped (--skip-session-backup); caller already backed up.");
+  }
 
   const dataDir = path.join(root, "data");
   if (fs.existsSync(dataDir)) {
@@ -84,7 +80,8 @@ async function main() {
   }
 
   console.log("[SUCCESS] Operational data reset completed.");
-  console.log("[HINT] Restore medical demo anytime: npm run seed:medical:restore");
+  console.log("[HINT] Restore last session: npm run ops:restore");
+  console.log("[HINT] Restore medical demo only: npm run seed:medical:restore");
 }
 
 main()

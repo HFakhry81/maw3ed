@@ -20,7 +20,22 @@ scripts\update-all.cmd
 powershell -File scripts\update-all.ps1
 ```
 
-يشمل: اعتماديات + ops + migrate/seed + بناء الواجهة + فحص العزل + smoke حجز + smoke HTTP/API + تثبيت mobile (soft).
+يشمل: اعتماديات + **نسخ احتياطي لجلسة العمل** + ops + migrate/seed + بناء الواجهة + فحص العزل + smoke حجز + smoke HTTP/API + تثبيت mobile (soft) + **استرجاع بيانات الجلسة**.
+
+قبل أي مسح/إعادة ضبط تُحفظ مساحات العمل في `data/backups/sessions/` ثم تُسترجع تلقائياً بعد انتهاء التحديث (أو عند الفشل). لتعطيل الاسترجاع عمداً:
+
+```bat
+set MAW3ED_SKIP_SESSION_RESTORE=1
+npm run update:all
+```
+
+أوامر يدوية:
+
+```bat
+npm run ops:backup
+npm run ops:restore
+npm run ops:backups
+```
 
 ## قائمة Windows التفاعلية
 
