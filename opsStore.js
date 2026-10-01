@@ -96,9 +96,11 @@ function defaultStore() {
   };
   // Local default / demo workspace stays medical; new workspaces re-seed via applyTemplateToStoreData.
   activityTemplates.applyTemplateToStoreData(base, "medical", "ar", { replaceStaff: false });
-  const erServices = (base.services || []).filter((item) => item.categoryId === "dept-er");
-  erServices.forEach((item, index) => {
-    item.providerIds = [index === 0 ? "staff-hf" : "staff-rec"];
+  const demoStaffIds = ["staff-hf", "staff-rec"];
+  (base.services || []).forEach((item, index) => {
+    if (!Array.isArray(item.providerIds) || item.providerIds.length === 0) {
+      item.providerIds = [demoStaffIds[index % demoStaffIds.length]];
+    }
   });
   return base;
 }

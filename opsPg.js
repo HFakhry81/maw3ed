@@ -66,12 +66,24 @@ async function ensureDoctor(client, orgId, staff) {
 async function ensureService(client, orgId, service, departmentId) {
   if (!service?.id) return null;
   const categoryId = `category-${departmentId}`;
+  const name = String(service.name || "موعد");
   await client.query(
     `INSERT INTO service_categories (id, organization_id, name)
      VALUES ($1, $2, $3)
      ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
     [categoryId, orgId, String(service.categoryName || departmentId)]
   );
+
+  // Unique index is (organization_id, LOWER(name)). Prefer updating an existing
+  // same-name row so renamed template ids do not collide with older seeds.
+  const existingByName = await client.query(
+    `SELECT id FROM services
+     WHERE organization_id = $1 AND LOWER(name) = LOWER($2)
+     LIMIT 1`,
+    [orgId, name]
+  );
+  const serviceId = existingByName.rows[0]?.id || String(service.id);
+
   await client.query(
     `INSERT INTO services
       (id, organization_id, category_id, name, duration_minutes, buffer_minutes, pricing_type, price, auto_confirm, auto_complete, public_booking, active)
@@ -88,10 +100,10 @@ async function ensureService(client, orgId, service, departmentId) {
        public_booking = true,
        active = true`,
     [
-      service.id,
+      serviceId,
       orgId,
       categoryId,
-      String(service.name || "موعد"),
+      name,
       Number(service.durationMinutes || 30),
       Number(service.bufferMinutes || 0),
       String(service.pricingType || "fixed"),
@@ -100,7 +112,7 @@ async function ensureService(client, orgId, service, departmentId) {
       Boolean(service.autoComplete)
     ]
   );
-  return service.id;
+  return serviceId;
 }
 
 /**
