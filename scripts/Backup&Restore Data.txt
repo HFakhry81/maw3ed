@@ -1,0 +1,3 @@
+npm run ops:backup
+npm run ops:restore
+npm run ops:backups

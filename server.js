@@ -8,6 +8,8 @@ const { sendVerificationEmail, sendSubscriptionRequestEmail } = require("./email
 const { createClerkClient, verifyToken } = require("@clerk/backend");
 const { whopRequest } = require("./whopClient");
 const { tryHandleOpsApi } = require("./opsRoutes");
+const { createPlatformAdmin } = require("./platformAdmin");
+const { createAdminRouter } = require("./platformAdminRoutes");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 7000);
@@ -378,15 +380,20 @@ async function requireAppUser(req) {
       clerk_user_id: identity.clerkUserId,
       email: identity.email,
       display_name: identity.displayName,
-      is_platform_admin: true,
+      is_platform_admin: false,
+      platform_role: null,
       status: "active"
     };
   }
   let result = await query("SELECT * FROM app_users WHERE clerk_user_id = $1", [identity.clerkUserId]);
   if (!result.rows[0]) {
     result = await query(
-      `INSERT INTO app_users (id, clerk_user_id, email, display_name, is_platform_admin)
-       VALUES ($1, $2, $3, $4, NOT EXISTS (SELECT 1 FROM app_users))
+      `INSERT INTO app_users (id, clerk_user_id, email, display_name, is_platform_admin, platform_role)
+       VALUES (
+         $1, $2, $3, $4,
+         NOT EXISTS (SELECT 1 FROM app_users),
+         CASE WHEN NOT EXISTS (SELECT 1 FROM app_users) THEN 'super_admin' ELSE NULL END
+       )
        ON CONFLICT (clerk_user_id) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = NOW()
        RETURNING *`,
       [createId("user"), identity.clerkUserId, identity.email, identity.displayName]
@@ -395,14 +402,26 @@ async function requireAppUser(req) {
   return result.rows[0];
 }
 
-async function requirePlatformAdmin(req) {
-  const user = await requireAppUser(req);
-  if (!user.is_platform_admin || user.status !== "active") {
-    const error = new Error("Platform administrator access is required");
-    error.statusCode = 403;
-    throw error;
+const platformAdmin = createPlatformAdmin({ query, databaseConfigured, sendJson });
+let adminRouter;
+
+function getAdminRouter() {
+  if (!adminRouter) {
+    adminRouter = createAdminRouter({
+      query,
+      listPlans,
+      requireAppUser,
+      platformAdmin,
+      sendJson,
+      parseJsonBody,
+      whopRequest
+    });
   }
-  return user;
+  return adminRouter;
+}
+
+async function requirePlatformAdmin(req) {
+  return getAdminRouter().requirePlatformAdminCompat(req);
 }
 
 async function getUserWorkspace(userId, workspaceId = null) {
@@ -556,12 +575,35 @@ async function listPlans() {
   return result.rows;
 }
 
-async function logPlatformEvent(actorUserId, action, targetType, targetId, details = {}) {
-  await query(
-    `INSERT INTO platform_audit_events (id, actor_user_id, action, target_type, target_id, details)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
-    [createId("audit"), actorUserId || null, action, targetType || null, targetId || null, JSON.stringify(details)]
-  );
+async function logPlatformEvent(actorUserId, action, targetType, targetId, details = {}, meta = {}) {
+  if (!databaseConfigured) return;
+  try {
+    await platformAdmin.writeAuditLog({
+      adminId: actorUserId,
+      action,
+      targetType,
+      targetId,
+      oldValue: meta.oldValue || null,
+      newValue: meta.newValue || null,
+      ip: meta.ip || null,
+      details
+    });
+  } catch (error) {
+    // Fallback for pre-migration DBs without new audit columns
+    try {
+      await query(
+        `INSERT INTO platform_audit_events (id, actor_user_id, action, target_type, target_id, details)
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+        [createId("audit"), actorUserId || null, action, targetType || null, targetId || null, JSON.stringify(details)]
+      );
+    } catch (fallbackError) {
+      console.warn("[audit] log failed:", error.message, fallbackError.message);
+    }
+  }
+}
+
+async function updateManualSubscription(admin, subscriptionId, status, req = null, payload = {}) {
+  return getAdminRouter().updateManualSubscription(admin, subscriptionId, status, req || { headers: {} }, payload);
 }
 
 async function createWorkspace(user, payload) {
@@ -834,11 +876,12 @@ async function requestManualSubscription(user, planKey) {
   }
   if (planKey === "free") {
     const subscription = (await query(
-      `INSERT INTO workspace_subscriptions (id, workspace_id, plan_key, provider, status)
-       VALUES ($1, $2, 'free', 'internal', 'active')
+      `INSERT INTO workspace_subscriptions (id, workspace_id, plan_key, provider, status, activated_at, price_usd_snapshot)
+       VALUES ($1, $2, 'free', 'internal', 'active', NOW(), 0)
        ON CONFLICT (workspace_id) WHERE status IN ('pending', 'active', 'past_due')
        DO UPDATE SET plan_key = 'free', provider = 'internal', provider_plan_id = NULL,
-         provider_membership_id = NULL, status = 'active', updated_at = NOW()
+         provider_membership_id = NULL, status = 'active', activated_at = NOW(),
+         price_usd_snapshot = 0, cancelled_at = NULL, updated_at = NOW()
        RETURNING *`,
       [createId("subscription"), workspace.id]
     )).rows[0];
@@ -856,27 +899,6 @@ async function requestManualSubscription(user, planKey) {
   const delivery = await sendSubscriptionRequestEmail({ user, workspace, plan });
   await logPlatformEvent(user.id, "paid_plan_requested", "workspace", workspace.id, { planKey, delivery: delivery.mode });
   return { mode: "manual-review", planKey, subscriptionId: subscription.id, message: "تم إرسال طلب الاشتراك إلى مسؤول المنصة للمراجعة.", delivery: delivery.mode };
-}
-
-async function updateManualSubscription(admin, subscriptionId, status) {
-  if (!["active", "cancelled", "rejected"].includes(status)) {
-    const error = new Error("Invalid subscription status");
-    error.statusCode = 400;
-    throw error;
-  }
-  const normalized = status === "rejected" ? "cancelled" : status;
-  const result = await query(
-    `UPDATE workspace_subscriptions SET status = $1, updated_at = NOW()
-     WHERE id = $2 AND provider = 'manual' RETURNING *`,
-    [normalized, subscriptionId]
-  );
-  if (!result.rows[0]) {
-    const error = new Error("Manual subscription request not found");
-    error.statusCode = 404;
-    throw error;
-  }
-  await logPlatformEvent(admin.id, `subscription_${status}`, "subscription", subscriptionId, { status: normalized });
-  return result.rows[0];
 }
 
 async function verifyWhopCheckout(user, checkoutId) {
@@ -979,7 +1001,17 @@ const server = http.createServer(async (req, res) => {
     }
     if (requested === "/api/account" && req.method === "GET") {
       const user = await requireAppUser(req);
-      return sendJson(res, 200, { ok: true, user: { id: user.id, email: user.email, displayName: user.display_name, isPlatformAdmin: user.is_platform_admin }, workspace: await getUserWorkspace(user.id) });
+      return sendJson(res, 200, {
+        ok: true,
+        user: {
+          id: user.id,
+          email: user.email,
+          displayName: user.display_name,
+          isPlatformAdmin: Boolean(user.is_platform_admin || user.platform_role),
+          platformRole: user.platform_role || (user.is_platform_admin ? "super_admin" : null)
+        },
+        workspace: await getUserWorkspace(user.id)
+      });
     }
     if (requested === "/api/workspaces" && req.method === "GET") {
       const user = await requireAppUser(req);
@@ -1006,75 +1038,10 @@ const server = http.createServer(async (req, res) => {
     if (requested === "/api/whop/verify-checkout" && req.method === "POST") {
       return sendJson(res, 410, { ok: false, error: "Automatic paid activation is disabled; an administrator must approve the request." });
     }
-    if (requested === "/api/admin/overview" && req.method === "GET") {
-      const admin = await requirePlatformAdmin(req);
-      const [users, workspaces, subscriptions, events] = await Promise.all([
-        query("SELECT COUNT(*)::int AS count FROM app_users WHERE status = 'active'"),
-        query("SELECT COUNT(*)::int AS count FROM workspaces WHERE status = 'active'"),
-        query("SELECT plan_key, COUNT(*)::int AS count FROM workspace_subscriptions WHERE status = 'active' GROUP BY plan_key ORDER BY plan_key"),
-        query("SELECT action, COUNT(*)::int AS count FROM platform_audit_events GROUP BY action ORDER BY count DESC LIMIT 8")
-      ]);
-      return sendJson(res, 200, { ok: true, admin: { id: admin.id, email: admin.email }, metrics: { users: users.rows[0].count, workspaces: workspaces.rows[0].count, subscriptions: subscriptions.rows, events: events.rows } });
-    }
-    if (requested === "/api/admin/workspaces" && req.method === "GET") {
-      await requirePlatformAdmin(req);
-      const result = await query(
-        `SELECT w.id, w.name, w.slug, w.activity_type, w.status, w.created_at, u.email AS owner_email,
-                COALESCE((SELECT plan_key FROM workspace_subscriptions s WHERE s.workspace_id = w.id AND s.status IN ('pending','active','past_due') ORDER BY s.created_at DESC LIMIT 1), 'free') AS plan_key
-         FROM workspaces w JOIN app_users u ON u.id = w.owner_user_id ORDER BY w.created_at DESC`
-      );
-      return sendJson(res, 200, { ok: true, workspaces: result.rows });
-    }
-    if (requested === "/api/admin/subscriptions" && req.method === "GET") {
-      await requirePlatformAdmin(req);
-      const result = await query(
-        `SELECT s.id, s.workspace_id, s.plan_key, s.provider, s.status, s.created_at, s.updated_at,
-                w.name AS workspace_name, u.email AS owner_email
-         FROM workspace_subscriptions s
-         JOIN workspaces w ON w.id = s.workspace_id
-         JOIN app_users u ON u.id = w.owner_user_id
-         ORDER BY s.updated_at DESC`
-      );
-      return sendJson(res, 200, { ok: true, subscriptions: result.rows });
-    }
-    const adminSubscriptionMatch = requested.match(/^\/api\/admin\/subscriptions\/([^/]+)$/);
-    if (adminSubscriptionMatch && req.method === "PATCH") {
-      const admin = await requirePlatformAdmin(req);
-      const payload = await parseJsonBody(req);
-      return sendJson(res, 200, { ok: true, subscription: await updateManualSubscription(admin, adminSubscriptionMatch[1], payload.status) });
-    }
-    if (requested === "/api/admin/plans" && req.method === "GET") {
-      await requirePlatformAdmin(req);
-      return sendJson(res, 200, { ok: true, plans: await listPlans() });
-    }
-    const adminPlanMatch = requested.match(/^\/api\/admin\/plans\/(free|pro|ultimate)$/);
-    if (adminPlanMatch && req.method === "PATCH") {
-      const admin = await requirePlatformAdmin(req);
-      const planKey = adminPlanMatch[1];
-      const payload = await parseJsonBody(req);
-      const current = (await query("SELECT * FROM plan_catalog WHERE plan_key = $1", [planKey])).rows[0];
-      if (!current) return sendJson(res, 404, { ok: false, error: "Plan not found" });
-      const price = Number(payload.priceUsd);
-      if (!Number.isFinite(price) || price < 0) return sendJson(res, 400, { ok: false, error: "priceUsd must be a non-negative number" });
-      if (current.whop_plan_id && planKey !== "free") {
-        await whopRequest(`/api/v1/plans/${encodeURIComponent(current.whop_plan_id)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ renewal_price: price })
-        });
-      }
-      const updated = (await query("UPDATE plan_catalog SET price_usd = $1, updated_at = NOW() WHERE plan_key = $2 RETURNING *", [price, planKey])).rows[0];
-      await logPlatformEvent(admin.id, "plan_price_updated", "plan", planKey, { priceUsd: price });
-      return sendJson(res, 200, { ok: true, plan: updated });
-    }
-    if (requested === "/api/admin/audit" && req.method === "GET") {
-      await requirePlatformAdmin(req);
-      const result = await query(
-        `SELECT e.id, e.action, e.target_type, e.target_id, e.details, e.created_at, u.email AS actor_email
-         FROM platform_audit_events e LEFT JOIN app_users u ON u.id = e.actor_user_id
-         ORDER BY e.created_at DESC LIMIT 100`
-      );
-      return sendJson(res, 200, { ok: true, events: result.rows });
+    if (requested.startsWith("/api/admin")) {
+      const handled = await getAdminRouter().handle(requested, req, res, requestUrl);
+      if (handled !== false) return;
+      return sendJson(res, 404, { ok: false, error: "Admin route not found" });
     }
     if (requested === "/api/health" && req.method === "GET") {
       if (databaseConfigured) await query("SELECT 1");

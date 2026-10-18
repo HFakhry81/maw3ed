@@ -3,6 +3,8 @@
 **Role:** Command Center / Micro-ERP OS for owners, managers, reception, and providers.  
 **Brand:** موعد / Maw3ed · UpNexa-eg.com. SetTime = UX reference only.
 
+> **ملاحظة:** لوحة **مسؤولي المنصة** (Super Admin) منفصلة على `/admin.html` وتتطلب Postgres + دور `platform_role`. هذه الوثيقة تصف لوحة تشغيل المنشأة (tenant ops).
+
 ## Core idea
 
 Operational transparency + real-time control: break silos between bookings, staff, CRM, finance, and marketing; turn data into decisions via KPIs; adapt UI by role (owner / reception / provider).

@@ -18,6 +18,11 @@
 | الحذف | ممنوع حذف موظف/خدمة عليهما مواعيد قادمة؛ ممنوع حذف آخر موظف لخدمة عامة | `deleteStaff` / `deleteService` |
 | تأكيد الحجز | Email (outbox/SendGrid) | `sendBookingConfirmationEmail` |
 | عزل مساحة العمل | كل workspace له `data/workspaces/{id}/maw3ed-ops.json` + holds؛ الهيدر `x-workspace-id`؛ الحجز العام يُحل عبر slug عالمي فريد | `opsWorkspace.js` / `opsRoutes.js` |
+| أدوار منصة (RBAC) | `super_admin` / `financial_admin` / `support_admin` على `app_users.platform_role` | `platformAdmin.js` / `009_platform_admin_governance.sql` |
+| تدقيق غير قابل للتعديل | `platform_audit_events` + trigger يمنع UPDATE/DELETE؛ يحفظ old/new/IP | `writeAuditLog` |
+| Kill-switch مساحة | `workspaces.status=suspended` يرفض `/api/ops` والحجز العام | `opsRoutes.assertWorkspaceNotSuspended` |
+| تأكيد مزدوج | `admin_action_confirmations` قبل الرفض/السعر/التعليق/تغيير الدور | `POST /api/admin/confirmations` |
+| دفتر مالي SaaS | `billing_transactions` + فواتير مبسطة عند تفعيل اشتراك مدفوع + تسويات يدوية | `platformAdminRoutes.js` |
 
 ## اقتراحات المرحلة التالية (حسب الصور المرجعية)
 
@@ -44,18 +49,22 @@
 - عربون Stripe قبل التأكيد النهائي.
 
 ### 5) قفل المنصة (Platform admin)
-- فتح قفل النشاط للعميل من `/api/admin` فقط.
-- تدقيق (audit log) لتغييرات الجدول/الأسعار/الصفحة العامة.
-- تعطيل مساحة عمل بالكامل (kill-switch حساب).
+- ~~تعطيل مساحة عمل بالكامل (kill-switch).~~ (`PATCH /api/admin/workspaces/:id`)
+- ~~تدقيق غير قابل للتعديل مع old/new/IP.~~
+- ~~RBAC أدوار منصة.~~
+- فتح قفل نشاط القالب للعميل من `/api/admin` فقط (متبقٍ).
+- واجهة المنصة: `/admin.html` (تتطلب Postgres + Clerk platform role).
 
 ### 6) دوائر النمو المعطّلة حالياً (Placeholders)
 - المدفوعات / التسويق / التكاملات تبقى مقفلة بالخطة حتى تنفيذها — لا تُعرض كوظائف جاهزة.
+- Whop checkout ما زال 410؛ الدفتر يُغذّى من الموافقات اليدوية.
 
 ## اختبارات
 
 ```bash
 node scripts/smoke-public-booking.js
 node scripts/smoke-booking-governance.js
+node scripts/smoke-platform-admin.js
 ```
 
 ## مراجع

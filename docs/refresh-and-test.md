@@ -83,5 +83,12 @@ npm run update:all
 ## بعد التحديث
 
 - لوحة التحكم: `http://127.0.0.1:7000/`
+- **إدارة المنصة (Super Admin):** `http://127.0.0.1:7000/admin.html` (Postgres + Clerk بدور منصة)
 - الحجز العام: `http://127.0.0.1:7000/book.html?slug=maw3ed-demo`
 - Vite: `http://127.0.0.1:7100/`
+
+اختبار حوكمة المنصة:
+
+```bat
+npm run test:platform-admin
+```

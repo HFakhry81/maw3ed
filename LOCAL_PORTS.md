@@ -10,11 +10,13 @@
 
 | App | Ports | Database |
 | --- | --- | --- |
-| Fanni | API `3000`, Expo `8081` | `fanni_db` |
+| Fanni (marketplace) | API `3000`, Expo `8081` | `fanni_db` |
+| **Fanni Private** | API **`3200`**, Expo **`8084`** | **`fanni_private_db`** |
 | UpNexa | API `5000`, Vite `5173`, Expo `8083` | `upnexa_db` |
 | Spendi | Expo `8082` | cloud Supabase |
 
-**Never** bind Maw3ed to `5000` on the shared VPS — that port belongs to UpNexa.
+**Never** bind Maw3ed to `5000` on the shared VPS — that port belongs to UpNexa.  
+**Never** bind Maw3ed to `3200`/`8084` — those belong to Fanni Private.
 
 ## React production path
 
