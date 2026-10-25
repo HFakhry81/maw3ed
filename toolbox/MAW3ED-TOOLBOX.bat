@@ -32,21 +32,23 @@ echo   10. Seed
 echo   11. Reset ops data       (auto session backup first)
 echo   12. Backup ops session
 echo   13. Restore latest session
+echo   14. Hospital: restore full data
+echo   15. Hospital: save full backup   (richest + test appointments)
 echo.
 echo  [ QA ]
-echo   14. Isolation check
-echo   15. Smoke public booking
-echo   16. Smoke HTTP
-echo   17. QA suite (all tests)
+echo   16. Isolation check
+echo   17. Smoke public booking
+echo   18. Smoke HTTP
+echo   19. QA suite (all tests)
 echo.
 echo  [ RELEASE ]
-echo   18. Build dist only
-echo   19. Prepare release      (refresh + Git/VPS commands)
+echo   20. Build dist only
+echo   21. Prepare release      (refresh + Git/VPS commands)
 echo.
-echo   20. Exit
+echo   22. Exit
 echo =======================================================================
 set "choice="
-set /p choice="Select [1-20]: "
+set /p choice="Select [1-22]: "
 
 if "%choice%"=="1" goto upd_all
 if "%choice%"=="2" goto upd_backend
@@ -61,13 +63,15 @@ if "%choice%"=="10" goto run_seed
 if "%choice%"=="11" goto run_reset
 if "%choice%"=="12" goto run_backup
 if "%choice%"=="13" goto run_restore
-if "%choice%"=="14" goto run_isolation
-if "%choice%"=="15" goto run_smoke_booking
-if "%choice%"=="16" goto run_smoke_http
-if "%choice%"=="17" goto run_qa
-if "%choice%"=="18" goto run_build
-if "%choice%"=="19" goto run_release
-if "%choice%"=="20" exit /b 0
+if "%choice%"=="14" goto run_hospital_restore
+if "%choice%"=="15" goto run_hospital_save
+if "%choice%"=="16" goto run_isolation
+if "%choice%"=="17" goto run_smoke_booking
+if "%choice%"=="18" goto run_smoke_http
+if "%choice%"=="19" goto run_qa
+if "%choice%"=="20" goto run_build
+if "%choice%"=="21" goto run_release
+if "%choice%"=="22" exit /b 0
 echo Invalid option.
 pause
 goto menu
@@ -158,6 +162,26 @@ pause & goto menu
 cls & color 0E
 cd /d "%PROJECT_ROOT%" || exit /b 1
 call node "%PROJECT_ROOT%\scripts\ops-session-backup.js" --restore-latest
+pause & goto menu
+
+:run_hospital_restore
+cls & color 0E
+echo [HOSPITAL] Restore full hospital seed (staff/services/customers/appointments)
+echo            Source: data\seeds\medical-demo-ops.json
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call npm run hospital:restore-full
+echo.
+echo Refresh the browser after this finishes.
+pause & goto menu
+
+:run_hospital_save
+cls & color 0A
+echo [HOSPITAL] Save full backup from richest running data + enrich for tests
+echo            Writes: data\seeds\medical-demo-ops.json  then expands local-default
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call npm run hospital:save-full
+echo.
+echo Refresh the browser after this finishes.
 pause & goto menu
 
 :run_isolation

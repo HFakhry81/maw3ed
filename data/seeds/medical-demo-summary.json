@@ -1,10 +1,20 @@
 {
   "name": "medical-demo",
-  "savedAt": "2026-09-25T11:42:30.124Z",
+  "savedAt": "2026-10-25T18:08:42.883Z",
   "staff": 248,
   "services": 225,
-  "customers": 10,
+  "customers": 40,
   "categories": 15,
-  "source": "generate",
-  "workspaceId": "local-default"
+  "source": "save-full-hospital-backup",
+  "sourceFile": "data/backups/local-default-before-reset-2026-10-01T12-25-15-706Z.json",
+  "workspaceId": "local-default",
+  "businessName": "مركز طبي",
+  "slug": "maw3ed-booking",
+  "logoUrl": "/data/uploads/workspaces/local-default/logo-1792951366393.png",
+  "enrichment": {
+    "appointmentsAdded": 180,
+    "customersTotal": 40,
+    "daySpan": 21,
+    "at": "2026-10-25T18:08:42.882Z"
+  }
 }

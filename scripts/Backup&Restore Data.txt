@@ -2,7 +2,10 @@ npm run ops:backup
 npm run ops:restore
 npm run ops:backups
 
-REM Full hospital demo (248 staff / 225 services) — clear restore:
+REM Full hospital demo — rebuild backup from richest data + expand:
+npm run hospital:save-full
+REM restore previously saved full hospital seed:
 npm run hospital:restore-full
-REM same:
+REM aliases:
+npm run save:full-hospital
 npm run restore:full-hospital

@@ -1,23 +1,18 @@
 البذرة الكاملة للمستشفى محفوظة في:
   data/seeds/medical-demo-ops.json
-  (~248 موظف · ~225 خدمة · 10 عملاء · 15 قسم)
 
-لاسترجاعها / فردها على مساحة العمل المحلية شغّل من جذر المشروع:
+── حفظ باك أب من أكبر بيانات شغّالة + إثراء مواعيد للاختبار ──
+  npm run hospital:save-full
+  (السكربت: scripts/save-full-hospital-backup.js)
 
+── فرد / استرجاع البذرة المحفوظة ──
   npm run hospital:restore-full
-
-أو الاسم البديل:
-
-  npm run restore:full-hospital
-
-السكربت: scripts/restore-full-hospital-data.js
+  أو: npm run restore:full-hospital
 
 بعدما ينتهي حدّث صفحة المتصفح (F5).
 
 ── أوامر قديمة (ما زالت تعمل) ──
   npm run seed:medical:restore
-
-إذا أردت توليد الطاقم من جديد ثم حفظه كنسخة احتياطية:
-  npm run seed:medical
+  npm run seed:medical          (توليد طاقم جديد ثم حفظ)
 
 بعد update:all أو refresh تُسترجع هذه البذرة تلقائياً عند مسار الاختبارات الطبية.
