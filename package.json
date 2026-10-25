@@ -21,6 +21,7 @@
     "hospital:save-full": "node scripts/save-full-hospital-backup.js",
     "save:full-hospital": "node scripts/save-full-hospital-backup.js",
     "check:isolation": "node scripts/check-isolation.js",
+    "check:staging": "node scripts/staging-acceptance.js",
     "ops:reset": "node scripts/reset-ops-data.js",
     "ops:backup": "node scripts/ops-session-backup.js --backup --reason=manual",
     "ops:restore": "node scripts/ops-session-backup.js --restore-latest",

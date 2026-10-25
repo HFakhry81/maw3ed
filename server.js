@@ -109,6 +109,10 @@ function securityHeaders(extra = {}) {
   };
 }
 
+function authRequiredForRequest() {
+  return process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
+}
+
 function sendJson(res, status, payload) {
   res.writeHead(status, securityHeaders({
     "Content-Type": "application/json; charset=utf-8",
@@ -1209,29 +1213,35 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, templates: result.rows.length ? result.rows : localTemplates });
     }
     if (requested === "/api/workspace-profile" && req.method === "GET") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       const orgId = await getRequestOrganizationId(req, requestUrl);
       return sendJson(res, 200, { ok: true, profile: databaseConfigured ? await getOrganizationProfile(orgId) : { id: organizationId, name: localData.organization?.name || "مستشفى الشفاء", activityType: "medical", locale: "ar", currency: "egp", timezone: "Africa/Cairo", labels: { customer: "المرضى", staff: "الأطباء", department: "الأقسام والعيادات", service: "الخدمات", appointment: "المواعيد" } } });
     }
     if (requested === "/api/workspace-profile" && req.method === "PATCH") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       return sendJson(res, 200, { ok: true, profile: await updateOrganizationProfile(req, requestUrl, await parseJsonBody(req)) });
     }
     if (requested === "/api/dashboard" && req.method === "GET") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       const orgId = await getRequestOrganizationId(req, requestUrl);
       return sendJson(res, 200, await dashboardData(requestUrl.searchParams.get("date") || "2025-05-14", orgId));
     }
     if (requested === "/api/departments" && req.method === "GET") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, departments: localData.departments });
       const orgId = await getRequestOrganizationId(req, requestUrl);
       const result = await query("SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]);
       return sendJson(res, 200, { ok: true, departments: result.rows });
     }
     if (requested === "/api/doctors" && req.method === "GET") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, doctors: localData.doctors });
       const orgId = await getRequestOrganizationId(req, requestUrl);
       const result = await query("SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]);
       return sendJson(res, 200, { ok: true, doctors: result.rows });
     }
     if (requested === "/api/patients" && req.method === "GET") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, patients: localData.patients });
       const orgId = await getRequestOrganizationId(req, requestUrl);
       const result = await query(`SELECT id, name, email, TO_CHAR(joined_at, 'YYYY-MM-DD') AS "joinedAt",
@@ -1239,6 +1249,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, patients: result.rows });
     }
     if (requested === "/api/appointments" && req.method === "GET") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       if (!databaseConfigured) {
         const date = requestUrl.searchParams.get("date");
         return sendJson(res, 200, { ok: true, appointments: localData.appointments.filter((appointment) => !date || appointment.date === date) });
@@ -1258,6 +1269,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, appointments: result.rows.map(toAppointment) });
     }
     if (requested === "/api/appointments" && req.method === "POST") {
+      if (authRequiredForRequest()) await requireAppUser(req);
       const orgId = await getRequestOrganizationId(req, requestUrl);
       const appointment = await handleAppointmentCreate(await parseJsonBody(req), orgId);
       return sendJson(res, 201, { ok: true, appointment });

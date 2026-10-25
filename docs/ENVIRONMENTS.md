@@ -34,6 +34,21 @@ npm run env:production
   → VPS: git pull + MAW3ED_ENV=production + npm start
 ```
 
+## قبول ما قبل الإطلاق (production-like)
+
+لا توجد بيئة `staging` مستقلة في هذا المشروع. بدلًا من ذلك، يتم تمرير نفس قواعد الإنتاج عبر إعدادات تشغيلية صارمة للتأهل قبل الإطلاق المحدود:
+
+```bash
+MAW3ED_ENV=production MAW3ED_REQUIRE_AUTH=1 node server.js
+npm run check:staging
+```
+
+تتحقق هذه الخطوة من:
+- عزل منافذ التطبيق والـ VPS
+- جاهزية الخدمة واستعدادها (`/api/health`, `/api/health/ready`)
+- حماية المسارات الحساسة (`/api/patients`, `/api/appointments`, `/api/development-events`)
+- عدم السماح بالوصول غير الموثق إلى واجهات التشغيل
+
 لا تستخدم Cloud Agent كمصدر نشر. لا توجد بيئات ثالثة (staging/replit/preview) في الإعداد الرسمي.
 
 ## الفروع
