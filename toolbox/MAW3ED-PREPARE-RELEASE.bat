@@ -3,13 +3,15 @@ chcp 65001 >nul
 setlocal EnableExtensions
 title Maw3ed - Prepare Release (Local → Git → VPS)
 color 0A
-cd /d "%~dp0"
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
+cd /d "%PROJECT_ROOT%" || exit /b 1
+set "MAW3ED_ENV=local"
 
 echo ===================================================
 echo  Maw3ed release prepare
 echo  1^) Full local refresh + smoke
 echo  2^) Print Git push + VPS pull commands
-echo  Path: %CD%
+echo  Project: %CD%
 echo ===================================================
 echo.
 

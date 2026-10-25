@@ -1,9 +1,10 @@
 @echo off
 chcp 65001 >nul
+setlocal EnableExtensions
 title Maw3ed - Master Build (Local)
-cd /d "%~dp0"
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
+cd /d "%PROJECT_ROOT%" || exit /b 1
 set "MAW3ED_ENV=local"
-if not exist .env.mode echo local>.env.mode
 
 :menu
 cls
@@ -28,21 +29,21 @@ if "%choice%"=="6" exit /b 0
 goto menu
 
 :db
-call update-db.bat
+call "%~dp0update-db.bat"
 goto menu
 
 :webapi
-call build-web-api.bat
+call "%~dp0build-web-api.bat"
 goto menu
 
 :apk
-call build-apk.bat
+call "%~dp0build-apk.bat"
 goto menu
 
 :full
-call MAW3ED-UPDATE-ALL.bat
+call "%~dp0MAW3ED-UPDATE-ALL.bat"
 goto menu
 
 :toolbox
-call MAW3ED-TOOLBOX.bat
+call "%~dp0MAW3ED-TOOLBOX.bat"
 goto menu

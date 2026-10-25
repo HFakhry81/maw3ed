@@ -16,6 +16,10 @@ const { loaded } = require("./load-env");
 
 const root = path.join(__dirname, "..");
 const reportPath = path.join(root, "data", "last-refresh-report.json");
+const installRoot = path.join("E:\\Installments", "maw3ed");
+const npmCache = path.join(installRoot, "npm-cache");
+const pnpmStore = path.join(installRoot, "pnpm-store");
+const yarnCache = path.join(installRoot, "yarn-cache");
 
 console.log(`[INFO] Maw3ed refresh mode=${loaded.mode} storage=${loaded.storage} port=${loaded.port}`);
 
@@ -28,7 +32,12 @@ function run(label, command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd || root,
     encoding: "utf8",
-    env: { ...process.env, ...(options.env || {}) },
+    env: {
+      ...process.env,
+      NODE_USE_SYSTEM_CA: "1",
+      npm_config_cache: npmCache,
+      ...(options.env || {})
+    },
     stdio: options.capture ? "pipe" : "inherit",
     shell: useShell
   });
@@ -76,19 +85,19 @@ function npmOrYarnInstall() {
   // 1. Try PNPM first if pnpm-lock.yaml exists
   if (hasPnpmLock) {
     const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-    const pnpmRes = run("install", pnpmBin, ["install", "--no-frozen-lockfile"], { soft: true, shell: true });
+    const pnpmRes = run("install", pnpmBin, ["install", "--no-frozen-lockfile", "--store-dir", pnpmStore], { soft: true, shell: true });
     if (pnpmRes.ok) return pnpmRes;
   }
 
   // 2. Try Yarn if yarn.lock exists
   if (hasYarnLock && commandExists("yarn")) {
-    const yarnRes = run("install", "yarn", ["install", "--frozen-lockfile"], { soft: true, shell: true });
+    const yarnRes = run("install", "yarn", ["install", "--frozen-lockfile", "--cache-folder", yarnCache], { soft: true, shell: true });
     if (yarnRes.ok) return yarnRes;
   }
 
   // 3. Fallback to NPM
   const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
-  return run("install", npmBin, ["install", "--legacy-peer-deps"], { soft: false, shell: true });
+  return run("install", npmBin, ["install", "--legacy-peer-deps", "--cache", npmCache], { soft: false, shell: true });
 }
 
 function main() {
@@ -147,13 +156,14 @@ function main() {
 
   const mobileDir = path.join(root, "mobile");
   if (fs.existsSync(path.join(mobileDir, "package.json"))) {
+    const mobileLock = fs.existsSync(path.join(mobileDir, "package-lock.json"));
     const hasModules = fs.existsSync(path.join(mobileDir, "node_modules"));
     const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
     if (hasModules && process.env.REFRESH_SKIP_INSTALL === "1") {
       steps.push({ label: "mobile-install", ok: true, status: 0, ms: 0, skipped: true, soft: true });
     } else {
       steps.push(
-        run("mobile-install", npmBin, ["install", "--legacy-peer-deps"], {
+        run("mobile-install", npmBin, [...(mobileLock ? ["ci"] : ["install"]), "--legacy-peer-deps", "--cache", npmCache], {
           cwd: mobileDir,
           soft: true,
           capture: true

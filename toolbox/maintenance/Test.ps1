@@ -22,8 +22,11 @@ if ($available.Count -eq 0) {
 }
 
 if ($Suite -eq 'default' -and $tests.PSObject.Properties.Name -notcontains 'default') {
-    Write-Host "[SKIP] No default suite is configured. Choose one with -Suite; available: $($available -join ', '), all." -ForegroundColor Yellow
-    exit 0
+    if ($available.Count -gt 0) { $Suite = 'all' }
+    else {
+        Write-Host '[SKIP] No automated test suites are configured.' -ForegroundColor Yellow
+        exit 0
+    }
 }
 if ($Suite -eq 'all') {
     $selected = $available

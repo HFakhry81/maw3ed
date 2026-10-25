@@ -29,8 +29,14 @@ try {
                 & npm update --cache $cache --no-audit --no-fund
             }
             else {
-                Write-Host '[INFO] Synchronizing installed packages with the npm lockfile.'
-                & npm install --cache $cache --no-audit --no-fund
+                if (Test-Path -LiteralPath (Join-Path $script:MaintenanceRoot 'package-lock.json')) {
+                    Write-Host '[INFO] Installing exact versions from package-lock.json.'
+                    & npm ci --cache $cache --no-audit --no-fund
+                }
+                else {
+                    Write-Host '[INFO] No npm lockfile found; resolving package.json using the E:\Installments cache.'
+                    & npm install --cache $cache --no-audit --no-fund
+                }
             }
         }
         'yarn' {

@@ -2,7 +2,9 @@
 chcp 65001 >nul
 setlocal EnableExtensions
 title Maw3ed - Update ALL
-cd /d "%~dp0"
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
+cd /d "%PROJECT_ROOT%" || exit /b 1
+set "MAW3ED_ENV=local"
 
 echo ===================================================
 echo  Maw3ed UPDATE ALL

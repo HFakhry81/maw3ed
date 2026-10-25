@@ -2,7 +2,9 @@
 chcp 65001 >nul
 setlocal EnableExtensions
 title Maw3ed - Developer Toolbox
-cd /d "%~dp0"
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
+cd /d "%PROJECT_ROOT%" || exit /b 1
+set "MAW3ED_ENV=local"
 
 :menu
 cls
@@ -124,12 +126,12 @@ pause & goto menu
 
 :run_migrate
 cls & color 0A
-if exist .env (call node --env-file=.env scripts\migrate.js) else (call node scripts\migrate.js)
+call node scripts\migrate.js
 pause & goto menu
 
 :run_seed
 cls & color 0E
-if exist .env (call node --env-file=.env scripts\seed.js) else (call node scripts\seed.js)
+call node scripts\seed.js
 pause & goto menu
 
 :run_reset

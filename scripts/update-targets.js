@@ -19,6 +19,10 @@ const { loaded } = require("./load-env");
 
 const root = path.join(__dirname, "..");
 const reportPath = path.join(root, "data", "last-update-report.json");
+const installRoot = path.join("E:\\Installments", "maw3ed");
+const npmCache = path.join(installRoot, "npm-cache");
+const pnpmStore = path.join(installRoot, "pnpm-store");
+const yarnCache = path.join(installRoot, "yarn-cache");
 
 const rawTarget = String(process.argv[2] || "").trim().toLowerCase();
 const target = rawTarget === "api" ? "backend" : rawTarget;
@@ -44,7 +48,12 @@ function run(label, command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd || root,
     encoding: "utf8",
-    env: { ...process.env, ...(options.env || {}) },
+    env: {
+      ...process.env,
+      NODE_USE_SYSTEM_CA: "1",
+      npm_config_cache: npmCache,
+      ...(options.env || {})
+    },
     stdio: options.capture ? "pipe" : "inherit",
     shell: useShell
   });
@@ -85,7 +94,7 @@ function ensureInstall(steps) {
 
   if (fs.existsSync(path.join(root, "pnpm-lock.yaml")) && commandExists("pnpm")) {
     const pnpmBin = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-    const pnpmRes = run("install", pnpmBin, ["install", "--no-frozen-lockfile"], { soft: true, shell: true });
+    const pnpmRes = run("install", pnpmBin, ["install", "--no-frozen-lockfile", "--store-dir", pnpmStore], { soft: true, shell: true });
     if (pnpmRes.ok) {
       steps.push(pnpmRes);
       return true;
@@ -94,7 +103,7 @@ function ensureInstall(steps) {
   }
 
   if (fs.existsSync(path.join(root, "yarn.lock")) && commandExists("yarn")) {
-    const yarnRes = run("install", "yarn", ["install", "--frozen-lockfile"], { soft: true, shell: true });
+    const yarnRes = run("install", "yarn", ["install", "--frozen-lockfile", "--cache-folder", yarnCache], { soft: true, shell: true });
     if (yarnRes.ok) {
       steps.push(yarnRes);
       return true;
@@ -102,7 +111,7 @@ function ensureInstall(steps) {
     steps.push(yarnRes);
   }
 
-  const entry = run("install", npmCmd(), ["install", "--legacy-peer-deps"], { soft: false, shell: true });
+  const entry = run("install", npmCmd(), ["install", "--legacy-peer-deps", "--cache", npmCache], { soft: false, shell: true });
   steps.push(entry);
   return entry.ok;
 }
@@ -269,12 +278,14 @@ function updateMobile(steps) {
   if (!fs.existsSync(path.join(mobileDir, "package.json"))) {
     fail(steps, steps.startedAt, "mobile/package.json missing");
   }
+  const mobileLock = fs.existsSync(path.join(mobileDir, "package-lock.json"));
   const hasModules = fs.existsSync(path.join(mobileDir, "node_modules"));
   if (hasModules && process.env.REFRESH_SKIP_INSTALL === "1") {
     steps.push({ label: "mobile-install", ok: true, status: 0, ms: 0, skipped: true });
     return;
   }
-  steps.push(run("mobile-install", npmCmd(), ["install", "--legacy-peer-deps"], { cwd: mobileDir, soft: false }));
+  const installArgs = mobileLock ? ["ci"] : ["install"];
+  steps.push(run("mobile-install", npmCmd(), [...installArgs, "--legacy-peer-deps", "--cache", npmCache], { cwd: mobileDir, soft: false }));
   if (!steps[steps.length - 1].ok) fail(steps, steps.startedAt, "mobile install failed");
 }
 
@@ -285,12 +296,13 @@ function updateAll(steps) {
 
   const mobileDir = path.join(root, "mobile");
   if (fs.existsSync(path.join(mobileDir, "package.json"))) {
+    const mobileLock = fs.existsSync(path.join(mobileDir, "package-lock.json"));
     const hasModules = fs.existsSync(path.join(mobileDir, "node_modules"));
     if (hasModules && process.env.REFRESH_SKIP_INSTALL === "1") {
       steps.push({ label: "mobile-install", ok: true, status: 0, ms: 0, skipped: true, soft: true });
     } else {
       steps.push(
-        run("mobile-install", npmCmd(), ["install", "--legacy-peer-deps"], {
+        run("mobile-install", npmCmd(), [...(mobileLock ? ["ci"] : ["install"]), "--legacy-peer-deps", "--cache", npmCache], {
           cwd: mobileDir,
           soft: true,
           capture: true
