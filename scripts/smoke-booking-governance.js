@@ -67,18 +67,26 @@ async function main() {
       "staff custom window"
     );
 
+    const unassignedService = ops.createService({
+      name: "خدمة بلا موظف",
+      categoryId: svc3.categoryId,
+      publicBooking: true,
+      providerIds: []
+    });
     let providerErr = null;
     try {
-      ops.createService({
-        name: "خدمة بلا موظف",
-        categoryId: svc3.categoryId,
-        publicBooking: true,
-        providerIds: []
+      await ops.listPublicSlots(s3, {
+        date: mondayDate,
+        serviceId: unassignedService.id,
+        staffId: "any"
       });
     } catch (error) {
       providerErr = error;
     }
-    assert(providerErr && providerErr.statusCode === 400, "public service needs provider");
+    assert(
+      providerErr && providerErr.statusCode === 400,
+      "public service without a provider must not allow booking"
+    );
 
     const slots = await ops.listPublicSlots(s3, { date: mondayDate, serviceId: svc3.id, staffId: st3.id });
     assert(slots.slots.length > 0, "need slot for delete guard");

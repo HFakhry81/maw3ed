@@ -1,0 +1,29 @@
+{
+  "installDirectory": "maw3ed",
+  "project": "Maw3ed",
+  "tests": {
+    "http": {
+      "name": "Local HTTP smoke",
+      "script": "test:http",
+      "target": ""
+    },
+    "smoke": {
+      "name": "Booking smoke tests",
+      "script": "test:smoke",
+      "target": ""
+    },
+    "platform-admin": {
+      "name": "Platform admin smoke",
+      "script": "test:platform-admin",
+      "target": ""
+    }
+  },
+  "checks": [
+    {
+      "name": "Workspace isolation",
+      "script": "check:isolation",
+      "target": ""
+    }
+  ],
+  "packageManager": "npm"
+}
