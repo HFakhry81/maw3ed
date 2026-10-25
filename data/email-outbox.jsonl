@@ -33,3 +33,5 @@
 {"createdAt":"2026-10-25T21:11:12.410Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
 {"createdAt":"2026-10-25T21:17:57.045Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف عام · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
 {"createdAt":"2026-10-25T21:17:57.047Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
+{"createdAt":"2026-10-25T21:32:27.628Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف عام · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
+{"createdAt":"2026-10-25T21:32:27.630Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}

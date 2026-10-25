@@ -466,10 +466,19 @@ async function listUserWorkspaces(userId) {
 
 async function getRequestOrganizationId(req, requestUrl) {
   if (!databaseConfigured) return organizationId;
-  const workspaceId = req.headers["x-workspace-id"] || requestUrl.searchParams.get("workspace");
-  if (!workspaceId) return organizationId;
+
+  const authRequired = process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
+  if (!authRequired) return organizationId;
+
   const user = await requireAppUser(req);
-  const workspace = await getUserWorkspace(user.id, workspaceId);
+  const workspaceId = req.headers["x-workspace-id"] || requestUrl.searchParams.get("workspace");
+  const effectiveWorkspaceId = workspaceId || (await getUserWorkspace(user.id))?.id;
+  if (!effectiveWorkspaceId) {
+    const error = new Error("No workspace is available for the current account");
+    error.statusCode = 403;
+    throw error;
+  }
+  const workspace = await getUserWorkspace(user.id, effectiveWorkspaceId);
   if (!workspace?.organization_id) {
     const error = new Error("This workspace is not available for the current account");
     error.statusCode = 403;
