@@ -1501,16 +1501,43 @@ async function createPublicAppointment(slug, payload = {}) {
 }
 
 function updateAppointmentStatus(id, status) {
+  const nextStatus = String(status || "").trim();
+  const aliasMap = {
+    check_in: "checked_in",
+    cancel: "cancelled",
+    canceled: "cancelled",
+    no_show: "no_show",
+    "no-show": "no_show",
+    noShow: "no_show"
+  };
+  const normalized = aliasMap[nextStatus] || nextStatus;
   const allowed = new Set(["pending", "confirmed", "checked_in", "completed", "cancelled", "no_show"]);
-  if (!allowed.has(String(status || ""))) fail("حالة الموعد غير صالحة");
+  if (!allowed.has(normalized)) fail("حالة الموعد غير صالحة");
   const appointment = store.appointments.find((item) => item.id === id);
   if (!appointment) fail("الموعد غير موجود", 404);
-  appointment.status = status;
+
+  const validTransitions = {
+    pending: ["confirmed", "cancelled", "no_show"],
+    confirmed: ["checked_in", "completed", "cancelled", "no_show"],
+    checked_in: ["completed", "cancelled", "no_show"],
+    completed: [],
+    cancelled: [],
+    no_show: []
+  };
+  const current = appointment.status || "pending";
+  if (!validTransitions[current]?.includes(normalized) && current !== normalized) {
+    fail(`لا يمكن تحويل حالة الموعد من ${current} إلى ${normalized}`, 400);
+  }
+
+  appointment.status = normalized;
   appointment.updatedAt = new Date().toISOString();
-  if (status === "checked_in" && !appointment.checkedInAt) {
+  if (normalized === "checked_in" && !appointment.checkedInAt) {
     appointment.checkedInAt = appointment.updatedAt;
   }
-  if (status === "completed" && !appointment.completedAt) {
+  if (normalized === "completed" && !appointment.completedAt) {
+    appointment.completedAt = appointment.updatedAt;
+  }
+  if ((normalized === "cancelled" || normalized === "no_show") && !appointment.completedAt && normalized === "no_show") {
     appointment.completedAt = appointment.updatedAt;
   }
   persist();
