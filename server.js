@@ -875,11 +875,66 @@ async function createWhopCheckout(user, planKey, requestUrl) {
   return { purchaseUrl: checkout.purchase_url, checkoutId: checkout.id, planKey };
 }
 
+async function getWorkspaceBillingStatus(user, workspaceId = null) {
+  const workspace = await getUserWorkspace(user.id, workspaceId);
+  if (!workspace) {
+    return { workspace: null, planKey: "free", status: "none", subscription: null };
+  }
+
+  if (!databaseConfigured) {
+    return {
+      workspace: { id: workspace.id, name: workspace.name, activityType: workspace.activity_type },
+      planKey: workspace.plan_key || "free",
+      status: "active",
+      subscription: { workspace_id: workspace.id, plan_key: workspace.plan_key || "free", provider: "internal", status: "active" },
+      message: "خطة العمل الحالية فعّالة." 
+    };
+  }
+
+  const subscription = (
+    await query(
+      `SELECT s.*, pc.display_name AS plan_name, pc.description, pc.price_usd, pc.billing_period_days, pc.features, pc.limits
+       FROM workspace_subscriptions s
+       JOIN plan_catalog pc ON pc.plan_key = s.plan_key
+       WHERE s.workspace_id = $1
+       ORDER BY s.updated_at DESC, s.created_at DESC
+       LIMIT 1`,
+      [workspace.id]
+    )
+  ).rows[0];
+
+  const planKey = subscription?.plan_key || workspace.plan_key || "free";
+  const status = subscription?.status || (workspace.plan_key ? "active" : "none");
+
+  return {
+    workspace: { id: workspace.id, name: workspace.name, activityType: workspace.activity_type },
+    planKey,
+    status,
+    subscription: subscription || null,
+    active: status === "active" || status === "past_due",
+    message:
+      status === "pending"
+        ? "طلب الاشتراك قيد المراجعة من مسؤول المنصة."
+        : status === "active"
+          ? "الاشتراك الحالي فعال."
+          : status === "cancelled"
+            ? "تم إلغاء الاشتراك الحالي."
+            : status === "past_due"
+              ? "الاشتراك الحالي متأخر في السداد." 
+              : "لا يوجد اشتراك نشط في هذه المساحة."
+  };
+}
+
 async function requestManualSubscription(user, planKey) {
   const plan = (await query("SELECT * FROM plan_catalog WHERE plan_key = $1 AND active = true", [planKey])).rows[0];
   const workspace = await getUserWorkspace(user.id);
   if (!plan || !workspace) {
     const error = new Error("Create a workspace before requesting a plan");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!planKey || !/^(free|pro|ultimate)$/.test(String(planKey))) {
+    const error = new Error("Plan is not available");
     error.statusCode = 400;
     throw error;
   }
@@ -895,7 +950,7 @@ async function requestManualSubscription(user, planKey) {
       [createId("subscription"), workspace.id]
     )).rows[0];
     await logPlatformEvent(user.id, "free_plan_activated", "workspace", workspace.id);
-    return { mode: "activated", planKey: "free", subscription };
+    return { mode: "activated", planKey: "free", status: "active", subscription };
   }
   const subscription = (await query(
     `INSERT INTO workspace_subscriptions (id, workspace_id, plan_key, provider, provider_plan_id, status)
@@ -907,7 +962,7 @@ async function requestManualSubscription(user, planKey) {
   )).rows[0];
   const delivery = await sendSubscriptionRequestEmail({ user, workspace, plan });
   await logPlatformEvent(user.id, "paid_plan_requested", "workspace", workspace.id, { planKey, delivery: delivery.mode });
-  return { mode: "manual-review", planKey, subscriptionId: subscription.id, message: "تم إرسال طلب الاشتراك إلى مسؤول المنصة للمراجعة.", delivery: delivery.mode };
+  return { mode: "manual-review", planKey, status: "pending", subscriptionId: subscription.id, message: "تم إرسال طلب الاشتراك إلى مسؤول المنصة للمراجعة.", delivery: delivery.mode };
 }
 
 async function verifyWhopCheckout(user, checkoutId) {
@@ -1035,6 +1090,15 @@ const server = http.createServer(async (req, res) => {
       const workspace = await getUserWorkspace(user.id);
       if (!workspace) return sendJson(res, 200, { ok: true, workspace: null, plan: (await listPlans()).find((plan) => plan.plan_key === "free") });
       return sendJson(res, 200, { ok: true, workspace: { id: workspace.id, name: workspace.name, activityType: workspace.activity_type }, plan: { key: workspace.plan_key, name: workspace.plan_name, features: workspace.features, limits: workspace.limits } });
+    }
+    if (requested === "/api/billing/status" && req.method === "GET") {
+      const user = await requireAppUser(req);
+      const workspace = await getUserWorkspace(user.id);
+      if (!workspace) {
+        return sendJson(res, 200, { ok: true, workspace: null, planKey: "free", status: "none", subscription: null });
+      }
+      const billingStatus = await getWorkspaceBillingStatus(user, workspace.id);
+      return sendJson(res, 200, { ok: true, ...billingStatus });
     }
     if (requested === "/api/billing/request" && req.method === "POST") {
       const user = await requireAppUser(req);
