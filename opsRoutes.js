@@ -76,7 +76,8 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       workspaceId = adminWorkspaceId(req, requestUrl);
     }
 
-    if (isOps) {
+    const authRequired = process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
+    if (isOps && authRequired) {
       const user = await requireAppUser(req);
       if (!user) {
         const error = new Error("Authentication is required");

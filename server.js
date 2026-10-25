@@ -1134,7 +1134,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await verifyEmail(await parseJsonBody(req)));
     }
     if (requested === "/api/development-events" && req.method === "POST") {
-      await requireAppUser(req);
+      if (process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1") {
+        await requireAppUser(req);
+      }
       const payload = await parseJsonBody(req);
       const event = typeof payload.event === "string" ? payload.event.trim() : "";
       if (!/^[a-z0-9_.-]{1,80}$/.test(event)) return sendJson(res, 400, { ok: false, error: "Invalid event name" });
@@ -1145,7 +1147,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 201, { ok: true, timestamp: record.timestamp });
     }
     if (requested === "/api/development-events" && req.method === "GET") {
-      await requireAppUser(req);
+      if (process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1") {
+        await requireAppUser(req);
+      }
       return sendJson(res, 200, { ok: true, events: await readEventLog(Math.min(Math.max(Number(requestUrl.searchParams.get("limit")) || 50, 1), 200)) });
     }
 
