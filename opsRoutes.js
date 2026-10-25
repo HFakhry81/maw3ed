@@ -49,7 +49,7 @@ function publicWorkspaceId(slug) {
   return resolved;
 }
 
-async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, parseJsonBody, localData }) {
+async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, parseJsonBody, localData, requireAppUser, getUserWorkspace, databaseConfigured }) {
   try {
     const publicBookingMatch = requested.match(/^\/api\/public\/booking\/([^/]+)$/);
     const publicSlotsMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/slots$/);
@@ -74,6 +74,23 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       workspaceId = publicWorkspaceId(slug);
     } else {
       workspaceId = adminWorkspaceId(req, requestUrl);
+    }
+
+    if (isOps) {
+      const user = await requireAppUser(req);
+      if (!user) {
+        const error = new Error("Authentication is required");
+        error.statusCode = 401;
+        throw error;
+      }
+      if (databaseConfigured) {
+        const membership = await getUserWorkspace(user.id, workspaceId);
+        if (!membership) {
+          const error = new Error("This workspace is not available for the current account");
+          error.statusCode = 403;
+          throw error;
+        }
+      }
     }
 
     if (isOps || isPublic) {
