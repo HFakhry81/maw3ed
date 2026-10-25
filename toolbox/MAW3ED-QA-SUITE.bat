@@ -14,16 +14,19 @@ echo ===================================================
 echo.
 
 echo [1/3] Booking and workspace smoke tests...
+cd /d "%PROJECT_ROOT%" || exit /b 1
 call npm.cmd run test:smoke
 if errorlevel 1 set "FAILED=1"
 
 echo.
 echo [2/3] HTTP API + pages smoke...
+cd /d "%PROJECT_ROOT%" || exit /b 1
 call npm.cmd run test:http
 if errorlevel 1 set "FAILED=1"
 
 echo.
 echo [3/3] Platform admin smoke...
+cd /d "%PROJECT_ROOT%" || exit /b 1
 call npm.cmd run test:platform-admin
 if errorlevel 1 set "FAILED=1"
 

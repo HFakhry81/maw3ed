@@ -16,9 +16,9 @@ echo ===================================================
 echo.
 
 if /i "%~1"=="--skip-refresh" (
-  call node scripts\prepare-release.js --skip-refresh
+  call node "%PROJECT_ROOT%\scripts\prepare-release.js" --skip-refresh
 ) else (
-  call node scripts\prepare-release.js
+  call node "%PROJECT_ROOT%\scripts\prepare-release.js"
 )
 
 if errorlevel 1 (

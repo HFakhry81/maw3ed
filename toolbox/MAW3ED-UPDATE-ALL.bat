@@ -13,7 +13,7 @@ echo  Ports: API/Web 7000 ^| Vite 7100
 echo ===================================================
 echo.
 
-call node scripts\update-targets.js all
+call node "%PROJECT_ROOT%\scripts\update-targets.js" all
 set "ERR=%ERRORLEVEL%"
 
 echo.

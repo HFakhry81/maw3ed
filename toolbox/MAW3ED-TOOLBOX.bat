@@ -75,94 +75,107 @@ goto menu
 :upd_all
 cls & color 0E
 echo [UPDATE ALL] backend + frontend/web + API smoke + mobile...
-call node scripts\update-targets.js all
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\update-targets.js" all
 echo.
 pause & goto menu
 
 :upd_backend
 cls & color 0A
 echo [UPDATE BACKEND/API]...
-call node scripts\update-targets.js backend
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\update-targets.js" backend
 echo.
 pause & goto menu
 
 :upd_frontend
 cls & color 0A
 echo [UPDATE FRONTEND]...
-call node scripts\update-targets.js frontend
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\update-targets.js" frontend
 echo.
 pause & goto menu
 
 :upd_web
 cls & color 0A
 echo [UPDATE WEB]...
-call node scripts\update-targets.js web
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\update-targets.js" web
 echo.
 pause & goto menu
 
 :upd_mobile
 cls & color 0A
 echo [UPDATE MOBILE]...
-call node scripts\update-targets.js mobile
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\update-targets.js" mobile
 echo.
 pause & goto menu
 
 :run_backend
 cls & color 0B
 echo [RUN] Backend/API on :7000
-call scripts\run-backend.cmd
+call "%PROJECT_ROOT%\scripts\run-backend.cmd"
 pause & goto menu
 
 :run_frontend
 cls & color 0B
 echo [RUN] Vite frontend on :7100
-call scripts\run-frontend.cmd
+call "%PROJECT_ROOT%\scripts\run-frontend.cmd"
 pause & goto menu
 
 :run_all
 cls & color 0B
-call scripts\run-all.cmd
+call "%PROJECT_ROOT%\scripts\run-all.cmd"
 pause & goto menu
 
 :run_migrate
 cls & color 0A
-call node scripts\migrate.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\migrate.js"
 pause & goto menu
 
 :run_seed
 cls & color 0E
-call node scripts\seed.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\seed.js"
 pause & goto menu
 
 :run_reset
 cls & color 0C
 echo [RESET] Creates a session backup first, then resets local-default ops.
-call node scripts\reset-ops-data.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\reset-ops-data.js"
 pause & goto menu
 
 :run_backup
 cls & color 0A
-call node scripts\ops-session-backup.js --backup --reason=toolbox
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\ops-session-backup.js" --backup --reason=toolbox
 pause & goto menu
 
 :run_restore
 cls & color 0E
-call node scripts\ops-session-backup.js --restore-latest
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\ops-session-backup.js" --restore-latest
 pause & goto menu
 
 :run_isolation
 cls & color 0D
-call node scripts\check-isolation.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\check-isolation.js"
 pause & goto menu
 
 :run_smoke_booking
 cls & color 0B
-call node scripts\smoke-public-booking.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\smoke-public-booking.js"
 pause & goto menu
 
 :run_smoke_http
 cls & color 0B
-call node scripts\smoke-http.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\smoke-http.js"
 pause & goto menu
 
 :run_qa
@@ -172,10 +185,12 @@ goto menu
 
 :run_build
 cls & color 0A
-call node scripts\build.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\build.js"
 pause & goto menu
 
 :run_release
 cls & color 0D
-call node scripts\prepare-release.js
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call node "%PROJECT_ROOT%\scripts\prepare-release.js"
 pause & goto menu
