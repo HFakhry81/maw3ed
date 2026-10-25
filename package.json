@@ -16,6 +16,8 @@
     "seed:medical": "node scripts/seed-medical-demo.js",
     "seed:medical:save": "node scripts/seed-medical-demo.js --save",
     "seed:medical:restore": "node scripts/seed-medical-demo.js --restore",
+    "hospital:restore-full": "node scripts/restore-full-hospital-data.js",
+    "restore:full-hospital": "node scripts/restore-full-hospital-data.js",
     "check:isolation": "node scripts/check-isolation.js",
     "ops:reset": "node scripts/reset-ops-data.js",
     "ops:backup": "node scripts/ops-session-backup.js --backup --reason=manual",
