@@ -1451,7 +1451,7 @@ async function createPublicAppointment(slug, payload = {}) {
   }
   if (opsPg.isOpsPgEnabled()) {
     try {
-      await opsPg.releaseSlotHold({ staffId: staffId || "any", date, time });
+      await opsPg.releaseSlotHold({ staffId: staffId || "any", date, time, slug });
     } catch (error) {
       console.warn("[ops] postgres hold release failed:", error.message);
     }

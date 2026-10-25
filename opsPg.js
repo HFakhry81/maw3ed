@@ -272,6 +272,10 @@ async function persistPublicAppointment({
   }
 }
 
+function buildSlotHoldKey({ organizationId, staffId, date, time }) {
+  return `${String(organizationId || "unknown")}::${String(staffId || "any")}::${String(date)}::${String(time)}`;
+}
+
 async function listPgHoldRanges({ slug, staffId, date, blockMinutes }) {
   if (!isOpsPgEnabled()) return [];
   await pool.query(`
@@ -289,9 +293,8 @@ async function listPgHoldRanges({ slug, staffId, date, blockMinutes }) {
   const result = await pool.query(
     `SELECT TO_CHAR(hold_time, 'HH24:MI') AS time
      FROM slot_holds
-     WHERE staff_id = $1 AND hold_date = $2 AND expires_at > NOW()
-       AND (organization_id IS NULL OR organization_id = $3)`,
-    [String(staffId), String(date), orgId]
+     WHERE organization_id = $1 AND staff_id = $2 AND hold_date = $3 AND expires_at > NOW()`,
+    [orgId, String(staffId), String(date)]
   );
   return result.rows.map((row) => {
     const start = toMinutes(row.time);
@@ -312,7 +315,7 @@ async function upsertSlotHold({ staffId, date, time, expiresAt, slug }) {
     )
   `);
   const orgId = await resolveOrganizationId(slug);
-  const key = `${staffId}|${date}|${time}`;
+  const key = buildSlotHoldKey({ organizationId: orgId, staffId, date, time });
   await pool.query(
     `INSERT INTO slot_holds (hold_key, organization_id, staff_id, hold_date, hold_time, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6)
@@ -323,11 +326,17 @@ async function upsertSlotHold({ staffId, date, time, expiresAt, slug }) {
 }
 
 /** Drop a soft hold so the booker is not blocked by their own row during confirm. */
-async function releaseSlotHold({ staffId, date, time }) {
+async function releaseSlotHold({ staffId, date, time, slug }) {
   if (!isOpsPgEnabled()) return { skipped: true };
-  const key = `${staffId}|${date}|${time}`;
+  const orgId = slug ? await resolveOrganizationId(slug) : null;
+  const key = orgId ? buildSlotHoldKey({ organizationId: orgId, staffId, date, time }) : `${String(staffId || "any")}::${String(date)}::${String(time)}`;
   await pool.query(`DELETE FROM slot_holds WHERE hold_key = $1`, [key]);
-  if (staffId && staffId !== "any") {
+  if (orgId) {
+    await pool.query(
+      `DELETE FROM slot_holds WHERE organization_id = $1 AND staff_id = $2 AND hold_date = $3 AND TO_CHAR(hold_time, 'HH24:MI') = $4`,
+      [orgId, String(staffId), String(date), String(time)]
+    );
+  } else if (staffId && staffId !== "any") {
     await pool.query(
       `DELETE FROM slot_holds WHERE staff_id = $1 AND hold_date = $2 AND TO_CHAR(hold_time, 'HH24:MI') = $3`,
       [String(staffId), String(date), String(time)]
