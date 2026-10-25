@@ -95,11 +95,25 @@ function localAppointmentCreate(payload) {
   return appointment;
 }
 
+function securityHeaders(extra = {}) {
+  const isProductionLike = process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
+  return {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
+    "X-XSS-Protection": "0",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+    ...(isProductionLike ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {}),
+    ...extra
+  };
+}
+
 function sendJson(res, status, payload) {
-  res.writeHead(status, {
+  res.writeHead(status, securityHeaders({
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store"
-  });
+  }));
   res.end(JSON.stringify(payload));
 }
 
@@ -1044,8 +1058,26 @@ async function readEventLog(limit) {
 }
 
 const server = http.createServer(async (req, res) => {
+  const requestId = crypto.randomUUID();
+  const startTime = Date.now();
   const requestUrl = new URL(req.url, "http://localhost");
   const requested = decodeURIComponent(requestUrl.pathname);
+
+  Object.entries(securityHeaders()).forEach(([key, value]) => {
+    res.setHeader(key, value);
+  });
+  res.on("finish", () => {
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: "info",
+      requestId,
+      method: req.method,
+      path: requested,
+      status: res.statusCode || 200,
+      durationMs: Date.now() - startTime,
+      clientIp: String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim()
+    }));
+  });
 
   try {
     if (requested === "/api/config" && req.method === "GET") {
@@ -1117,8 +1149,38 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 404, { ok: false, error: "Admin route not found" });
     }
     if (requested === "/api/health" && req.method === "GET") {
-      if (databaseConfigured) await query("SELECT 1");
-      return sendJson(res, 200, { ok: true, service: "maw3ed-api", database: databaseConfigured ? "postgresql" : "local-memory" });
+      let ready = true;
+      let database = databaseConfigured ? "postgresql" : "local-memory";
+      if (databaseConfigured) {
+        try {
+          await query("SELECT 1");
+        } catch (error) {
+          ready = false;
+          database = "postgresql-unavailable";
+        }
+      }
+      return sendJson(res, ready ? 200 : 503, {
+        ok: ready,
+        service: "maw3ed-api",
+        database,
+        ready,
+        liveness: true,
+        uptimeMs: Date.now() - startTime
+      });
+    }
+    if (requested === "/api/health/live" && req.method === "GET") {
+      return sendJson(res, 200, { ok: true, service: "maw3ed-api", liveness: true, uptimeMs: Date.now() - startTime });
+    }
+    if (requested === "/api/health/ready" && req.method === "GET") {
+      if (databaseConfigured) {
+        try {
+          await query("SELECT 1");
+          return sendJson(res, 200, { ok: true, service: "maw3ed-api", ready: true, database: "postgresql" });
+        } catch (error) {
+          return sendJson(res, 503, { ok: false, service: "maw3ed-api", ready: false, database: "postgresql-unavailable", error: "database_unavailable" });
+        }
+      }
+      return sendJson(res, 200, { ok: true, service: "maw3ed-api", ready: true, database: "local-memory" });
     }
     if (requested === "/api/activity-templates" && req.method === "GET") {
       const localTemplates = [
@@ -1260,18 +1322,18 @@ const server = http.createServer(async (req, res) => {
         uploadPath === uploadsRoot ||
         (uploadPath.startsWith(workspacesRoot + path.sep) && uploadPath.includes(`${path.sep}uploads${path.sep}`));
       if (!allowed) {
-        res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
+        res.writeHead(403, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
         return res.end("Forbidden");
       }
       return fs.readFile(uploadPath, (error, data) => {
         if (error) {
-          res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+          res.writeHead(404, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
           return res.end("Not found");
         }
-        res.writeHead(200, {
+        res.writeHead(200, securityHeaders({
           "Content-Type": types[path.extname(uploadPath)] || "application/octet-stream",
           "Cache-Control": "public, max-age=86400"
-        });
+        }));
         return res.end(data);
       });
     }
@@ -1294,25 +1356,25 @@ const server = http.createServer(async (req, res) => {
         if (hasReactDist && error.code === "ENOENT" && !path.extname(requested)) {
           return fs.readFile(path.join(distRoot, "index.html"), (spaError, spaData) => {
             if (spaError) {
-              res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+              res.writeHead(404, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
               return res.end("Not found");
             }
-            res.writeHead(200, {
+            res.writeHead(200, securityHeaders({
               "Content-Type": "text/html; charset=utf-8",
               "Cache-Control": "no-store",
               "X-Maw3ed-UI": "react"
-            });
+            }));
             return res.end(spaData);
           });
         }
-        res.writeHead(error.code === "ENOENT" ? 404 : 500, { "Content-Type": "text/plain; charset=utf-8" });
+        res.writeHead(error.code === "ENOENT" ? 404 : 500, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
         return res.end(error.code === "ENOENT" ? "Not found" : "Server error");
       }
       const isHashedAsset = hasReactDist && /[-_][A-Za-z0-9_-]{8,}\.(?:js|css|svg|png|jpg|webp)$/.test(path.basename(filePath));
-      const headers = {
+      const headers = securityHeaders({
         "Content-Type": types[path.extname(filePath)] || "application/octet-stream",
         "Cache-Control": isHashedAsset ? "public, max-age=31536000, immutable" : "no-store"
-      };
+      });
       if (hasReactDist && path.basename(filePath) === "index.html") headers["X-Maw3ed-UI"] = "react";
       res.writeHead(200, headers);
       res.end(data);
