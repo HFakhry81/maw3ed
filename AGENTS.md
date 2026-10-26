@@ -22,6 +22,8 @@ The best starting points for reliable changes are:
 - [docs/PRODUCTION_READINESS_REPORT.md](docs/PRODUCTION_READINESS_REPORT.md) — current risk and readiness status
 - [docs/WORKSPACE_CAPACITY_MODEL_EDUCATION_AND_VERTICALS.md](docs/WORKSPACE_CAPACITY_MODEL_EDUCATION_AND_VERTICALS.md) — education, group capacity, resources, and vertical booking modes
 - [legacyAccess.js](legacyAccess.js) — Phase 1 barriers for legacy medical APIs, development-events, and uploads
+- [workspaceEvents.js](workspaceEvents.js) — per-workspace append-only operational event log (JSONL; no DB migration)
+- [runtimePosture.js](runtimePosture.js) — production auth/storage posture checks
 
 ## Development workflow
 

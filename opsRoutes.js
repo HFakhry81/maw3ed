@@ -1,6 +1,8 @@
 const ops = require("./opsStore");
 const { createPlatformAdmin } = require("./platformAdmin");
 const { query, databaseConfigured } = require("./db");
+const workspaceEvents = require("./workspaceEvents");
+const { evaluateRuntimePosture } = require("./runtimePosture");
 
 const platformAdmin = createPlatformAdmin({ query, databaseConfigured, sendJson: () => {} });
 
@@ -43,8 +45,18 @@ const OPS_KNOWN_REQUESTS = new Set([
   "GET /api/ops/appointments",
   "POST /api/ops/appointments",
   "PUT /api/ops/activity-profile",
-  "GET /api/ops/stats"
+  "GET /api/ops/stats",
+  "GET /api/ops/events"
 ]);
+
+function recordOpsEvent(workspaceId, event) {
+  try {
+    return workspaceEvents.appendWorkspaceEvent(workspaceId, event);
+  } catch (error) {
+    console.warn("[workspace-events] append failed:", error.message);
+    return null;
+  }
+}
 
 function isKnownOpsRequest(requested, method) {
   return OPS_KNOWN_REQUESTS.has(`${method} ${requested}`) ||
@@ -72,11 +84,12 @@ function isOpsRoleAllowed(requested, method, role) {
     return OPS_ADMIN_ROLES.has(role);
   }
 
-  // Expenses and appointment financial overrides are restricted to workspace admins.
+  // Expenses, notification config, aggregates, and tenant audit reads are admin-only.
   if (
     requested === "/api/ops/expenses" ||
     requested === "/api/ops/notifications" ||
     requested === "/api/ops/stats" ||
+    requested === "/api/ops/events" ||
     /^\/api\/ops\/(?:appointments\/[^/]+\/pricing|desk\/appointments\/[^/]+\/lines\/[^/]+\/pricing|desk\/appointments\/[^/]+\/addons)$/.test(requested)
   ) {
     return OPS_ADMIN_ROLES.has(role);
@@ -160,8 +173,19 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       workspaceId = adminWorkspaceId(req, requestUrl);
     }
 
+    if (isOps) {
+      const posture = evaluateRuntimePosture(process.env, { databaseConfigured });
+      if (!posture.ok) {
+        const error = new Error("Server security posture refuses this request");
+        error.statusCode = 503;
+        error.code = "runtime_posture";
+        throw error;
+      }
+    }
+
     const authRequired = process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
     let workspaceRole = null;
+    let actorUserId = null;
     if (isOps && authRequired) {
       const user = await requireAppUser(req);
       if (!user) {
@@ -169,14 +193,32 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         error.statusCode = 401;
         throw error;
       }
+      actorUserId = user.id;
       const membership = await getUserWorkspace(user.id, workspaceId);
       if (!membership) {
+        recordOpsEvent(workspaceId, {
+          actor_id: user.id,
+          action: "authz.denied",
+          target_type: "route",
+          target_id: `${req.method} ${requested}`,
+          outcome: "forbidden",
+          details: { reason: "not_member" }
+        });
         const error = new Error("This workspace is not available for the current account");
         error.statusCode = 403;
         throw error;
       }
       workspaceRole = membership.role;
       if (!isOpsRoleAllowed(requested, req.method, membership.role)) {
+        recordOpsEvent(workspaceId, {
+          actor_id: user.id,
+          role: membership.role,
+          action: "authz.denied",
+          target_type: "route",
+          target_id: `${req.method} ${requested}`,
+          outcome: "forbidden",
+          details: { reason: "role_not_allowed" }
+        });
         const error = new Error("This workspace role cannot perform this operation");
         error.statusCode = 403;
         throw error;
@@ -207,6 +249,16 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
           stats: canViewFinance ? stats : { appointments: stats.appointments, servicesCount: stats.servicesCount, staffCount: stats.staffCount, customersCount: stats.customersCount },
           activity: ops.getActivityProfile(),
           planUsage: ops.getPlanUsage()
+        });
+        return true;
+      }
+
+      if (requested === "/api/ops/events" && req.method === "GET") {
+        const limit = Number(requestUrl.searchParams.get("limit") || 50);
+        sendJson(res, 200, {
+          ok: true,
+          workspaceId: ops.getCurrentWorkspaceId(),
+          events: workspaceEvents.listWorkspaceEvents(ops.getCurrentWorkspaceId(), { limit })
         });
         return true;
       }
@@ -244,11 +296,28 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       }
       const staffMatch = requested.match(/^\/api\/ops\/staff\/([^/]+)$/);
       if (staffMatch && req.method === "PATCH") {
-        sendJson(res, 200, { ok: true, staff: ops.updateStaff(staffMatch[1], await parseJsonBody(req)) });
+        const staff = ops.updateStaff(staffMatch[1], await parseJsonBody(req));
+        recordOpsEvent(workspaceId, {
+          actor_id: actorUserId,
+          role: workspaceRole,
+          action: "staff.update",
+          target_type: "staff",
+          target_id: staffMatch[1],
+          outcome: "success"
+        });
+        sendJson(res, 200, { ok: true, staff });
         return true;
       }
       if (staffMatch && req.method === "DELETE") {
         ops.deleteStaff(staffMatch[1]);
+        recordOpsEvent(workspaceId, {
+          actor_id: actorUserId,
+          role: workspaceRole,
+          action: "staff.delete",
+          target_type: "staff",
+          target_id: staffMatch[1],
+          outcome: "success"
+        });
         sendJson(res, 200, { ok: true });
         return true;
       }
@@ -539,15 +608,30 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       const appointmentPricingMatch = requested.match(/^\/api\/ops\/appointments\/([^/]+)\/pricing$/);
       if (appointmentPricingMatch && req.method === "PATCH") {
         const payload = await parseJsonBody(req);
-        sendJson(res, 200, {
-          ok: true,
-          appointment: ops.setAppointmentPricing(appointmentPricingMatch[1], payload)
+        const appointment = ops.setAppointmentPricing(appointmentPricingMatch[1], payload);
+        recordOpsEvent(workspaceId, {
+          actor_id: actorUserId,
+          role: workspaceRole,
+          action: "appointment.pricing_update",
+          target_type: "appointment",
+          target_id: appointmentPricingMatch[1],
+          outcome: "success"
         });
+        sendJson(res, 200, { ok: true, appointment });
         return true;
       }
 
       if (requested === "/api/ops/activity-profile" && req.method === "PUT") {
-        sendJson(res, 200, { ok: true, activity: ops.updateActivityProfile(await parseJsonBody(req)) });
+        const activity = ops.updateActivityProfile(await parseJsonBody(req));
+        recordOpsEvent(workspaceId, {
+          actor_id: actorUserId,
+          role: workspaceRole,
+          action: "activity_profile.update",
+          target_type: "activity_profile",
+          target_id: workspaceId,
+          outcome: "success"
+        });
+        sendJson(res, 200, { ok: true, activity });
         return true;
       }
 

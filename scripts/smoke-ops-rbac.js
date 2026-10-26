@@ -65,6 +65,8 @@ async function main() {
     assert(!isOpsRoleAllowed("/api/ops/stats", "GET", "manager"), "manager must not read financial aggregates");
     assert(isOpsRoleAllowed("/api/ops/appointments", "POST", "manager"), "manager should create operational appointments");
     assert(isOpsRoleAllowed("/api/ops/expenses", "GET", "owner"), "owner should read workspace finances");
+    assert(isOpsRoleAllowed("/api/ops/events", "GET", "owner"), "owner should read workspace audit events");
+    assert(!isOpsRoleAllowed("/api/ops/events", "GET", "manager"), "manager must not read workspace audit events");
     assert(!isOpsRoleAllowed("/api/ops/not-yet-implemented", "GET", "owner"), "unknown ops routes must fail closed");
 
     const unauthenticated = await invoke({ path: "/api/ops/bootstrap", user: null });

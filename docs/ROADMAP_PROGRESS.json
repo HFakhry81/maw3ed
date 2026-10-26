@@ -9,13 +9,12 @@
   ],
   "resume_pointer": {
     "phase": 1,
-    "package": "legacy-apis-dev-events-uploads",
+    "package": "bola-workspace-events-production-posture",
     "next_steps": [
-      "Re-run npm run test:ops-rbac && npm run test:legacy-rbac and node --check on touched modules after further edits",
-      "Add fuller BOLA/property-level API tests for legacy and ops object IDs across workspaces",
-      "Review production DB/JSON posture and whether JSON storage must be forbidden outside local",
-      "Add workspace-scoped operational events log (distinct from local development-events)",
-      "Do not start Phase 2 migration/seed/reset in the next Phase 1 package"
+      "Owner decision: close Phase 1 with staff↔desk attribution left as documented open gate, or implement account↔staff record linking first",
+      "If linking is approved: map user↔staff + object scope, then allow only attributed desk actions; keep staff denied until then",
+      "Optional later: migrate workspace events JSONL to append-only Postgres table (requires migration — not Phase 1)",
+      "Do not start Phase 2 migration/seed/reset until Phase 1 close or explicit owner override"
     ]
   },
   "phases": [
@@ -57,14 +56,31 @@
             "node --check server.js",
             "node --check opsRoutes.js"
           ]
+        },
+        {
+          "id": "bola-workspace-events-production-posture",
+          "status": "complete_technical",
+          "summary": "BOLA/function/property smokes; workspace events JSONL + GET /api/ops/events; production JSON posture (membership never skipped; warn + optional strict refuse)",
+          "evidence_commands": [
+            "npm run test:phase1-security",
+            "node --check runtimePosture.js",
+            "node --check workspaceEvents.js",
+            "node --check opsRoutes.js",
+            "node --check server.js"
+          ]
         }
       ],
       "remaining_to_close": [
-        "Fuller BOLA/permission field tests on APIs",
-        "Production DB/JSON posture decision and enforcement",
-        "Workspace operational events log",
-        "Staff account↔staff-record attribution before expanding staff desk permissions"
-      ]
+        "Staff account↔staff-record attribution before expanding staff desk permissions (product decision; not invented in Phase 1 packages)"
+      ],
+      "production_json_posture": {
+        "auth_required_in_production": true,
+        "json_skips_membership": false,
+        "default_production_storage": "postgres",
+        "json_in_production": "allowed_for_isolated_acceptance_with_warning",
+        "strict_refuse_env": "MAW3ED_STRICT_PRODUCTION_STORAGE=1",
+        "strict_allow_override_env": "MAW3ED_ALLOW_JSON_IN_PRODUCTION=1"
+      }
     },
     { "id": 2, "name_ar": "سلامة البيانات والترحيل", "status": "not_started" },
     { "id": 3, "name_ar": "الحجز الذري والتوفر", "status": "not_started" },
@@ -83,8 +99,10 @@
     "phase_1_legacy_rbac": true,
     "phase_1_development_events_local_only": true,
     "phase_1_uploads_access_control": true,
-    "phase_1_bola_full_suite": false,
-    "phase_1_workspace_events_log": false,
+    "phase_1_bola_full_suite": true,
+    "phase_1_workspace_events_log": true,
+    "phase_1_production_json_posture": true,
+    "phase_1_staff_attribution": false,
     "phase_1_closed": false,
     "phase_2_started": false
   }

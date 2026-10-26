@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | عام محدود | `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health*`، وقراءات صفحة الحجز العامة؛ `POST` للـ hold/appointment العام | allowlist مقصودة؛ راجع حدود البيانات، المعدل، token/pass، وغياب إساءة التدفق |
 | حساب | `/api/account`, `/api/workspaces`, `/api/entitlements`, `/api/billing/*` | تستخدم Clerk بحسب مساراتها؛ تحقق من ارتباط كل تغيير بمساحة المستخدم وخطة الاشتراك |
-| تشغيل workspace | `/api/ops/*` أدناه | auth عند production أو `MAW3ED_REQUIRE_AUTH=1`؛ العضوية عبر resolver DB+JSON، ثم سياسة أدوار route×method؛ وضع local دون auth مقصود للتطوير، وليس للنشر |
+| تشغيل workspace | `/api/ops/*` أدناه | auth عند production أو `MAW3ED_REQUIRE_AUTH=1`؛ العضوية عبر resolver DB+JSON، ثم سياسة أدوار route×method؛ رفض 503 إن فشل `runtimePosture` الصارم؛ وضع local دون auth مقصود للتطوير، وليس للنشر |
 | قديم/طبي | `/api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | عند تفعيل auth: جلسة + عضوية نشطة + سياسة `legacyAccess` (manager+ للقراءة/إنشاء المواعيد؛ owner/admin لـ PATCH profile؛ viewer/staff مرفوضان). ما زال يلزم اختبار BOLA على مستوى الكائن عبر المستأجرين |
 | منصة | `/api/admin/*` | Clerk وأدوار منصة؛ لا تخلط دور المنصة بعضوية المنشأة، ولا تعتبر سجل المنصة بديلاً عن tenant audit |
 | تطوير/ملفات | `/api/development-events`, `/data/uploads/*` | الأحداث: local فقط (404 خارجها) + جلسة عند auth المطلوب + تنقية تفاصيل. الملفات: صور علامة workspace عامة لصفحة الحجز؛ غير الصور والمسارات العامة تتطلب عضوية/جلسة عند auth؛ عابر المستأجر → 404 |
@@ -36,6 +36,7 @@
 | `GET /api/ops/desk/today`; `POST /api/ops/desk/(preview\|check-in)`; `POST /api/ops/desk/appointments/:id/complete` | owner/admin/manager؛ staff ينتظر ربط حسابه بسجل الموظف قبل كشف/تغيير بيانات المرضى |
 | `POST /api/ops/desk/appointments/:id/addons`; `PATCH /api/ops/desk/appointments/:id/lines/:lineId/pricing` | owner/admin |
 | `GET /api/ops/stats` | owner/admin؛ أرقام إجمالية قد تكشف بيانات مالية |
+| `GET /api/ops/events` | owner/admin؛ سجل أحداث تشغيل المساحة (JSONL لكل workspace)؛ منفصل عن development-events |
 | `GET /api/public/booking/:slug`; `GET /api/public/booking/:slug/slots`; `GET /api/public/booking/:slug/pass/:token` | عام محدود؛ لا يُستخدم للوصول إلى endpoint داخلي |
 | `POST /api/public/booking/:slug/hold`; `POST /api/public/booking/:slug/appointments` | عام بمعدل/hold؛ يلزم استكمال idempotency والحجز الذري حسب الخطة |
 
@@ -66,9 +67,18 @@
 | `POST /api/admin/finance/transactions`, `/finance/settlements` | كتابة مالية؛ maker-checker/idempotency/reconciliation مطلوب حسب الإجراء |
 | `GET /api/admin/export/(workspaces\|subscriptions\|transactions\|audit).csv` | تصدير عالي الحساسية؛ صلاحية دقيقة وتدقيق القراءة والتنزيل |
 
+## وضع التخزين في الإنتاج
+
+- الافتراضي عبر `scripts/load-env.js`: `MAW3ED_STORAGE=postgres` عندما `MAW3ED_ENV=production`.
+- JSON في production مسموح لفحوص قبول معزولة فقط مع auth fail-closed وعضوية إجبارية (لا يُتخطى المسار المحلي).
+- تحذير عند التشغيل بـ JSON في production؛ الرفض الاختياري: `MAW3ED_STRICT_PRODUCTION_STORAGE=1` ما لم يُضبط `MAW3ED_ALLOW_JSON_IN_PRODUCTION=1`. راجع [`runtimePosture.js`](../runtimePosture.js).
+
 ## حالة الاختبارات
 
-- جرى إنشاء وتشغيل smoke لحزمة RBAC لـ ops بنجاح: [`scripts/smoke-ops-rbac.js`](../scripts/smoke-ops-rbac.js) (`npm run test:ops-rbac`).
-- جرى إنشاء وتشغيل smoke لحزمة legacy/uploads/dev-events بنجاح: [`scripts/smoke-legacy-rbac.js`](../scripts/smoke-legacy-rbac.js) (`npm run test:legacy-rbac`).
-- اختبارات الحواجز الوحدوية لا تحل محل جرد runtime أو اختبار BOLA كامل على كل المسارات القديمة والمنصة والملفات.
+- ops RBAC: [`scripts/smoke-ops-rbac.js`](../scripts/smoke-ops-rbac.js) (`npm run test:ops-rbac`).
+- legacy/uploads/dev-events: [`scripts/smoke-legacy-rbac.js`](../scripts/smoke-legacy-rbac.js) (`npm run test:legacy-rbac`).
+- BOLA/function/property: [`scripts/smoke-bola.js`](../scripts/smoke-bola.js) (`npm run test:bola`).
+- workspace events: [`scripts/smoke-workspace-events.js`](../scripts/smoke-workspace-events.js) (`npm run test:workspace-events`).
+- حزمة مجمّعة: `npm run test:phase1-security`.
+- هذه الاختبارات لا تغطي كل مسارات المنصة أو كل حقول الرد؛ ربط staff↔desk ما زال بوابة مفتوحة.
 - ترتبط كل تحديثات الحالة بـ [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json)؛ نتائج التنفيذ تُسجل بعد تشغيل الأمر لا بمجرد كتابته هنا.

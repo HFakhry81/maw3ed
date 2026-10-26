@@ -29,10 +29,11 @@
 - [x] المرحلة 0 — جرد API وقرارات تقنية وسجل تنفيذ
 - [x] المرحلة 1 — حزمة `/api/ops/*` RBAC + membership
 - [x] المرحلة 1 — حزمة legacy medical APIs + development-events + uploads
-- [ ] المرحلة 1 — اختبارات BOLA/حقول صلاحية أشمل عبر المستأجرين
-- [ ] المرحلة 1 — سجل أحداث تشغيل workspace (غير development-events المحلي)
-- [ ] المرحلة 1 — قرار/فرض وضع production لـ DB مقابل JSON
-- [ ] إغلاق المرحلة 1
+- [x] المرحلة 1 — اختبارات BOLA/حقول صلاحية (function/property/object) عبر المستأجرين
+- [x] المرحلة 1 — سجل أحداث تشغيل workspace (JSONL لكل مساحة، بلا migration)
+- [x] المرحلة 1 — قرار/فرض وضع production لـ DB مقابل JSON (عضوية إجبارية + تحذير/strict اختياري)
+- [ ] المرحلة 1 — ربط حساب staff↔سجل موظف قبل توسيع desk (بوابة منتج موثّقة؛ لم تُخترع في هذه الحزمة)
+- [ ] إغلاق المرحلة 1 بالكامل (متوقف على بوابة staff أعلاه أو قرار مالك صريح بقبولها مفتوحة بعد الإطلاق المحدود)
 - [ ] بدء المرحلة 2 (ترحيل/seed/reset) — **ممنوع قبل إغلاق بوابة المرحلة 1**
 
 ## حصر مجموعات API (مراجعة ساكنة)
@@ -41,9 +42,10 @@
 | --- | --- | --- |
 | عامة/تهيئة | `/api/config`, `/api/plans`, `/api/activity-templates`, `/api/health*`, `/api/public/booking/*` | allowlist فقط؛ بيانات صفحة عامة محدودة، rate limit، والإنشاء العام عبر إثبات/hold وسياسة الحجز |
 | الحساب والمساحات | `/api/account`, `/api/workspaces`, `/api/entitlements`, `/api/billing/*` | Clerk؛ ربط كل فعل بالحساب ومساحة مسموحة؛ عدم قبول tenant من العميل كإذن |
-| تشغيل workspace | كل `/api/ops/*` | auth خارج local، عضوية نشطة للمساحة المختارة، ثم دور مناسب للroute/الفعل/البيانات |
+| تشغيل workspace | كل `/api/ops/*` | auth خارج local، عضوية نشطة للمساحة المختارة، ثم دور مناسب للroute/الفعل/البيانات؛ `GET /api/ops/events` للمالك/المسؤول |
 | قديم/مجال طبي | `/api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | auth/عضوية/RBAC tenant-aware عبر `legacyAccess.js` عند تفعيل auth؛ إزالة الاستثناءات القديمة أو تعطيلها بعد ترحيل العملاء |
 | سجل التطوير | `/api/development-events` | local فقط؛ مع auth عند `MAW3ED_REQUIRE_AUTH`/production-like؛ تنقية حقول حساسة وحد حجم |
+| سجل تشغيل workspace | `data/workspaces/<id>/events.jsonl` عبر `GET /api/ops/events` | append-only لكل مساحة؛ منفصل عن development-events؛ بلا جدول PG حتى مرحلة لاحقة |
 | مسؤول المنصة | `/api/admin/*` | دور منصة مستقل، فصل واجبات للأفعال عالية المخاطر، سجل platform audit |
 | ملفات | `/data/uploads/*` | صور العلامة ضمن workspace تبقى عامة لصفحة الحجز؛ غير الصور و`/data/uploads` العامة تتطلب عضوية/جلسة عند تفعيل auth؛ منع traversal |
 
@@ -54,6 +56,7 @@
 - المستخدم لا يكتسب صلاحية من `x-workspace-id`; الخادم يثبت العضوية النشطة والدور في المساحة المطلوبة.
 - افتراض الدور التشغيلي الأولي: owner/admin كاملان؛ manager تشغيل دون بيانات مالية/تجاوزات تسعير؛ staff وviewer يقتصران على قراءات إعداد غير حساسة حتى يربط حساب الموظف بملف/نطاق كائنات. تغيّر هذه السياسة يتطلب قراراً موثقاً واختبارات.
 - واجهات legacy الطبية تتبع نفس خط الأساس: manager+ للقراءة/إنشاء المواعيد؛ owner/admin فقط لـ PATCH `/api/workspace-profile`؛ viewer/staff مرفوضان حتى ربط الموظف.
+- وضع الإنتاج: المصادقة إلزامية؛ التخزين الافتراضي postgres عبر `load-env`؛ JSON مسموح لفحوص production-like المعزولة مع **عدم تجاوز العضوية**؛ التحذير عند JSON في production؛ الرفض الصارم اختياري عبر `MAW3ED_STRICT_PRODUCTION_STORAGE=1` ما لم يُضبط `MAW3ED_ALLOW_JSON_IN_PRODUCTION=1`.
 - تبقى قرارات الدفع/الاسترداد، مدد الإلغاء، سياسة الرسائل، والالتزامات القانونية حسب السوق بوابات موقوفة قبل تفعيل الميزات ذات الصلة.
 
 ## سجل الإنجاز
@@ -82,12 +85,21 @@
   - `npm run test:ops-rbac` → `{"ok":true,"suite":"smoke-ops-rbac"}`
   - `npm run test:legacy-rbac` → `{"ok":true,"suite":"smoke-legacy-rbac"}`
   - `node --check legacyAccess.js` / `server.js` / `opsRoutes.js` / `scripts/smoke-legacy-rbac.js` / `scripts/smoke-ops-rbac.js` → نجاح بلا أخطاء
-- **المتبقي لإغلاق المرحلة 1:** اختبارات BOLA/حقول أوسع؛ سجل أحداث تشغيل workspace؛ مراجعة فرض DB مقابل JSON في الإنتاج؛ ربط حساب staff قبل توسيع صلاحياته. لا ترحيل/seed/reset في حزم المرحلة 1 المتبقية.
+- **المتبقي آنذاك:** BOLA أوسع؛ سجل أحداث workspace؛ وضع DB/JSON؛ ربط staff.
+
+### المرحلة 1 — الحزمة الثالثة: BOLA + أحداث workspace + وضع الإنتاج — 2026-10-27
+
+- **BOLA / function / property:** أُضيف [`scripts/smoke-bola.js`](../scripts/smoke-bola.js). يغطي: رفض `x-workspace-id` لمساحة غير مملوكة؛ كائن staff خاص بمساحة B داخل سياق A → 404؛ نفس المعرف القالبي `staff-owner` لا يسرّب التعديل بين المستأجرين؛ manager لا يصل لتسعير المواعيد ولا `GET /api/ops/events`؛ bootstrap للمدير يحذف `expenses`/`notifications`؛ legacy patients ترفض رأس مساحة مزوّراً.
+- **سجل أحداث workspace:** [`workspaceEvents.js`](../workspaceEvents.js) يكتب JSONL append-only في `data/workspaces/<id>/events.jsonl` (يعمل مع JSON وPG بدون migration). `GET /api/ops/events` للمالك/المسؤول فقط. تُسجَّل رفضات التفويض وتحديثات staff/activity/pricing الحساسة مع تنقية التفاصيل. جدول PostgreSQL مؤجّل لمرحلة تشغيل/خصوصية لاحقة.
+- **وضع الإنتاج DB/JSON:** [`runtimePosture.js`](../runtimePosture.js) + فحص عند الإقلاع ورفض 503 للـ ops عند فشل الوضعية الصارمة. القرار الموثّق: auth إلزامي في production؛ JSON لا يتجاوز العضوية؛ التحذير عند JSON؛ الرفض الاختياري بـ `MAW3ED_STRICT_PRODUCTION_STORAGE`.
+- **staff↔record:** لم يُنفَّذ ربط حساب الموظف عمداً (قرار منتج مطلوب قبل توسيع desk). تبقى صلاحيات staff مرفوضة لأفعال desk/customers.
+- **التحقق (شُغّل فعلياً):**
+  - `npm run test:phase1-security` (= ops-rbac + legacy-rbac + bola + workspace-events) → نجاح
+  - `node --check` على `runtimePosture.js`, `workspaceEvents.js`, `opsRoutes.js`, `server.js`, `legacyAccess.js`, سكربتات الـ smoke → نجاح
 
 ## نقطة الاستئناف
 
-1. أعد تشغيل `npm run test:ops-rbac` و`npm run test:legacy-rbac` بعد أي تعديل لاحق على الحواجز.
-2. وسّع اختبارات BOLA: عضو مساحة A يطلب معرفات كائنات مساحة B على ops/legacy ويجب أن يحصل على 403/404 آمن دون تمييز الوجود.
-3. صمّم سجل أحداث تشغيل workspace منفصل عن `/api/development-events` المحلي.
-4. راجع قرار منع JSON كمصدر تشغيل في production إن لزم، دون بدء ترحيل بيانات كامل (المرحلة 2).
-5. لا تبدأ migration/seed/reset في حزمة المرحلة 1 التالية.
+1. قرار مالك: هل تُغلق المرحلة 1 مع بقاء بوابة staff↔desk موثّقة، أم يُنفَّذ نموذج ربط الموظف أولاً؟
+2. عند اعتماد الربط: حساب مستخدم ↔ `staff` record + نطاق كائنات، ثم اختبار desk لدور staff فقط؛ لا توسّع صلاحيات staff قبل ذلك.
+3. اختياري لاحق: نقل أحداث workspace إلى جدول PG append-only (يتطلب migration — خارج المرحلة 1).
+4. لا تبدأ migration/seed/reset لبيانات التشغيل (المرحلة 2) قبل إغلاق بوابة المرحلة 1 أو قرار مالك صريح.

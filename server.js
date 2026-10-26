@@ -15,6 +15,7 @@ const {
   isDevelopmentEventsAllowed,
   assertUploadReadable
 } = require("./legacyAccess");
+const { evaluateRuntimePosture, logRuntimePosture } = require("./runtimePosture");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 7000);
@@ -1496,7 +1497,15 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(port, "0.0.0.0", () => {
   const ui = fs.existsSync(path.join(root, "dist", "index.html")) ? "react-dist" : "dev-fallback";
+  const posture = evaluateRuntimePosture(process.env, { databaseConfigured });
   console.log(`Maw3ed React dashboard on port ${port} (${ui})`);
-  console.log(`Environment: ${process.env.MAW3ED_ENV || "local"} · storage=${process.env.MAW3ED_STORAGE || "local"}`);
+  console.log(
+    `Environment: ${process.env.MAW3ED_ENV || "local"} · storage=${process.env.MAW3ED_STORAGE || "local"}` +
+      ` · authRequired=${posture.authRequired} · storageMode=${posture.storageMode}`
+  );
+  logRuntimePosture(posture);
+  if (!posture.ok) {
+    console.error("[posture] Refusing to advertise a healthy production posture:", posture.errors.join(", "));
+  }
   console.log("Side-by-side ports: web/API 7000, Vite 7100, Postgres 5433/maw3ed");
 });
