@@ -1,22 +1,31 @@
 {
-  "$schema_note": "Machine-readable companion to IMPLEMENTATION_EXECUTION_LOG.md. Update both after every package. Status values: not_started | in_progress | complete_technical | blocked.",
+  "$schema_note": "Machine-readable companion to IMPLEMENTATION_EXECUTION_LOG.md. Update both after every package. Status values: not_started | in_progress | complete_technical | blocked | closed_with_open_gate.",
   "updated_at": "2026-10-27",
   "project": "maw3ed",
   "source_of_truth": [
     "docs/IMPLEMENTATION_ROADMAP.md",
     "docs/IMPLEMENTATION_EXECUTION_LOG.md",
-    "docs/SECURITY_ROUTE_INVENTORY.md"
+    "docs/SECURITY_ROUTE_INVENTORY.md",
+    "docs/WORKSPACE_OPS_DATA_INTEGRITY.md"
   ],
   "resume_pointer": {
-    "phase": 1,
-    "package": "bola-workspace-events-production-posture",
+    "phase": 2,
+    "package": "integrity-baseline",
     "next_steps": [
-      "Owner decision: close Phase 1 with staff↔desk attribution left as documented open gate, or implement account↔staff record linking first",
-      "If linking is approved: map user↔staff + object scope, then allow only attributed desk actions; keep staff denied until then",
-      "Optional later: migrate workspace events JSONL to append-only Postgres table (requires migration — not Phase 1)",
-      "Do not start Phase 2 migration/seed/reset until Phase 1 close or explicit owner override"
+      "Run migrate twice against local Postgres (port 5433) and confirm second run applies 0 pending files via schema_migrations",
+      "Add PG dump/restore for workspace_ops_* then compare JSON↔PG for a demo workspace until ok=true",
+      "Clean or quarantine medical-demo seed orphans before enforcing audit on seeds in CI",
+      "Keep staff↔desk attribution denied (Phase 1 open product gate) — do not expand staff desk permissions here"
     ]
   },
+  "open_product_gates": [
+    {
+      "id": "staff_desk_attribution",
+      "phase_origin": 1,
+      "status": "accepted_open",
+      "summary": "Staff role remains denied for desk/customer mutations until account↔staff-record linking is product-approved"
+    }
+  ],
   "phases": [
     {
       "id": 0,
@@ -33,7 +42,9 @@
     {
       "id": 1,
       "name_ar": "الهوية والعزل وRBAC",
-      "status": "in_progress",
+      "status": "closed_with_open_gate",
+      "closed_at": "2026-10-27",
+      "closed_revision": "366e209c889f5de234d70e649819937e5e584a87",
       "packages": [
         {
           "id": "ops-rbac",
@@ -70,9 +81,11 @@
           ]
         }
       ],
-      "remaining_to_close": [
-        "Staff account↔staff-record attribution before expanding staff desk permissions (product decision; not invented in Phase 1 packages)"
-      ],
+      "open_gate": {
+        "id": "staff_desk_attribution",
+        "status": "accepted_open",
+        "summary": "Owner accepted closing Phase 1 security barriers with staff↔desk attribution deferred; staff desk actions stay denied"
+      },
       "production_json_posture": {
         "auth_required_in_production": true,
         "json_skips_membership": false,
@@ -82,7 +95,29 @@
         "strict_allow_override_env": "MAW3ED_ALLOW_JSON_IN_PRODUCTION=1"
       }
     },
-    { "id": 2, "name_ar": "سلامة البيانات والترحيل", "status": "not_started" },
+    {
+      "id": 2,
+      "name_ar": "سلامة البيانات والترحيل",
+      "status": "in_progress",
+      "packages": [
+        {
+          "id": "integrity-baseline",
+          "status": "complete_technical",
+          "summary": "Composite FK inventory + migration 011; schema_migrations ledger; JSON orphan audit/compare; ops session backup↔restore smoke; SoT doc",
+          "evidence_commands": [
+            "npm run test:ops-integrity",
+            "node scripts/audit-ops-integrity.js --migrations-only --json",
+            "node --check opsIntegrity.js",
+            "node --check scripts/migrate.js"
+          ]
+        }
+      ],
+      "remaining_to_close": [
+        "Idempotent migrate proven twice on live local Postgres",
+        "PG workspace_ops_* backup/restore + JSON↔PG compare ok=true for a managed workspace",
+        "No orphan records under enforced audit for accepted demo/migration datasets"
+      ]
+    },
     { "id": 3, "name_ar": "الحجز الذري والتوفر", "status": "not_started" },
     { "id": 4, "name_ar": "الموارد وامتدادات الخدمات", "status": "not_started" },
     { "id": 5, "name_ar": "الرحلات والواجهة", "status": "not_started" },
@@ -103,7 +138,15 @@
     "phase_1_workspace_events_log": true,
     "phase_1_production_json_posture": true,
     "phase_1_staff_attribution": false,
-    "phase_1_closed": false,
-    "phase_2_started": false
+    "phase_1_closed": true,
+    "phase_1_closed_with_open_gate": true,
+    "phase_2_started": true,
+    "phase_2_fk_inventory": true,
+    "phase_2_migration_ledger": true,
+    "phase_2_json_compare_audit": true,
+    "phase_2_json_backup_restore_drill": true,
+    "phase_2_pg_migrate_twice": false,
+    "phase_2_pg_ops_backup_restore": false,
+    "phase_2_closed": false
   }
 }
