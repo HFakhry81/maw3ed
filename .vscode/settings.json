@@ -19,6 +19,18 @@
         "/^cd \"E:/UpNexa\\.com/maw3ed\"; node -e \"const ops=require\\('\\./opsStore'\\); ops\\.withWorkspace\\('dup-check-after', \\(\\)=>\\{ try \\{ ops\\.createServiceCategory\\(\\{name:'فئة اختبار'\\}\\); ops\\.createServiceCategory\\(\\{name:' فئة اختبار '\\}\\); console\\.log\\('duplicate-category-created'\\); \\} catch \\(err\\) \\{ console\\.log\\('duplicate-category-error:' \\+ err\\.message\\); \\} try \\{ ops\\.createStaff\\(\\{name:'أحمد محمد', title:'استقبال'\\}\\); ops\\.createStaff\\(\\{name:' أحمد   محمد ', title:'موظف'\\}\\); console\\.log\\('duplicate-staff-created'\\); \\} catch \\(err\\) \\{ console\\.log\\('duplicate-staff-error:' \\+ err\\.message\\); \\} try \\{ ops\\.createService\\(\\{name:'تنظيف', categoryId:'svc-cat-0000'\\}\\); console\\.log\\('duplicate-service-created'\\); \\} catch \\(err\\) \\{ console\\.log\\('duplicate-service-error:' \\+ err\\.message\\); \\} \\}\\);\"; npm run build$/": {
             "approve": true,
             "matchCommandLine": true
+        },
+        "/^node --check scripts/bootstrap-platform-admin\\.js; node --check server\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --check scripts/bootstrap-platform-admin\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^node --check server\\.js$/": {
+            "approve": true,
+            "matchCommandLine": true
         }
     }
 }

@@ -28,6 +28,7 @@
     "ops:backups": "node scripts/ops-session-backup.js --list",
     "test:smoke": "node scripts/smoke-public-booking.js && node scripts/smoke-booking-governance.js && node scripts/smoke-workspace-isolation.js",
     "test:platform-admin": "node scripts/smoke-platform-admin.js",
+    "platform-admin:bootstrap": "node scripts/bootstrap-platform-admin.js",
     "test:http": "node scripts/smoke-http.js",
     "test:all": "npm run test:smoke && npm run test:http && npm run test:platform-admin",
     "refresh": "node scripts/refresh-all.js",

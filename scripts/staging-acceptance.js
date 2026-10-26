@@ -103,11 +103,38 @@ async function main() {
     const patientStatus = await request("GET", "/api/patients");
     checks.push({ name: "patients-protected", ok: patientStatus.status === 401, details: JSON.stringify(patientStatus.json) });
 
+    const dashboardStatus = await request("GET", "/api/dashboard");
+    checks.push({ name: "dashboard-protected", ok: dashboardStatus.status === 401, details: JSON.stringify(dashboardStatus.json) });
+
+    const departmentsStatus = await request("GET", "/api/departments");
+    checks.push({ name: "departments-protected", ok: departmentsStatus.status === 401, details: JSON.stringify(departmentsStatus.json) });
+
+    const doctorsStatus = await request("GET", "/api/doctors");
+    checks.push({ name: "doctors-protected", ok: doctorsStatus.status === 401, details: JSON.stringify(doctorsStatus.json) });
+
     const appointmentsStatus = await request("GET", "/api/appointments");
     checks.push({ name: "appointments-protected", ok: appointmentsStatus.status === 401, details: JSON.stringify(appointmentsStatus.json) });
 
+    const appointmentsPostStatus = await request("POST", "/api/appointments");
+    checks.push({ name: "appointments-write-protected", ok: appointmentsPostStatus.status === 401, details: JSON.stringify(appointmentsPostStatus.json) });
+
+    const workspaceProfileStatus = await request("GET", "/api/workspace-profile");
+    checks.push({ name: "workspace-profile-protected", ok: workspaceProfileStatus.status === 401, details: JSON.stringify(workspaceProfileStatus.json) });
+
+    const workspaceProfilePatchStatus = await request("PATCH", "/api/workspace-profile");
+    checks.push({ name: "workspace-profile-write-protected", ok: workspaceProfilePatchStatus.status === 401, details: JSON.stringify(workspaceProfilePatchStatus.json) });
+
+    const opsBootstrapStatus = await request("GET", "/api/ops/bootstrap");
+    checks.push({ name: "ops-bootstrap-protected", ok: opsBootstrapStatus.status === 401, details: JSON.stringify(opsBootstrapStatus.json) });
+
+    const opsCustomerPostStatus = await request("POST", "/api/ops/customers");
+    checks.push({ name: "ops-write-protected", ok: opsCustomerPostStatus.status === 401, details: JSON.stringify(opsCustomerPostStatus.json) });
+
     const devEventsStatus = await request("GET", "/api/development-events?limit=5");
-    checks.push({ name: "development-events-protected", ok: devEventsStatus.status === 401, details: JSON.stringify(devEventsStatus.json) });
+    checks.push({ name: "development-events-disabled", ok: devEventsStatus.status === 404, details: JSON.stringify(devEventsStatus.json) });
+
+    const devEventsPostStatus = await request("POST", "/api/development-events");
+    checks.push({ name: "development-events-write-disabled", ok: devEventsPostStatus.status === 404, details: JSON.stringify(devEventsPostStatus.json) });
 
     const health = await request("GET", "/api/health");
     checks.push({ name: "health-overall", ok: health.status === 200, details: JSON.stringify(health.json) });

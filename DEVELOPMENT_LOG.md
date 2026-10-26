@@ -46,4 +46,3 @@
 **تقرير النهاية:** تم تثبيت مسار Local-first مع سكربتات تحديث باك/فرونت/ويب/موبايل/الكل وتجهيز النشر إلى Git ثم VPS.
 **التحقق:** node --check scripts/update-targets.js && node --check scripts/prepare-release.js
 **الملفات المتأثرة:** `DEVELOPMENT_LOG.md`, `docs/DEVELOPMENT_LOG.md`, `docs/refresh-and-test.md`, `package.json`, `replit.md`, `.cursor/`, `data/development-log.jsonl`, `docs/DEPLOY_VPS.md`, `docs/LOCAL_CURSOR_WORKFLOW.md`, `scripts/prepare-release.js`, `scripts/run-all.cmd`, `scripts/run-backend.cmd`, `scripts/run-frontend.cmd`, `scripts/update-all.cmd`, `scripts/update-all.ps1`, `scripts/update-targets.js`
-

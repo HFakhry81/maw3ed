@@ -408,9 +408,7 @@ async function requireAppUser(req) {
     result = await query(
       `INSERT INTO app_users (id, clerk_user_id, email, display_name, is_platform_admin, platform_role)
        VALUES (
-         $1, $2, $3, $4,
-         NOT EXISTS (SELECT 1 FROM app_users),
-         CASE WHEN NOT EXISTS (SELECT 1 FROM app_users) THEN 'super_admin' ELSE NULL END
+         $1, $2, $3, $4, FALSE, NULL
        )
        ON CONFLICT (clerk_user_id) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = NOW()
        RETURNING *`,
@@ -1283,6 +1281,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await verifyEmail(await parseJsonBody(req)));
     }
     if (requested === "/api/development-events" && req.method === "POST") {
+      if (process.env.MAW3ED_ENV !== "local") {
+        return sendJson(res, 404, { ok: false, error: "Not found" });
+      }
       if (process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1") {
         await requireAppUser(req);
       }
@@ -1296,6 +1297,9 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 201, { ok: true, timestamp: record.timestamp });
     }
     if (requested === "/api/development-events" && req.method === "GET") {
+      if (process.env.MAW3ED_ENV !== "local") {
+        return sendJson(res, 404, { ok: false, error: "Not found" });
+      }
       if (process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1") {
         await requireAppUser(req);
       }
