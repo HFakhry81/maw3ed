@@ -1,6 +1,6 @@
 # جرد واجهات Maw3ed وطبقات الوصول
 
-**مراجعة ساكنة:** 2026-10-27. قائمة المسارات معلنة في `server.js`, `opsRoutes.js`, `platformAdminRoutes.js`; لا يغطي هذا الجرد أي endpoint أضيف ديناميكياً أو من proxy خارجي. يجب مقارنة القائمة باختبار runtime قبل الإطلاق.
+**مراجعة ساكنة:** 2026-10-27 (حدّثت حواجز المرحلة 1 للحزمة الثانية). قائمة المسارات معلنة في `server.js`, `opsRoutes.js`, `platformAdminRoutes.js`, `legacyAccess.js`; لا يغطي هذا الجرد أي endpoint أضيف ديناميكياً أو من proxy خارجي. يجب مقارنة القائمة باختبار runtime قبل الإطلاق. حالة المراحل: [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json).
 
 ## فئات الوصول
 
@@ -8,10 +8,10 @@
 | --- | --- | --- |
 | عام محدود | `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health*`، وقراءات صفحة الحجز العامة؛ `POST` للـ hold/appointment العام | allowlist مقصودة؛ راجع حدود البيانات، المعدل، token/pass، وغياب إساءة التدفق |
 | حساب | `/api/account`, `/api/workspaces`, `/api/entitlements`, `/api/billing/*` | تستخدم Clerk بحسب مساراتها؛ تحقق من ارتباط كل تغيير بمساحة المستخدم وخطة الاشتراك |
-| تشغيل workspace | `/api/ops/*` أدناه | auth عند production أو `MAW3ED_REQUIRE_AUTH=1`؛ العضوية تتحقق عبر resolver، ثم سياسة أدوار في التغيير الحالي؛ وضع local دون auth مقصود للتطوير، وليس للنشر |
-| قديم/طبي | `/api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | حواجز auth مشروطة بالإعداد؛ يلزم استكمال membership/RBAC لكل كائن/خاصية واختبارات cross-workspace |
+| تشغيل workspace | `/api/ops/*` أدناه | auth عند production أو `MAW3ED_REQUIRE_AUTH=1`؛ العضوية عبر resolver DB+JSON، ثم سياسة أدوار route×method؛ وضع local دون auth مقصود للتطوير، وليس للنشر |
+| قديم/طبي | `/api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | عند تفعيل auth: جلسة + عضوية نشطة + سياسة `legacyAccess` (manager+ للقراءة/إنشاء المواعيد؛ owner/admin لـ PATCH profile؛ viewer/staff مرفوضان). ما زال يلزم اختبار BOLA على مستوى الكائن عبر المستأجرين |
 | منصة | `/api/admin/*` | Clerk وأدوار منصة؛ لا تخلط دور المنصة بعضوية المنشأة، ولا تعتبر سجل المنصة بديلاً عن tenant audit |
-| تطوير/ملفات | `/api/development-events`, `/data/uploads/*` | الأحداث تتطلب auth في production/flag ولا يظهر دور إداري؛ راجع التعطيل/التنقية والاحتفاظ. الملفات تحتاج تحقق ملكية وصلاحية static لكل object |
+| تطوير/ملفات | `/api/development-events`, `/data/uploads/*` | الأحداث: local فقط (404 خارجها) + جلسة عند auth المطلوب + تنقية تفاصيل. الملفات: صور علامة workspace عامة لصفحة الحجز؛ غير الصور والمسارات العامة تتطلب عضوية/جلسة عند auth؛ عابر المستأجر → 404 |
 
 ## واجهات التشغيل (`opsRoutes.js`)
 
@@ -48,10 +48,13 @@
 | `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health`, `/api/health/live`, `/api/health/ready` | عام مع تقليل مخرجات config وحماية readiness من كشف أسرار |
 | `GET /api/account`, `/api/workspaces`, `/api/entitlements`, `/api/billing/status`; `POST /api/workspaces`, `/api/billing/request` | جلسة؛ ربط الـ workspace بالعضوية؛ RBAC/امتلاك لكل write |
 | `POST /api/whop/checkout`, `/api/whop/verify-checkout` | معطلان حالياً (`410`) |
-| `GET,PATCH /api/workspace-profile`; `GET /api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments`; `POST /api/appointments` | API مجال طبي حساس؛ auth مشروط حالياً، ويحتاج عضوية ودور وكائن/خاصية لكل عملية أو إيقافه بعد ترحيل العميل |
+| `GET /api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | عند auth: membership + دور manager+ عبر `legacyAccess.js`؛ `x-workspace-id` سياق فقط |
+| `PATCH /api/workspace-profile` | عند auth: owner/admin فقط |
+| `POST /api/appointments` | عند auth: membership + دور manager+ |
 | `POST /api/auth/request-verification`, `/api/auth/verify-email` | public flow؛ rate-limit، منع enumeration، وتحقق abuse مطلوب |
-| `GET,POST /api/development-events` | auth مشروط؛ لا يوجد في route check دور إداري واضح |
-| `GET /data/uploads/*` | مسار ملفات؛ تحقق workspace ownership، عدم traversal، ACL؛ الملفات الخاصة لا تخدم كـ static عام |
+| `GET,POST /api/development-events` | local فقط؛ 404 خارج local؛ جلسة عند `MAW3ED_REQUIRE_AUTH`/production-like؛ تنقية حقول حساسة |
+| `GET /data/uploads/workspaces/:id/*.(png\|jpg\|jpeg\|webp\|gif\|svg)` | عام مقصود (علامة صفحة الحجز)؛ امتدادات صور فقط |
+| `GET /data/uploads/workspaces/:id/*` (غير صورة) و`GET /data/uploads/*` | عند auth: جلسة + عضوية للمساحة عند الانطباق؛ غير العضو → 404؛ منع traversal قائم |
 
 ## واجهات المنصة (`platformAdminRoutes.js`)
 
@@ -65,6 +68,7 @@
 
 ## حالة الاختبارات
 
-- جرى إنشاء وتشغيل smoke مخصص لحزمة RBAC الأولى بنجاح: [`scripts/smoke-ops-rbac.js`](../scripts/smoke-ops-rbac.js) (`npm run test:ops-rbac`).
-- اختبار المجموعة لا يحل محل جرد runtime أو اختبار BOLA على كل المسارات القديمة والمنصة والملفات.
-- ترتبط كل تحديثات الحالة بـ [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md)؛ نتائج التنفيذ تُسجل بعد تشغيل الأمر لا بمجرد كتابته هنا.
+- جرى إنشاء وتشغيل smoke لحزمة RBAC لـ ops بنجاح: [`scripts/smoke-ops-rbac.js`](../scripts/smoke-ops-rbac.js) (`npm run test:ops-rbac`).
+- جرى إنشاء وتشغيل smoke لحزمة legacy/uploads/dev-events بنجاح: [`scripts/smoke-legacy-rbac.js`](../scripts/smoke-legacy-rbac.js) (`npm run test:legacy-rbac`).
+- اختبارات الحواجز الوحدوية لا تحل محل جرد runtime أو اختبار BOLA كامل على كل المسارات القديمة والمنصة والملفات.
+- ترتبط كل تحديثات الحالة بـ [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json)؛ نتائج التنفيذ تُسجل بعد تشغيل الأمر لا بمجرد كتابته هنا.

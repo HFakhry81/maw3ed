@@ -15,10 +15,13 @@ The best starting points for reliable changes are:
 - [activityTemplatesCatalog.js](activityTemplatesCatalog.js) — activity templates and starter catalogs
 - [platformAdminRoutes.js](platformAdminRoutes.js) — platform admin features
 - [docs/PROJECT_DOCUMENTATION_INDEX.md](docs/PROJECT_DOCUMENTATION_INDEX.md) — documentation map
+- [docs/IMPLEMENTATION_EXECUTION_LOG.md](docs/IMPLEMENTATION_EXECUTION_LOG.md) — roadmap stage status and resume pointer
+- [docs/ROADMAP_PROGRESS.json](docs/ROADMAP_PROGRESS.json) — machine-readable stage checklist synced with the execution log
 - [docs/ARCHITECTURE_AND_SECURITY_BASELINE.md](docs/ARCHITECTURE_AND_SECURITY_BASELINE.md) — architecture and security baseline
 - [docs/refresh-and-test.md](docs/refresh-and-test.md) — local workflow and validation commands
 - [docs/PRODUCTION_READINESS_REPORT.md](docs/PRODUCTION_READINESS_REPORT.md) — current risk and readiness status
 - [docs/WORKSPACE_CAPACITY_MODEL_EDUCATION_AND_VERTICALS.md](docs/WORKSPACE_CAPACITY_MODEL_EDUCATION_AND_VERTICALS.md) — education, group capacity, resources, and vertical booking modes
+- [legacyAccess.js](legacyAccess.js) — Phase 1 barriers for legacy medical APIs, development-events, and uploads
 
 ## Development workflow
 

@@ -1,0 +1,91 @@
+{
+  "$schema_note": "Machine-readable companion to IMPLEMENTATION_EXECUTION_LOG.md. Update both after every package. Status values: not_started | in_progress | complete_technical | blocked.",
+  "updated_at": "2026-10-27",
+  "project": "maw3ed",
+  "source_of_truth": [
+    "docs/IMPLEMENTATION_ROADMAP.md",
+    "docs/IMPLEMENTATION_EXECUTION_LOG.md",
+    "docs/SECURITY_ROUTE_INVENTORY.md"
+  ],
+  "resume_pointer": {
+    "phase": 1,
+    "package": "legacy-apis-dev-events-uploads",
+    "next_steps": [
+      "Re-run npm run test:ops-rbac && npm run test:legacy-rbac and node --check on touched modules after further edits",
+      "Add fuller BOLA/property-level API tests for legacy and ops object IDs across workspaces",
+      "Review production DB/JSON posture and whether JSON storage must be forbidden outside local",
+      "Add workspace-scoped operational events log (distinct from local development-events)",
+      "Do not start Phase 2 migration/seed/reset in the next Phase 1 package"
+    ]
+  },
+  "phases": [
+    {
+      "id": 0,
+      "name_ar": "النطاق وحصر السطح",
+      "status": "complete_technical",
+      "closed_at": "2026-10-27",
+      "evidence": [
+        "docs/PHASE_0_API_INVENTORY_AND_DECISIONS.md",
+        "docs/SECURITY_ROUTE_INVENTORY.md",
+        "docs/IMPLEMENTATION_EXECUTION_LOG.md"
+      ],
+      "notes": "Commercial/legal product gates remain open and block related feature launch, not Phase 0 technical close."
+    },
+    {
+      "id": 1,
+      "name_ar": "الهوية والعزل وRBAC",
+      "status": "in_progress",
+      "packages": [
+        {
+          "id": "ops-rbac",
+          "status": "complete_technical",
+          "summary": "/api/ops/* route×method×role policy + membership resolver for DB+JSON",
+          "evidence_commands": [
+            "npm run test:ops-rbac",
+            "node --check opsRoutes.js",
+            "node --check server.js"
+          ]
+        },
+        {
+          "id": "legacy-apis-dev-events-uploads",
+          "status": "complete_technical",
+          "summary": "Legacy medical APIs membership+role barriers; development-events local-only + detail sanitization; private uploads gated; branding images remain public",
+          "evidence_commands": [
+            "npm run test:ops-rbac",
+            "npm run test:legacy-rbac",
+            "node --check legacyAccess.js",
+            "node --check server.js",
+            "node --check opsRoutes.js"
+          ]
+        }
+      ],
+      "remaining_to_close": [
+        "Fuller BOLA/permission field tests on APIs",
+        "Production DB/JSON posture decision and enforcement",
+        "Workspace operational events log",
+        "Staff account↔staff-record attribution before expanding staff desk permissions"
+      ]
+    },
+    { "id": 2, "name_ar": "سلامة البيانات والترحيل", "status": "not_started" },
+    { "id": 3, "name_ar": "الحجز الذري والتوفر", "status": "not_started" },
+    { "id": 4, "name_ar": "الموارد وامتدادات الخدمات", "status": "not_started" },
+    { "id": 5, "name_ar": "الرحلات والواجهة", "status": "not_started" },
+    { "id": 6, "name_ar": "الرسائل والفوترة والتكاملات", "status": "not_started" },
+    { "id": 7, "name_ar": "التشغيل والخصوصية والاستعادة", "status": "not_started" },
+    { "id": 8, "name_ar": "قبول ما قبل الإطلاق", "status": "not_started" },
+    { "id": 9, "name_ar": "تجربة محدودة والتوسع", "status": "not_started" }
+  ],
+  "checklist": {
+    "phase_0_inventory": true,
+    "phase_0_decisions_doc": true,
+    "phase_0_execution_log": true,
+    "phase_1_ops_rbac": true,
+    "phase_1_legacy_rbac": true,
+    "phase_1_development_events_local_only": true,
+    "phase_1_uploads_access_control": true,
+    "phase_1_bola_full_suite": false,
+    "phase_1_workspace_events_log": false,
+    "phase_1_closed": false,
+    "phase_2_started": false
+  }
+}

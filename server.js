@@ -10,6 +10,11 @@ const { whopRequest } = require("./whopClient");
 const { tryHandleOpsApi } = require("./opsRoutes");
 const { createPlatformAdmin } = require("./platformAdmin");
 const { createAdminRouter } = require("./platformAdminRoutes");
+const {
+  requireLegacyWorkspaceAccess,
+  isDevelopmentEventsAllowed,
+  assertUploadReadable
+} = require("./legacyAccess");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 7000);
@@ -145,6 +150,37 @@ function appendJsonLine(file, record) {
   const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
   const separator = current.length > 0 && !current.endsWith("\n") ? "\n" : "";
   fs.appendFileSync(file, `${separator}${JSON.stringify(record)}\n`, "utf8");
+}
+
+function sanitizeDevelopmentEventDetails(details = {}) {
+  const blocked = new Set([
+    "email",
+    "phone",
+    "password",
+    "token",
+    "authorization",
+    "cookie",
+    "patient",
+    "patientName",
+    "patientId",
+    "nationalId",
+    "ssn",
+    "address"
+  ]);
+  const out = {};
+  for (const [key, value] of Object.entries(details || {})) {
+    if (blocked.has(String(key))) continue;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      out[key] = sanitizeDevelopmentEventDetails(value);
+      continue;
+    }
+    if (typeof value === "string" && value.length > 200) {
+      out[key] = `${value.slice(0, 200)}…`;
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
 }
 
 function appendDevelopmentEvent(event, details = {}) {
@@ -484,26 +520,41 @@ async function listUserWorkspaces(userId) {
 }
 
 async function getRequestOrganizationId(req, requestUrl) {
-  if (!databaseConfigured) return organizationId;
-
-  const authRequired = process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
+  const authRequired = authRequiredForRequest();
   if (!authRequired) return organizationId;
 
   const user = await requireAppUser(req);
   const workspaceId = req.headers["x-workspace-id"] || requestUrl.searchParams.get("workspace");
-  const effectiveWorkspaceId = workspaceId || (await getUserWorkspace(user.id))?.id;
-  if (!effectiveWorkspaceId) {
-    const error = new Error("No workspace is available for the current account");
-    error.statusCode = 403;
-    throw error;
-  }
-  const workspace = await getUserWorkspace(user.id, effectiveWorkspaceId);
-  if (!workspace?.organization_id) {
+  const membership = workspaceId
+    ? await getUserWorkspace(user.id, workspaceId)
+    : await getUserWorkspace(user.id);
+  if (!membership) {
     const error = new Error("This workspace is not available for the current account");
     error.statusCode = 403;
     throw error;
   }
-  return workspace.organization_id;
+
+  if (membership.organization_id) return membership.organization_id;
+  if (!databaseConfigured) {
+    return membership.id ? `org-${membership.id}` : organizationId;
+  }
+
+  const error = new Error("This workspace is not available for the current account");
+  error.statusCode = 403;
+  throw error;
+}
+
+async function requireLegacyAccess(req, requestUrl, requested, method) {
+  return requireLegacyWorkspaceAccess({
+    req,
+    requestUrl,
+    requested,
+    method,
+    requireAppUser,
+    getUserWorkspace,
+    defaultOrganizationId: organizationId,
+    databaseConfigured
+  });
 }
 
 async function getOrganizationProfile(orgId) {
@@ -520,22 +571,16 @@ async function getOrganizationProfile(orgId) {
   return result.rows[0] || null;
 }
 
-async function updateOrganizationProfile(req, requestUrl, payload) {
-  const orgId = await getRequestOrganizationId(req, requestUrl);
-  if (process.env.CLERK_SECRET_KEY) {
-    const user = await requireAppUser(req);
-    const membership = await query(
-      `SELECT ws.role FROM workspace_members ws
-       JOIN organizations o ON o.workspace_id = ws.workspace_id
-       WHERE o.id = $1 AND ws.user_id = $2`,
-      [orgId, user.id]
-    );
-    if (!["owner", "admin", "manager"].includes(membership.rows[0]?.role)) {
-      const error = new Error("Workspace manager access is required");
+async function updateOrganizationProfile(req, requestUrl, payload, access = null) {
+  const orgId = access?.organizationId || (await getRequestOrganizationId(req, requestUrl));
+  if (authRequiredForRequest()) {
+    const role = access?.role;
+    if (!role || !["owner", "admin"].includes(role)) {
+      const error = new Error("This workspace role cannot perform this operation");
       error.statusCode = 403;
       throw error;
     }
-  } else if (orgId !== organizationId) {
+  } else if (databaseConfigured === false && orgId !== organizationId && !access?.organizationId) {
     const error = new Error("Workspace authentication is required");
     error.statusCode = 401;
     throw error;
@@ -1216,49 +1261,78 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, templates: result.rows.length ? result.rows : localTemplates });
     }
     if (requested === "/api/workspace-profile" && req.method === "GET") {
-      if (authRequiredForRequest()) await requireAppUser(req);
-      const orgId = await getRequestOrganizationId(req, requestUrl);
-      return sendJson(res, 200, { ok: true, profile: databaseConfigured ? await getOrganizationProfile(orgId) : { id: organizationId, name: localData.organization?.name || "مستشفى الشفاء", activityType: "medical", locale: "ar", currency: "egp", timezone: "Africa/Cairo", labels: { customer: "المرضى", staff: "الأطباء", department: "الأقسام والعيادات", service: "الخدمات", appointment: "المواعيد" } } });
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
+      const orgId = access.organizationId;
+      return sendJson(res, 200, {
+        ok: true,
+        profile: databaseConfigured
+          ? await getOrganizationProfile(orgId)
+          : {
+              id: orgId,
+              name: localData.organization?.name || "مستشفى الشفاء",
+              activityType: "medical",
+              locale: "ar",
+              currency: "egp",
+              timezone: "Africa/Cairo",
+              labels: {
+                customer: "المرضى",
+                staff: "الأطباء",
+                department: "الأقسام والعيادات",
+                service: "الخدمات",
+                appointment: "المواعيد"
+              }
+            }
+      });
     }
     if (requested === "/api/workspace-profile" && req.method === "PATCH") {
-      if (authRequiredForRequest()) await requireAppUser(req);
-      return sendJson(res, 200, { ok: true, profile: await updateOrganizationProfile(req, requestUrl, await parseJsonBody(req)) });
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
+      return sendJson(res, 200, {
+        ok: true,
+        profile: await updateOrganizationProfile(req, requestUrl, await parseJsonBody(req), access)
+      });
     }
     if (requested === "/api/dashboard" && req.method === "GET") {
-      if (authRequiredForRequest()) await requireAppUser(req);
-      const orgId = await getRequestOrganizationId(req, requestUrl);
-      return sendJson(res, 200, await dashboardData(requestUrl.searchParams.get("date") || "2025-05-14", orgId));
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
+      return sendJson(res, 200, await dashboardData(requestUrl.searchParams.get("date") || "2025-05-14", access.organizationId));
     }
     if (requested === "/api/departments" && req.method === "GET") {
-      if (authRequiredForRequest()) await requireAppUser(req);
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, departments: localData.departments });
-      const orgId = await getRequestOrganizationId(req, requestUrl);
-      const result = await query("SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]);
+      const result = await query(
+        "SELECT id, name, default_service FROM departments WHERE organization_id = $1 AND active = true ORDER BY name",
+        [access.organizationId]
+      );
       return sendJson(res, 200, { ok: true, departments: result.rows });
     }
     if (requested === "/api/doctors" && req.method === "GET") {
-      if (authRequiredForRequest()) await requireAppUser(req);
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, doctors: localData.doctors });
-      const orgId = await getRequestOrganizationId(req, requestUrl);
-      const result = await query("SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name", [orgId]);
+      const result = await query(
+        "SELECT id, name, specialty FROM doctors WHERE organization_id = $1 AND active = true ORDER BY name",
+        [access.organizationId]
+      );
       return sendJson(res, 200, { ok: true, doctors: result.rows });
     }
     if (requested === "/api/patients" && req.method === "GET") {
-      if (authRequiredForRequest()) await requireAppUser(req);
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
       if (!databaseConfigured) return sendJson(res, 200, { ok: true, patients: localData.patients });
-      const orgId = await getRequestOrganizationId(req, requestUrl);
-      const result = await query(`SELECT id, name, email, TO_CHAR(joined_at, 'YYYY-MM-DD') AS "joinedAt",
-        last_visit AS "lastVisit" FROM patients WHERE organization_id = $1 ORDER BY created_at DESC`, [orgId]);
+      const result = await query(
+        `SELECT id, name, email, TO_CHAR(joined_at, 'YYYY-MM-DD') AS "joinedAt",
+        last_visit AS "lastVisit" FROM patients WHERE organization_id = $1 ORDER BY created_at DESC`,
+        [access.organizationId]
+      );
       return sendJson(res, 200, { ok: true, patients: result.rows });
     }
     if (requested === "/api/appointments" && req.method === "GET") {
-      if (authRequiredForRequest()) await requireAppUser(req);
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
       if (!databaseConfigured) {
         const date = requestUrl.searchParams.get("date");
-        return sendJson(res, 200, { ok: true, appointments: localData.appointments.filter((appointment) => !date || appointment.date === date) });
+        return sendJson(res, 200, {
+          ok: true,
+          appointments: localData.appointments.filter((appointment) => !date || appointment.date === date)
+        });
       }
       const date = requestUrl.searchParams.get("date");
-      const orgId = await getRequestOrganizationId(req, requestUrl);
       const result = await query(
         `SELECT a.id, a.appointment_date, TO_CHAR(a.appointment_time, 'HH24:MI') AS appointment_time,
                 a.patient_id, p.name AS patient_name, a.department_id, d.name AS department_name,
@@ -1267,14 +1341,13 @@ const server = http.createServer(async (req, res) => {
          JOIN departments d ON d.id = a.department_id JOIN doctors dr ON dr.id = a.doctor_id
          WHERE a.organization_id = $1 AND ($2::date IS NULL OR a.appointment_date = $2::date)
          ORDER BY a.appointment_date, a.appointment_time`,
-        [orgId, date || null]
+        [access.organizationId, date || null]
       );
       return sendJson(res, 200, { ok: true, appointments: result.rows.map(toAppointment) });
     }
     if (requested === "/api/appointments" && req.method === "POST") {
-      if (authRequiredForRequest()) await requireAppUser(req);
-      const orgId = await getRequestOrganizationId(req, requestUrl);
-      const appointment = await handleAppointmentCreate(await parseJsonBody(req), orgId);
+      const access = await requireLegacyAccess(req, requestUrl, requested, req.method);
+      const appointment = await handleAppointmentCreate(await parseJsonBody(req), access.organizationId);
       return sendJson(res, 201, { ok: true, appointment });
     }
     if (requested === "/api/auth/request-verification" && req.method === "POST") {
@@ -1283,30 +1356,29 @@ const server = http.createServer(async (req, res) => {
     if (requested === "/api/auth/verify-email" && req.method === "POST") {
       return sendJson(res, 200, await verifyEmail(await parseJsonBody(req)));
     }
-    if (requested === "/api/development-events" && req.method === "POST") {
-      if (process.env.MAW3ED_ENV !== "local") {
+    if (requested === "/api/development-events" && (req.method === "POST" || req.method === "GET")) {
+      if (!isDevelopmentEventsAllowed()) {
         return sendJson(res, 404, { ok: false, error: "Not found" });
       }
-      if (process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1") {
+      // Local-only telemetry. When auth is required (production-like local), demand a session.
+      if (authRequiredForRequest()) {
         await requireAppUser(req);
       }
-      const payload = await parseJsonBody(req);
-      const event = typeof payload.event === "string" ? payload.event.trim() : "";
-      if (!/^[a-z0-9_.-]{1,80}$/.test(event)) return sendJson(res, 400, { ok: false, error: "Invalid event name" });
-      const details = payload.details && typeof payload.details === "object" ? payload.details : {};
-      const serialized = JSON.stringify(details);
-      const safeDetails = serialized.length > 2000 ? { truncated: true } : details;
-      const record = appendDevelopmentEvent(event, safeDetails);
-      return sendJson(res, 201, { ok: true, timestamp: record.timestamp });
-    }
-    if (requested === "/api/development-events" && req.method === "GET") {
-      if (process.env.MAW3ED_ENV !== "local") {
-        return sendJson(res, 404, { ok: false, error: "Not found" });
+      if (req.method === "POST") {
+        const payload = await parseJsonBody(req);
+        const event = typeof payload.event === "string" ? payload.event.trim() : "";
+        if (!/^[a-z0-9_.-]{1,80}$/.test(event)) return sendJson(res, 400, { ok: false, error: "Invalid event name" });
+        const details = payload.details && typeof payload.details === "object" ? payload.details : {};
+        const sanitized = sanitizeDevelopmentEventDetails(details);
+        const serialized = JSON.stringify(sanitized);
+        const safeDetails = serialized.length > 2000 ? { truncated: true } : sanitized;
+        const record = appendDevelopmentEvent(event, safeDetails);
+        return sendJson(res, 201, { ok: true, timestamp: record.timestamp });
       }
-      if (process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1") {
-        await requireAppUser(req);
-      }
-      return sendJson(res, 200, { ok: true, events: await readEventLog(Math.min(Math.max(Number(requestUrl.searchParams.get("limit")) || 50, 1), 200)) });
+      return sendJson(res, 200, {
+        ok: true,
+        events: await readEventLog(Math.min(Math.max(Number(requestUrl.searchParams.get("limit")) || 50, 1), 200))
+      });
     }
 
     const opsHandled = await tryHandleOpsApi({
@@ -1324,6 +1396,14 @@ const server = http.createServer(async (req, res) => {
     if (opsHandled) return;
 
     if (requested.startsWith("/data/uploads/")) {
+      await assertUploadReadable({
+        requestedPath: requested,
+        req,
+        requestUrl,
+        requireAppUser,
+        getUserWorkspace
+      });
+
       let uploadPath = path.resolve(root, `.${requested}`);
       const workspaceUploadMatch = requested.match(/^\/data\/uploads\/workspaces\/([^/]+)\/([^/]+)$/);
       if (workspaceUploadMatch) {
@@ -1346,14 +1426,16 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(403, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
         return res.end("Forbidden");
       }
+      const classificationExt = path.extname(uploadPath).toLowerCase();
+      const isPublicBrandingImage = Boolean(workspaceUploadMatch) && Boolean(types[classificationExt]);
       return fs.readFile(uploadPath, (error, data) => {
         if (error) {
           res.writeHead(404, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
           return res.end("Not found");
         }
         res.writeHead(200, securityHeaders({
-          "Content-Type": types[path.extname(uploadPath)] || "application/octet-stream",
-          "Cache-Control": "public, max-age=86400"
+          "Content-Type": types[classificationExt] || "application/octet-stream",
+          "Cache-Control": isPublicBrandingImage ? "public, max-age=86400" : "private, no-store"
         }));
         return res.end(data);
       });
