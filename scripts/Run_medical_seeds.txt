@@ -8,6 +8,11 @@
 ── فرد / استرجاع البذرة المحفوظة ──
   npm run hospital:restore-full
   أو: npm run restore:full-hospital
+  افتراضياً تُحمّل إلى مساحة المعمل الطبية المملوكة لـ contact.haitham@gmail.com.
+  يمكن تحديد مساحة أخرى صراحةً عبر:
+    npm run hospital:restore-full -- --workspace=<id>
+  الاستعادة تدمج السجلات مع الموجود وتُبقي السجل الحالي عند تطابق المعرّف.
+  للاستبدال الكامل عمداً: npm run hospital:restore-full -- --replace
 
 بعدما ينتهي حدّث صفحة المتصفح (F5).
 

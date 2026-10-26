@@ -8,13 +8,16 @@
  *   npm run seed:medical              generate demo + save canonical backup
  *   npm run seed:medical:save         save current workspace → canonical backup
  *   npm run seed:medical:restore      restore workspace ← canonical backup
- *   node scripts/seed-medical-demo.js --workspace=local-default
+ *   node scripts/seed-medical-demo.js --workspace=<id>
+ *   node scripts/seed-medical-demo.js --owner-email=<email>
+ *   node scripts/seed-medical-demo.js --restore --replace
  *   node scripts/seed-medical-demo.js --keep
  */
 const fs = require("fs");
 const path = require("path");
 require("./load-env");
 
+const { query, pool, databaseConfigured } = require("../db");
 const ops = require("../opsStore");
 const opsWorkspace = require("../opsWorkspace");
 const {
@@ -29,8 +32,75 @@ const keep = args.includes("--keep");
 const noBackup = args.includes("--no-backup");
 const doRestore = args.includes("--restore");
 const doSave = args.includes("--save");
+const doReplace = args.includes("--replace");
 const wsArg = args.find((a) => a.startsWith("--workspace="));
-const workspaceId = wsArg ? wsArg.split("=")[1] : opsWorkspace.DEFAULT_WORKSPACE_ID || "local-default";
+const ownerArg = args.find((a) => a.startsWith("--owner-email="));
+const requestedWorkspaceId = wsArg ? wsArg.slice("--workspace=".length).trim() : "";
+const ownerEmail = ownerArg ? ownerArg.slice("--owner-email=".length).trim() : "contact.haitham@gmail.com";
+let workspaceId = requestedWorkspaceId || null;
+let workspaceTarget = null;
+
+async function resolveWorkspaceTarget() {
+  if (requestedWorkspaceId) {
+    const safeId = opsWorkspace.sanitizeWorkspaceId(requestedWorkspaceId);
+    if (safeId !== requestedWorkspaceId) {
+      throw new Error(`معرّف مساحة العمل غير صالح: ${requestedWorkspaceId}`);
+    }
+    return { id: safeId };
+  }
+
+  if (!databaseConfigured) {
+    throw new Error(
+      "تعذّر تحديد مساحة العمل المالكة للبذرة: PostgreSQL غير مفعّل. اضبط MAW3ED_STORAGE=postgres وDATABASE_URL أو مرّر --workspace=<id> صراحةً."
+    );
+  }
+  if (!ownerEmail) {
+    throw new Error("البريد الإلكتروني للمالك مطلوب عبر --owner-email=<email>");
+  }
+
+  const result = await query(
+    `SELECT DISTINCT w.id, w.name, w.slug, w.activity_type, w.locale, w.created_at
+     FROM app_users u
+     JOIN workspaces w ON w.owner_user_id = u.id AND w.status = 'active'
+     JOIN workspace_members wm
+       ON wm.workspace_id = w.id AND wm.user_id = u.id AND wm.role = 'owner'
+     WHERE LOWER(BTRIM(u.email)) = LOWER(BTRIM($1))
+     ORDER BY w.created_at ASC`,
+    [ownerEmail]
+  );
+  const ownedWorkspaces = result.rows;
+  const labWorkspaces = ownedWorkspaces.filter((workspace) =>
+    /معمل|lab|ma3mal/i.test(`${workspace.name || ""} ${workspace.slug || ""}`)
+  );
+  const candidates = labWorkspaces.length ? labWorkspaces : ownedWorkspaces.length === 1 ? ownedWorkspaces : [];
+
+  if (candidates.length !== 1) {
+    const available = ownedWorkspaces.length
+      ? ownedWorkspaces.map((workspace) => `${workspace.name} (${workspace.id})`).join(", ")
+      : "لا توجد مساحة نشطة مملوكة لهذا الحساب";
+    throw new Error(
+      `تعذّر تحديد مساحة المعمل بشكل فريد للحساب ${ownerEmail}. المساحات المملوكة: ${available}. ` +
+      "مرّر --workspace=<id> لتحديد المساحة المطلوبة."
+    );
+  }
+
+  const target = candidates[0];
+  const activityTemplates = require("../activityTemplatesCatalog");
+  if (activityTemplates.resolveTemplateId(target.activity_type) !== "medical") {
+    throw new Error(
+      `مساحة العمل "${target.name}" (${target.id}) ليست مساحة طبية؛ لن تُربط بها بذرة المستشفى.`
+    );
+  }
+
+  return {
+    id: target.id,
+    name: target.name,
+    slug: target.slug,
+    activityType: target.activity_type,
+    locale: target.locale,
+    ownerEmail
+  };
+}
 
 const SHIFTS = [
   { id: "morning", label: "صباحية", opensAt: "08:00", closesAt: "16:00", overnight: false },
@@ -230,10 +300,94 @@ function cloneStore(store) {
   return JSON.parse(JSON.stringify(store));
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeSeedObject(seedObject, currentObject) {
+  const merged = { ...seedObject };
+  for (const [key, currentValue] of Object.entries(currentObject)) {
+    const seedValue = seedObject[key];
+    if (isRecord(seedValue) && isRecord(currentValue)) {
+      merged[key] = mergeSeedObject(seedValue, currentValue);
+    } else {
+      merged[key] = currentValue;
+    }
+  }
+  return merged;
+}
+
+function seedArrayKey(value) {
+  if (isRecord(value)) {
+    for (const key of ["id", "weekday", "date", "key"]) {
+      if (value[key] !== undefined && value[key] !== null) return `${key}:${value[key]}`;
+    }
+    return `json:${JSON.stringify(value)}`;
+  }
+  return `${typeof value}:${String(value)}`;
+}
+
+function mergeSeedArray(seedArray, currentArray) {
+  const merged = new Map();
+  for (const item of seedArray) merged.set(seedArrayKey(item), cloneStore(item));
+  for (const item of currentArray) {
+    const key = seedArrayKey(item);
+    const seedItem = merged.get(key);
+    merged.set(key, isRecord(seedItem) && isRecord(item) ? { ...seedItem, ...item } : cloneStore(item));
+  }
+  return [...merged.values()];
+}
+
+function mergeSeedStore(currentStore, seedStore) {
+  const merged = cloneStore(seedStore);
+  for (const [key, currentValue] of Object.entries(currentStore)) {
+    const seedValue = seedStore[key];
+    if (Array.isArray(seedValue) && Array.isArray(currentValue)) {
+      merged[key] = mergeSeedArray(seedValue, currentValue);
+    } else if (isRecord(seedValue) && isRecord(currentValue)) {
+      merged[key] = mergeSeedObject(seedValue, currentValue);
+    } else {
+      merged[key] = currentValue;
+    }
+  }
+  return merged;
+}
+
+function applyWorkspaceIdentity(store, ctx) {
+  const currentPage = ctx.data.bookingPage || {};
+  const nextPage = {
+    ...(store.bookingPage || {}),
+    ...currentPage
+  };
+  const previousSlug = currentPage.slug;
+  const targetSlug = workspaceTarget?.slug || previousSlug || nextPage.slug;
+
+  if (targetSlug) {
+    const registeredSlug = opsWorkspace.registerSlug(targetSlug, workspaceId);
+    nextPage.slug = registeredSlug;
+    if (previousSlug && previousSlug !== registeredSlug) {
+      opsWorkspace.unregisterSlug(previousSlug, workspaceId);
+    }
+  }
+  if (workspaceTarget?.name) nextPage.businessName = workspaceTarget.name;
+  if (workspaceTarget?.locale) nextPage.locale = workspaceTarget.locale;
+  if (workspaceTarget?.ownerEmail) {
+    const logoUrl = currentPage.logoUrl || "";
+    const logoWorkspaceId = logoUrl.match(/\/workspaces\/([^/]+)\//)?.[1];
+    nextPage.logoUrl = logoWorkspaceId && logoWorkspaceId !== workspaceId ? "" : logoUrl;
+  }
+
+  store.bookingPage = nextPage;
+}
+
 function saveCanonicalFromWorkspace(source = "save") {
   return ops.withWorkspace(workspaceId, () => {
     const ctx = opsWorkspace.getContext(() => ({ staff: [], services: [], customers: [] }));
-    const result = writeCanonicalSeed(cloneStore(ctx.data), { source, workspaceId });
+    const result = writeCanonicalSeed(cloneStore(ctx.data), {
+      source,
+      workspaceId,
+      ...(workspaceTarget?.ownerEmail ? { ownerEmail: workspaceTarget.ownerEmail } : {})
+    });
     console.log(`[seed-medical] canonical saved → ${path.relative(process.cwd(), result.path)}`);
     console.log(JSON.stringify(result.meta, null, 2));
     return result;
@@ -251,17 +405,11 @@ function restoreCanonicalToWorkspace() {
   }
 
   const counts = ops.withWorkspace(workspaceId, () => {
-    const next = cloneStore(store);
-    const ctx = opsWorkspace.getContext(() => cloneStore(next));
+    const ctx = opsWorkspace.getContext(() => cloneStore(store));
+    const next = doReplace ? cloneStore(store) : mergeSeedStore(ctx.data, store);
+    applyWorkspaceIdentity(next, ctx);
     opsWorkspace.replaceStoreData(ctx, next);
-    try {
-      if (next.bookingPage?.slug) {
-        opsWorkspace.registerSlug(next.bookingPage.slug, workspaceId);
-      }
-    } catch (error) {
-      console.warn(`[seed-medical] slug register: ${error.message}`);
-    }
-    return summarizeStore(ctx.data);
+    return { ...summarizeStore(ctx.data), mode: doReplace ? "replace" : "merge" };
   });
 
   console.log("[seed-medical] restore done");
@@ -284,6 +432,10 @@ function generateDemo() {
       ops.resetOpsData();
       console.log("[seed-medical] reset to default store");
     }
+
+    const ctx = opsWorkspace.getContext(() => ({}));
+    applyWorkspaceIdentity(ctx.data, ctx);
+    opsWorkspace.persistContext(ctx);
 
     // 24h facility window so shift staff can book around the clock
     ops.saveWorkingHours(
@@ -518,18 +670,27 @@ function generateDemo() {
   return summary;
 }
 
-function main() {
-  if (doRestore && doSave) {
-    throw new Error("استخدم --restore أو --save فقط، ليس الاثنين معاً");
+async function main() {
+  try {
+    if (doRestore && doSave) {
+      throw new Error("استخدم --restore أو --save فقط، ليس الاثنين معاً");
+    }
+    workspaceTarget = await resolveWorkspaceTarget();
+    workspaceId = workspaceTarget.id;
+    console.log(
+      `[seed-medical] target workspace=${workspaceId}` +
+      (workspaceTarget.name ? ` name=${workspaceTarget.name} slug=${workspaceTarget.slug || ""}` : "") +
+      (workspaceTarget.ownerEmail ? ` owner=${workspaceTarget.ownerEmail} role=owner` : " explicit")
+    );
+    if (doRestore) return restoreCanonicalToWorkspace();
+    if (doSave) return saveCanonicalFromWorkspace("save");
+    return generateDemo();
+  } finally {
+    if (pool) await pool.end();
   }
-  if (doRestore) return restoreCanonicalToWorkspace();
-  if (doSave) return saveCanonicalFromWorkspace("save");
-  return generateDemo();
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   console.error("[seed-medical] FAILED:", error.message || error);
-  process.exit(1);
-}
+  process.exitCode = 1;
+});

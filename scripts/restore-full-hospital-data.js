@@ -8,7 +8,12 @@
  * الاستخدام من جذر المشروع:
  *   npm run hospital:restore-full
  *   node scripts/restore-full-hospital-data.js
- *   node scripts/restore-full-hospital-data.js --workspace=local-default
+ *   node scripts/restore-full-hospital-data.js --owner-email=contact.haitham@gmail.com
+ *   node scripts/restore-full-hospital-data.js --workspace=<id>
+ *   node scripts/restore-full-hospital-data.js --replace
+ *
+ * افتراضياً تُستعاد البذرة إلى مساحة المعمل الطبية المملوكة للحساب أعلاه.
+ * الاستعادة تدمج السجلات افتراضياً؛ استخدم --replace للاستبدال الكامل.
  *
  * بعد الانتهاء حدّث صفحة المتصفح.
  */
