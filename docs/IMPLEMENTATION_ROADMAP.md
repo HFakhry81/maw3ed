@@ -2,7 +2,7 @@
 
 **تاريخ المراجعة:** 2026-10-27
 **الأساس:** [تقرير الجاهزية](PRODUCTION_READINESS_REPORT.md)، [مواصفات المنتج](PRODUCT_AND_PLATFORM_SPEC.md)، [مقارنة المنصات](REFERENCE_PLATFORM_BENCHMARK.md)، [خط أساس العمارة والأمان](ARCHITECTURE_AND_SECURITY_BASELINE.md)، و[نموذج السعة والتعليم والأنشطة](WORKSPACE_CAPACITY_MODEL_EDUCATION_AND_VERTICALS.md).  
-**متابعة التنفيذ:** [سجل المراحل](IMPLEMENTATION_EXECUTION_LOG.md) و[جرد واجهات الوصول](SECURITY_ROUTE_INVENTORY.md).
+**متابعة التنفيذ:** [سجل المراحل](IMPLEMENTATION_EXECUTION_LOG.md)، [تتبع آلي](ROADMAP_PROGRESS.json)، و[جرد واجهات الوصول](SECURITY_ROUTE_INVENTORY.md).
 **نوع الوثيقة:** خطة تنفيذ مستهدفة وليست إثباتاً بأن الميزات أو الضوابط نُفذت. آخر تقارير الجاهزية المذكورة مبنية على فحص ساكن؛ يجب إعادة فحص الكود وتشغيل الاختبارات عند بدء كل دفعة.  
 **قاعدة الإطلاق:** لا إطلاق عام متعدد المنشآت ولا استخدام بيانات مرضى/طلاب حقيقية قبل اجتياز بوابات الهوية والعزل والخصوصية والتزامن والاستعادة والتشغيل.
 
