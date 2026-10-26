@@ -175,6 +175,30 @@ function fail(message, statusCode = 400) {
   throw error;
 }
 
+function normalizeNameKey(value) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .normalize("NFKC")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function assertUniqueName({ items, value, field = "name", ignoreId = null, kind = "العنصر", messageOverride }) {
+  const nextValue = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!nextValue) return;
+  const key = normalizeNameKey(nextValue);
+  const duplicate = items.some((item) => {
+    if (item.id && ignoreId && String(item.id) === String(ignoreId)) return false;
+    const currentValue = String(item[field] ?? "").trim();
+    return currentValue && normalizeNameKey(currentValue) === key;
+  });
+  if (duplicate) {
+    const customMessage = messageOverride || `لا يمكن إنشاء ${kind} مكرر باسم «${nextValue}». استخدم اسمًا مختلفًا.`;
+    fail(customMessage);
+  }
+}
+
 function listCustomers({ search = "", categoryId = "" } = {}) {
   const q = search.trim().toLowerCase();
   return store.customers.filter((customer) => {
@@ -871,8 +895,14 @@ function createStaff(payload) {
   assertPlanCapacity("staff");
   const firstName = String(payload.firstName || payload.name || "").trim();
   const lastName = String(payload.lastName || "").trim();
-  const name = String(payload.name || `${firstName} ${lastName}`.trim()).trim();
+  const name = String(payload.name || `${firstName} ${lastName}`.trim()).replace(/\s+/g, " ").trim();
   if (!name) fail("اسم الموظف مطلوب");
+  assertUniqueName({
+    items: store.staff,
+    value: name,
+    kind: "موظف",
+    messageOverride: `لا يمكن إنشاء موظف مكرر باسم «${name}». استخدم اسمًا مختلفًا.`
+  });
   const title = String(payload.title || "").trim();
   if (!title) fail("المهنة مطلوبة");
   const useBusinessHours = payload.useBusinessHours !== false;
@@ -910,9 +940,18 @@ function updateStaff(id, payload) {
   if (payload.firstName != null || payload.lastName != null || payload.name != null) {
     const firstName = payload.firstName != null ? String(payload.firstName).trim() : person.firstName || "";
     const lastName = payload.lastName != null ? String(payload.lastName).trim() : person.lastName || "";
+    const nextName = String(payload.name || `${firstName} ${lastName}`.trim() || person.name).replace(/\s+/g, " ").trim();
+    assertUniqueName({
+      items: store.staff,
+      value: nextName,
+      field: "name",
+      ignoreId: id,
+      kind: "موظف",
+      messageOverride: `لا يمكن استخدام اسم الموظف المكرر «${nextName}». اختر اسمًا مختلفًا.`
+    });
     person.firstName = firstName;
     person.lastName = lastName;
-    person.name = String(payload.name || `${firstName} ${lastName}`.trim() || person.name).trim();
+    person.name = nextName;
   }
   if (payload.title != null) {
     const title = String(payload.title).trim();
@@ -971,8 +1010,14 @@ function listServiceCategories() {
 }
 
 function createServiceCategory(payload) {
-  const name = String(payload.name || "").trim();
+  const name = String(payload.name || "").replace(/\s+/g, " ").trim();
   if (!name) fail("اسم الفئة مطلوب");
+  assertUniqueName({
+    items: store.serviceCategories,
+    value: name,
+    kind: "فئة",
+    messageOverride: `لا يمكن إنشاء فئة مكررة باسم «${name}». اختر اسمًا مختلفًا.`
+  });
   const category = {
     id: createId("svc-cat"),
     name,
@@ -989,8 +1034,16 @@ function updateServiceCategory(id, payload) {
   const category = store.serviceCategories.find((item) => item.id === id);
   if (!category) fail("فئة الخدمة غير موجودة", 404);
   if (payload.name != null) {
-    const name = String(payload.name || "").trim();
+    const name = String(payload.name || "").replace(/\s+/g, " ").trim();
     if (!name) fail("اسم الفئة مطلوب");
+    assertUniqueName({
+      items: store.serviceCategories,
+      value: name,
+      field: "name",
+      ignoreId: id,
+      kind: "فئة",
+      messageOverride: `لا يمكن استخدام اسم الفئة المكرر «${name}». اختر اسمًا مختلفًا.`
+    });
     category.name = name;
   }
   if (payload.enabled != null) category.enabled = Boolean(payload.enabled);
@@ -1040,12 +1093,18 @@ function listServices(categoryId) {
 
 function createService(payload) {
   assertPlanCapacity("services");
-  const name = String(payload.name || "").trim();
+  const name = String(payload.name || "").replace(/\s+/g, " ").trim();
   const categoryId = payload.categoryId;
   if (!name || !categoryId) fail("اسم الخدمة والفئة مطلوبان");
   if (!store.serviceCategories.some((category) => category.id === categoryId)) {
     fail("فئة الخدمة غير موجودة");
   }
+  assertUniqueName({
+    items: store.services,
+    value: name,
+    kind: "خدمة",
+    messageOverride: `لا يمكن إنشاء خدمة مكررة باسم «${name}». اختر اسمًا مختلفًا.`
+  });
   const timing = normalizeServiceTiming(payload);
   const pricing = normalizeServicePricing(payload);
   const service = {
@@ -1093,8 +1152,16 @@ function updateService(id, payload) {
     if (requestedProviderIds.some((staffId) => !knownStaffIds.has(staffId))) fail("يوجد مقدم خدمة غير موجود");
   }
   if (payload.name != null) {
-    const name = String(payload.name).trim();
+    const name = String(payload.name).replace(/\s+/g, " ").trim();
     if (!name) fail("اسم الخدمة مطلوب");
+    assertUniqueName({
+      items: store.services,
+      value: name,
+      field: "name",
+      ignoreId: id,
+      kind: "خدمة",
+      messageOverride: `لا يمكن استخدام اسم الخدمة المكرر «${name}». اختر اسمًا مختلفًا.`
+    });
     service.name = name;
   }
   if (payload.categoryId != null) {

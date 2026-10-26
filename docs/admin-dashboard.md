@@ -28,7 +28,7 @@ Operational transparency + real-time control: break silos between bookings, staf
 
 ## Architecture (now vs target)
 
-```
+```text
 Now:  React SPA  →  Node opsRoutes  →  opsStore JSON (+ Postgres orgs)
 Later: React SPA  →  Nest modular monolith  →  Postgres RLS + Redis
 ```

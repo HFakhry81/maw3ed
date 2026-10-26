@@ -6,7 +6,7 @@
 ## خريطة العزل النهائية
 
 | المشروع | المسار | API / Server | Web / Vite | Metro (Expo) | PostgreSQL |
-|---------|--------|--------------|------------|--------------|------------|
+| --------- | -------- | -------------- | ------------ | -------------- | ------------ |
 | **Fanni** (بدون تغيير) | `E:\UpNexa.com\fanni` | **3000** | — | **8081** | `localhost:5432` / **`fanni_db`** |
 | **UpNexa** | `E:\UpNexa.com\UpNexa` | **5000** | **5173** | **8083** | `localhost:5432` / **`upnexa_db`** |
 | **Maw3ed** | `E:\UpNexa.com\maw3ed` | **7000** | **7100** | — | `localhost:5433` / **`maw3ed`** |
@@ -22,6 +22,7 @@
 ## الملفات التي تغيّرت
 
 ### UpNexa
+
 - `.env.example` → منافذ 5000 / 5173 / 8083 وقاعدة `upnexa_db`
 - `artifacts/mobile/.env` → إزالة `fanni_db` وربط `upnexa_db` + API `:5000` + Metro `8083`
 - `artifacts/mobile/scripts/dev-start.js` → افتراضي Metro `8083`
@@ -29,15 +30,18 @@
 - `Update_UpNexa.bat` → API `5000` بدل `3000`
 
 ### Maw3ed
+
 - `vite.config.js` → افتراضي `7100`
 - `.env.example` و `.env` → `PORT=7000` و `VITE_PORT=7100`
 - `server.js` → يقرأ `process.env.PORT` (افتراضي 7000)
 
 ### Spendi (`finance-app`)
+
 - `package.json` scripts → `--port 8082`
 - `.env` / `.env.example` → `EXPO_PORT=8082`
 
 ### Fanni
+
 - **لم يُمس** — يبقى `PORT=3000` و `fanni_db` و Metro `8081`.
 
 ## خطوة يدوية مطلوبة (مرة واحدة)

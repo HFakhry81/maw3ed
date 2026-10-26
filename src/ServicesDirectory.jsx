@@ -171,14 +171,15 @@ export function ServicesDirectory({
           </button>
           {categories.map((category) => {
             const inactive = category.active === false || category.enabled === false;
+            const count = countInCategory(category.id);
             return (
               <div key={category.id} className={categoryId === category.id ? "cat-row active" : "cat-row"}>
                 <button type="button" className={categoryId === category.id ? "cat active" : "cat"} onClick={() => onCategoryChange?.(category.id)}>
                   <span className="cat-name">
-                    {category.name}
+                    {category.name} ({count})
                     {inactive ? <span className="status-soft">متوقفة</span> : null}
                   </span>
-                  <span className="cat-count">{countInCategory(category.id)}</span>
+                  <span className="cat-count">{count}</span>
                 </button>
                 <div className="row-actions compact">
                   <button type="button" className="edit-button" onClick={() => onOpenCategoryEdit?.(category)}>تعديل</button>
@@ -224,6 +225,7 @@ export function ServicesDirectory({
               byCategory.map((bucket) => {
                 const closed = collapsedCats[bucket.id] === true;
                 const admins = adminsForCategory(bucket.id, staff, allServices);
+                const count = bucket.rows.length;
                 return (
                   <div className="dir-group" key={bucket.id || "none"}>
                     <button
@@ -231,8 +233,8 @@ export function ServicesDirectory({
                       className="dir-group-toggle"
                       onClick={() => setCollapsedCats((c) => ({ ...c, [bucket.id]: !closed }))}
                     >
-                      <strong>{bucket.name}</strong>
-                      <span>{bucket.rows.length} خدمة</span>
+                      <strong>{bucket.name} ({count})</strong>
+                      <span>{count} خدمة</span>
                       <span className="dir-group-meta">إداري: {admins.map((a) => a.name).join("، ") || "—"}</span>
                       <em>{closed ? "▾" : "▴"}</em>
                     </button>

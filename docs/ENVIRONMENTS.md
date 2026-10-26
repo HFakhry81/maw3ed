@@ -44,6 +44,7 @@ npm run check:staging
 ```
 
 تتحقق هذه الخطوة من:
+
 - عزل منافذ التطبيق والـ VPS
 - جاهزية الخدمة واستعدادها (`/api/health`, `/api/health/ready`)
 - حماية المسارات الحساسة (`/api/patients`, `/api/appointments`, `/api/development-events`)

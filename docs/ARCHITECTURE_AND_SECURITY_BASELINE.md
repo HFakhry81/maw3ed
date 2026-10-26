@@ -69,7 +69,7 @@ PostgreSQL: tenant-owned data + constraints + transactions (+ RLS defense in dep
 ## 6. خط الأساس الأمني المطلوب
 
 | المجال | ضابط القبول |
-|---|---|
+| --- | --- |
 | مصادقة | كل مسارات التشغيل والحساب تحميها جلسة صحيحة؛ العامة allowlist معلنة |
 | تفويض | اختبارات لكل دور ولكل route/method وحالة كائن عابر لمستأجر |
 | الجلسة/CSRF | سياسة cookie وSameSite وCSRF حسب الأصل؛ لا تسجيل tokens |
@@ -86,8 +86,8 @@ PostgreSQL: tenant-owned data + constraints + transactions (+ RLS defense in dep
 
 ## 7. التشغيل والنشر
 
-- بيئات منفصلة `local` و`staging` و`production`؛ توثيق البيئة الحية ومفاتيحها دون إظهار القيم.
-- Node.js LTS معروف ومثبت، `npm` مدير واحد وlockfile واحد؛ CI ينفذ `npm ci`, build, lint/type/static checks, migrations على نسخة مؤقتة، واختبارات API.
+- أوضاع التطبيق المعتمدة حالياً `local` و`production`؛ `npm run check:staging` فحص قبول production-like معزول وليس وضع تشغيل ثالثاً. أي بيئة staging دائمة تحتاج قراراً مستقلاً وتحديث [ENVIRONMENTS.md](ENVIRONMENTS.md).
+- حسم Node.js LTS ومدير حزم/lockfile واحد بقرار موثق؛ توجد lockfiles متعددة حالياً. بعد الحسم، يثبت CI الاعتماديات بالطريقة المطابقة، ويبني الواجهة والخادم، ويشغل migrations على قاعدة مؤقتة واختبارات API.
 - migrations تقدمية وقابلة للتراجع أو forward-fix، مع لقطة احتياطية قبل تغيير مخطط خطر.
 - health/readiness يميز أن العملية حية من جاهزية قاعدة البيانات والمهاجرات ومزود الرسائل.
 - reverse proxy يثق بعناوين forwarded من proxy واحد معروف ولا يقبل تزويرها من الإنترنت.
