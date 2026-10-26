@@ -59,6 +59,7 @@ async function main() {
     }
   } catch (error) {
     console.error("[ERROR] Migration execution failed:", error.message);
+    process.exitCode = 1;
   } finally {
     await pool.end();
   }

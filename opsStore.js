@@ -186,6 +186,10 @@ function listCustomers({ search = "", categoryId = "" } = {}) {
 function createCustomer(payload) {
   const firstName = String(payload.firstName || "").trim();
   if (!firstName) fail("الاسم الأول مطلوب");
+  const categoryId = String(payload.categoryId || "cat-new");
+  if (!store.customerCategories.some((category) => category.id === categoryId)) {
+    fail("فئة العميل غير موجودة");
+  }
   const customer = {
     id: createId("customer"),
     firstName,
@@ -193,7 +197,7 @@ function createCustomer(payload) {
     phone: String(payload.phone || "").trim(),
     email: String(payload.email || "").trim(),
     address: String(payload.address || "").trim(),
-    categoryId: payload.categoryId || "cat-new",
+    categoryId,
     avatarUrl: String(payload.avatarUrl || "")
   };
   store.customers.unshift(customer);
@@ -290,7 +294,9 @@ function setServiceProviders(serviceId, providerIds) {
   const service = store.services.find((item) => item.id === serviceId);
   if (!service) fail("الخدمة غير موجودة", 404);
   const staffIds = new Set(store.staff.map((person) => person.id));
-  service.providerIds = (providerIds || []).map(String).filter((id) => staffIds.has(id));
+  const requestedIds = (providerIds || []).map(String).filter(Boolean);
+  if (requestedIds.some((id) => !staffIds.has(id))) fail("يوجد مقدم خدمة غير موجود");
+  service.providerIds = requestedIds;
   assertServiceProviders(service);
   sanitizeAndSyncStaffServiceLinks();
   persist();
@@ -347,34 +353,46 @@ function normalizeWeekHours(days, fallback = store.workingHours) {
   });
 }
 
-/** Staff-level closed days: stored for Pro prep; booking ignores them until Pro unlock. */
 function normalizeStaffClosedDays(items) {
   if (!Array.isArray(items)) return [];
   return items.map((item, index) => {
     const startDate = String(item.startDate || item.date || "").trim();
+    const endDate = String(item.endDate || startDate).trim() || startDate;
     return {
       id: String(item.id || `scd-${Date.now().toString(36)}-${index}`),
       startDate,
-      endDate: String(item.endDate || startDate).trim() || startDate,
+      endDate,
       description: String(item.description || "").trim()
     };
-  }).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.startDate));
+  }).filter((item) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(item.startDate) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(item.endDate) &&
+    item.endDate >= item.startDate
+  );
 }
 
-/** Staff-level specific days: stored for Pro prep; booking ignores them until Pro unlock. */
 function normalizeStaffSpecificDays(items) {
   if (!Array.isArray(items)) return [];
   return items.map((item, index) => {
     const startDate = String(item.startDate || item.date || "").trim();
+    const endDate = String(item.endDate || startDate).trim() || startDate;
     return {
       id: String(item.id || `ssd-${Date.now().toString(36)}-${index}`),
       title: String(item.title || "").trim() || "يوم محدد",
       startDate,
-      endDate: String(item.endDate || startDate).trim() || startDate,
+      endDate,
       opensAt: String(item.opensAt || "08:00").trim(),
-      closesAt: String(item.closesAt || "16:00").trim()
+      closesAt: String(item.closesAt || "16:00").trim(),
+      breakStartsAt: String(item.breakStartsAt || "").trim(),
+      breakEndsAt: String(item.breakEndsAt || "").trim()
     };
-  }).filter((item) => /^\d{4}-\d{2}-\d{2}$/.test(item.startDate));
+  }).filter((item) =>
+    /^\d{4}-\d{2}-\d{2}$/.test(item.startDate) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(item.endDate) &&
+    item.endDate >= item.startDate &&
+    /^\d{2}:\d{2}$/.test(item.opensAt) &&
+    /^\d{2}:\d{2}$/.test(item.closesAt)
+  );
 }
 
 /** Explicitly closed Pro staff features — no compute path yet. */
@@ -401,21 +419,32 @@ function findSpecificDayOverride(date) {
   );
 }
 
+function findStaffSpecificDayOverride(staff, date) {
+  return (staff?.specificDays || []).find((item) =>
+    dateInRange(date, item.startDate, item.endDate || item.startDate)
+  );
+}
+
 function resolveHoursForStaff(staffId, date) {
   if (isClosedCalendarDay(date)) return null;
-  const specific = findSpecificDayOverride(date);
+  const staff = store.staff.find((person) => person.id === staffId);
+  if ((staff?.closedDays || []).some((item) =>
+    dateInRange(date, item.startDate || item.date, item.endDate || item.startDate || item.date)
+  )) return null;
+
+  const specific = findStaffSpecificDayOverride(staff, date) || findSpecificDayOverride(date);
   if (specific) {
     return {
       isOpen: true,
       opensAt: specific.opensAt || "08:00",
       closesAt: specific.closesAt || "16:00",
+      overnight: shiftHours.isOvernightShift(specific.opensAt, specific.closesAt),
       breakEnabled: Boolean(specific.breakStartsAt && specific.breakEndsAt),
       breakStartsAt: specific.breakStartsAt || "",
       breakEndsAt: specific.breakEndsAt || ""
     };
   }
   const weekday = new Date(`${date}T12:00:00`).getDay();
-  const staff = store.staff.find((person) => person.id === staffId);
   if (staff?.useBusinessHours === false && Array.isArray(staff.workingHours) && staff.workingHours.length) {
     const custom = staff.workingHours.find((item) => Number(item.weekday) === weekday);
     if (custom) return custom;
@@ -453,7 +482,9 @@ function futureAppointmentsFor({ staffId = "", serviceId = "" } = {}) {
 
 function assertServiceProviders(service) {
   // Creating/editing a service may omit providers. Booking must not.
-  void service;
+  const knownStaffIds = new Set(store.staff.map((person) => person.id));
+  const providerIds = Array.isArray(service?.providerIds) ? service.providerIds : [];
+  if (providerIds.some((id) => !knownStaffIds.has(id))) fail("يوجد مقدم خدمة غير موجود");
 }
 
 function assertServiceBookable(service) {
@@ -1012,6 +1043,9 @@ function createService(payload) {
   const name = String(payload.name || "").trim();
   const categoryId = payload.categoryId;
   if (!name || !categoryId) fail("اسم الخدمة والفئة مطلوبان");
+  if (!store.serviceCategories.some((category) => category.id === categoryId)) {
+    fail("فئة الخدمة غير موجودة");
+  }
   const timing = normalizeServiceTiming(payload);
   const pricing = normalizeServicePricing(payload);
   const service = {
@@ -1046,8 +1080,26 @@ function createService(payload) {
 function updateService(id, payload) {
   const service = store.services.find((item) => item.id === id);
   if (!service) fail("الخدمة غير موجودة", 404);
-  if (payload.name != null) service.name = String(payload.name).trim();
-  if (payload.categoryId != null) service.categoryId = payload.categoryId;
+  if (payload.categoryId != null && !store.serviceCategories.some((category) => category.id === payload.categoryId)) {
+    fail("فئة الخدمة غير موجودة");
+  }
+  const requestedProviderIds = Array.isArray(payload.providerIds)
+    ? payload.providerIds.map(String).filter(Boolean)
+    : payload.providerId != null
+      ? (payload.providerId ? [String(payload.providerId)] : [])
+      : null;
+  if (requestedProviderIds) {
+    const knownStaffIds = new Set(store.staff.map((person) => person.id));
+    if (requestedProviderIds.some((staffId) => !knownStaffIds.has(staffId))) fail("يوجد مقدم خدمة غير موجود");
+  }
+  if (payload.name != null) {
+    const name = String(payload.name).trim();
+    if (!name) fail("اسم الخدمة مطلوب");
+    service.name = name;
+  }
+  if (payload.categoryId != null) {
+    service.categoryId = payload.categoryId;
+  }
   if (payload.durationMinutes != null || payload.bufferMinutes != null) {
     const timing = normalizeServiceTiming(payload, service);
     service.durationMinutes = timing.durationMinutes;
@@ -1066,8 +1118,7 @@ function updateService(id, payload) {
   if (payload.autoAccept != null) service.autoAccept = Boolean(payload.autoAccept);
   if (payload.autoComplete != null) service.autoComplete = Boolean(payload.autoComplete);
   if (payload.active != null) service.active = Boolean(payload.active);
-  if (Array.isArray(payload.providerIds)) service.providerIds = payload.providerIds.map(String).filter(Boolean);
-  else if (payload.providerId != null) service.providerIds = payload.providerId ? [String(payload.providerId)] : [];
+  if (requestedProviderIds) service.providerIds = requestedProviderIds;
   assertServiceProviders(service);
   sanitizeAndSyncStaffServiceLinks();
   persist();
@@ -1162,8 +1213,9 @@ function updateBookingPage(payload) {
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-");
   const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
-  const registered = opsWorkspace.registerSlug(nextSlug, workspaceId);
-  if (previousSlug && previousSlug !== registered) {
+  const postgresManaged = opsWorkspace.isPostgresWorkspace();
+  const registered = postgresManaged ? nextSlug : opsWorkspace.registerSlug(nextSlug, workspaceId);
+  if (!postgresManaged && previousSlug && previousSlug !== registered) {
     opsWorkspace.unregisterSlug(previousSlug, workspaceId);
   }
   store.bookingPage = {
@@ -1344,12 +1396,14 @@ async function listPublicSlots(slug, { date, serviceId, staffId = "any", ignoreH
     if (opsPg.isOpsPgEnabled()) {
       try {
         const [pgAppointments, pgHolds] = await Promise.all([
-          opsPg.listPgBlockedRanges({
-            slug,
-            staffId: person.id,
-            date,
-            durationFallback: Number(service.durationMinutes || 30)
-          }),
+          opsWorkspace.isPostgresWorkspace()
+            ? Promise.resolve([])
+            : opsPg.listPgBlockedRanges({
+                slug,
+                staffId: person.id,
+                date,
+                durationFallback: Number(service.durationMinutes || 30)
+              }),
           opsPg.listPgHoldRanges({
             slug,
             staffId: person.id,
@@ -1477,7 +1531,7 @@ async function createPublicAppointment(slug, payload = {}) {
     paymentMethod: payload.paymentMethod || "cash"
   });
 
-  if (opsPg.isOpsPgEnabled()) {
+  if (opsPg.isOpsPgEnabled() && !opsWorkspace.isPostgresWorkspace()) {
     const staff = store.staff.find((person) => person.id === appointment.staffId);
     const category = store.serviceCategories.find((item) => item.id === service.categoryId);
     try {
@@ -1620,6 +1674,13 @@ function createAppointment(payload) {
   const blockMinutes = serviceBookingBlockMinutes(service);
   const start = toMinutes(time);
   const end = start + blockMinutes;
+  const availableTimes = listStaffSlotsForDay({
+    staffId,
+    date,
+    blockMinutes,
+    ignoreHolds: true
+  });
+  if (!availableTimes.includes(time)) fail("الموظف غير متاح في هذا الوقت أو خارج ساعات العمل", 409);
   const collision = store.appointments.find((item) => {
     if (item.date !== date || item.staffId !== staffId || item.status === "cancelled") return false;
     const otherStart = toMinutes(item.time);
@@ -2167,6 +2228,10 @@ function resolveWorkspaceIdForSlug(slug) {
   return opsWorkspace.resolveWorkspaceIdBySlug(slug);
 }
 
+function resolveWorkspaceIdForSlugAsync(slug) {
+  return opsWorkspace.resolveWorkspaceIdBySlugAsync(slug);
+}
+
 function seedWorkspaceStore(workspaceId, options = {}) {
   return opsWorkspace.seedWorkspace(workspaceId, options, defaultStore);
 }
@@ -2181,6 +2246,7 @@ module.exports = {
   withWorkspace,
   withWorkspaceAsync,
   resolveWorkspaceIdForSlug,
+  resolveWorkspaceIdForSlugAsync,
   seedWorkspaceStore,
   getCurrentWorkspaceId,
   listActivityTemplates,

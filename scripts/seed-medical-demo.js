@@ -46,7 +46,31 @@ async function resolveWorkspaceTarget() {
     if (safeId !== requestedWorkspaceId) {
       throw new Error(`معرّف مساحة العمل غير صالح: ${requestedWorkspaceId}`);
     }
-    return { id: safeId };
+    if (!databaseConfigured) return { id: safeId };
+
+    const result = await query(
+      `SELECT id, name, slug, activity_type, locale
+       FROM workspaces
+       WHERE id = $1 AND status = 'active'`,
+      [safeId]
+    );
+    const target = result.rows[0];
+    if (!target) {
+      throw new Error(`مساحة العمل غير موجودة أو غير نشطة: ${safeId}`);
+    }
+    const activityTemplates = require("../activityTemplatesCatalog");
+    if (activityTemplates.resolveTemplateId(target.activity_type) !== "medical") {
+      throw new Error(
+        `مساحة العمل "${target.name}" (${target.id}) ليست مساحة طبية؛ لن تُربط بها بذرة المستشفى.`
+      );
+    }
+    return {
+      id: target.id,
+      name: target.name,
+      slug: target.slug,
+      activityType: target.activity_type,
+      locale: target.locale
+    };
   }
 
   if (!databaseConfigured) {
@@ -363,9 +387,11 @@ function applyWorkspaceIdentity(store, ctx) {
   const targetSlug = workspaceTarget?.slug || previousSlug || nextPage.slug;
 
   if (targetSlug) {
-    const registeredSlug = opsWorkspace.registerSlug(targetSlug, workspaceId);
+    const registeredSlug = opsWorkspace.isPostgresWorkspace()
+      ? targetSlug
+      : opsWorkspace.registerSlug(targetSlug, workspaceId);
     nextPage.slug = registeredSlug;
-    if (previousSlug && previousSlug !== registeredSlug) {
+    if (!opsWorkspace.isPostgresWorkspace() && previousSlug && previousSlug !== registeredSlug) {
       opsWorkspace.unregisterSlug(previousSlug, workspaceId);
     }
   }
@@ -380,8 +406,8 @@ function applyWorkspaceIdentity(store, ctx) {
   store.bookingPage = nextPage;
 }
 
-function saveCanonicalFromWorkspace(source = "save") {
-  return ops.withWorkspace(workspaceId, () => {
+async function saveCanonicalFromWorkspace(source = "save") {
+  return ops.withWorkspaceAsync(workspaceId, async () => {
     const ctx = opsWorkspace.getContext(() => ({ staff: [], services: [], customers: [] }));
     const result = writeCanonicalSeed(cloneStore(ctx.data), {
       source,
@@ -394,17 +420,16 @@ function saveCanonicalFromWorkspace(source = "save") {
   });
 }
 
-function restoreCanonicalToWorkspace() {
+async function restoreCanonicalToWorkspace() {
   const { meta, store } = readCanonicalSeed();
   console.log(`[seed-medical] restoring from ${path.relative(process.cwd(), canonicalSeedPath())}`);
   console.log(`[seed-medical] seed meta:`, meta);
 
-  if (!noBackup) {
-    const backup = backupOpsFile(workspaceId);
-    if (backup) console.log(`[seed-medical] pre-restore backup → ${backup}`);
-  }
-
-  const counts = ops.withWorkspace(workspaceId, () => {
+  const counts = await ops.withWorkspaceAsync(workspaceId, async () => {
+    if (!noBackup) {
+      const backup = backupOpsFile(workspaceId);
+      if (backup) console.log(`[seed-medical] pre-restore backup → ${backup}`);
+    }
     const ctx = opsWorkspace.getContext(() => cloneStore(store));
     const next = doReplace ? cloneStore(store) : mergeSeedStore(ctx.data, store);
     applyWorkspaceIdentity(next, ctx);
@@ -418,16 +443,15 @@ function restoreCanonicalToWorkspace() {
   return counts;
 }
 
-function generateDemo() {
+async function generateDemo() {
   console.log(`[seed-medical] generate workspace=${workspaceId} keep=${keep}`);
 
-  if (!noBackup) {
-    const backup = backupOpsFile(workspaceId);
-    if (backup) console.log(`[seed-medical] backup → ${backup}`);
-    else console.log("[seed-medical] no existing ops file to backup");
-  }
-
-  const summary = ops.withWorkspace(workspaceId, () => {
+  const summary = await ops.withWorkspaceAsync(workspaceId, async () => {
+    if (!noBackup) {
+      const backup = backupOpsFile(workspaceId);
+      if (backup) console.log(`[seed-medical] backup → ${backup}`);
+      else console.log("[seed-medical] no existing ops file to backup");
+    }
     if (!keep) {
       ops.resetOpsData();
       console.log("[seed-medical] reset to default store");
@@ -664,7 +688,7 @@ function generateDemo() {
 
   console.log("[seed-medical] generate done");
   console.log(JSON.stringify(summary, null, 2));
-  saveCanonicalFromWorkspace("generate");
+  await saveCanonicalFromWorkspace("generate");
   console.log("\nاسترجاع لاحقاً: npm run seed:medical:restore");
   console.log("تحذير: refresh / ops:reset يمسحان workspace — البذرة في data/seeds/ تبقى.");
   return summary;
@@ -682,9 +706,9 @@ async function main() {
       (workspaceTarget.name ? ` name=${workspaceTarget.name} slug=${workspaceTarget.slug || ""}` : "") +
       (workspaceTarget.ownerEmail ? ` owner=${workspaceTarget.ownerEmail} role=owner` : " explicit")
     );
-    if (doRestore) return restoreCanonicalToWorkspace();
-    if (doSave) return saveCanonicalFromWorkspace("save");
-    return generateDemo();
+    if (doRestore) return await restoreCanonicalToWorkspace();
+    if (doSave) return await saveCanonicalFromWorkspace("save");
+    return await generateDemo();
   } finally {
     if (pool) await pool.end();
   }

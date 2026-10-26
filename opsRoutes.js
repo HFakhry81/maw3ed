@@ -39,8 +39,8 @@ function adminWorkspaceId(req, requestUrl) {
   return String(raw).trim() || ops.DEFAULT_WORKSPACE_ID;
 }
 
-function publicWorkspaceId(slug) {
-  const resolved = ops.resolveWorkspaceIdForSlug(slug);
+async function publicWorkspaceId(slug) {
+  const resolved = await ops.resolveWorkspaceIdForSlugAsync(slug);
   if (!resolved) {
     const error = new Error("صفحة الحجز غير متاحة");
     error.statusCode = 404;
@@ -71,7 +71,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       const slug = decodeURIComponent(
         (publicBookingMatch || publicSlotsMatch || publicHoldMatch || publicBookMatch || publicPassMatch)[1]
       );
-      workspaceId = publicWorkspaceId(slug);
+      workspaceId = await publicWorkspaceId(slug);
     } else {
       workspaceId = adminWorkspaceId(req, requestUrl);
     }

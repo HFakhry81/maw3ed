@@ -3,6 +3,7 @@ import { api } from "./api";
 import { t } from "./i18n";
 import { SmartTimePicker } from "./SmartTimePicker.jsx";
 import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
+import { toMinutes, isOvernightShift } from "./shiftHours.js";
 
 function startOfWeek(date) {
   const value = new Date(date);
@@ -30,6 +31,7 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
     () => allServices.filter((service) => service.active !== false && (service.providerIds || []).length > 0),
     [allServices]
   );
+  const facilityHours = ops?.schedule?.general || [];
   const customers = ops?.customers || [];
   const [form, setForm] = useState({
     customerName: "",
@@ -42,7 +44,6 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
   });
   const [busy, setBusy] = useState(false);
   const dayNames = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-  const hours = useMemo(() => Array.from({ length: 13 }, (_, index) => `${String(8 + index).padStart(2, "0")}:00`), []);
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)), [weekStart]);
   const selectedService = services.find((service) => service.id === form.serviceId) || null;
   const staffForService = useMemo(() => {
@@ -71,6 +72,37 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
       return date >= from && date <= to;
     });
   }, [appointments, weekStart]);
+
+  const hours = useMemo(() => {
+    const visibleHours = new Set(Array.from(
+      { length: 13 },
+      (_, index) => `${String(index + 8).padStart(2, "0")}:00`
+    ));
+    const addHours = (start, end) => {
+      for (let hour = start; hour < end; hour += 1) {
+        visibleHours.add(`${String(hour % 24).padStart(2, "0")}:00`);
+      }
+    };
+    for (const day of facilityHours) {
+      if (!day || day.isOpen === false) continue;
+      const open = toMinutes(day.opensAt);
+      const close = toMinutes(day.closesAt);
+      if (!Number.isFinite(open) || !Number.isFinite(close) || open === close) continue;
+      const startHour = Math.floor(open / 60);
+      const closeHour = Math.ceil(close / 60);
+      if (isOvernightShift(day)) {
+        addHours(startHour, 24);
+        addHours(0, closeHour);
+      } else {
+        addHours(startHour, closeHour);
+      }
+    }
+    for (const appointment of weekAppointments) {
+      const hour = String(appointment.time || "").slice(0, 2);
+      if (/^\d{2}$/.test(hour) && Number(hour) <= 23) visibleHours.add(`${hour}:00`);
+    }
+    return [...visibleHours].sort((left, right) => Number(left.slice(0, 2)) - Number(right.slice(0, 2)));
+  }, [facilityHours, weekAppointments]);
 
   const submit = async (event) => {
     event.preventDefault();

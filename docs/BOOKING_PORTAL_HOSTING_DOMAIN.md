@@ -46,7 +46,7 @@
    → تقويم الإدارة + بريد تأكيد
 ```
 
-**الوضع الحالي:** المسار يعمل على مخزن ops JSON محلياً. عند `MAW3ED_STORAGE=postgres` تُكتب الحجز أيضاً إلى PostgreSQL وتُدمج حجوزات PG في حساب الشرائح.
+**الوضع الحالي:** الوضع المحلي يستخدم مخزن ops JSON. عند `MAW3ED_STORAGE=postgres` تُحمّل مسارات `/api/ops/*` للمساحات المسجّلة في جدول `workspaces` بياناتها من جداول PostgreSQL المطبّعة (migration `010_normalized_workspace_ops.sql`) وتحفظ تغييراتها بمعاملة؛ كما يستمر مسار الحجز العام في مزامنة الحجز مع جداول PostgreSQL عبر `opsPg.js`.
 
 ---
 

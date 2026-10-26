@@ -862,8 +862,10 @@ async function createWorkspace(user, payload) {
       activityType: resolvedActivityType,
       locale
     });
+    await opsStore.withWorkspaceAsync(workspace.id, async () => {});
   } catch (error) {
-    console.warn("[workspace] ops seed failed:", error.message);
+    console.error("[workspace] normalized ops initialization failed:", error.message);
+    throw new Error(`تم إنشاء مساحة العمل لكن تعذّر تهيئة بيانات التشغيل في PostgreSQL: ${error.message}`);
   }
   return { ...workspace, organization_id: workspace.organization_id, labels: template.labels };
 }

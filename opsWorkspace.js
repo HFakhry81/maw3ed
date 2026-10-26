@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const { AsyncLocalStorage } = require("async_hooks");
+const { databaseConfigured, pool } = require("./db");
+const workspaceOpsPg = require("./workspaceOpsPg");
 
 const DEFAULT_WORKSPACE_ID = "local-default";
 const rootDir = __dirname;
@@ -211,11 +213,17 @@ function getContext(defaultStoreFactory) {
 }
 
 function persistContext(ctx) {
+  const request = als.getStore();
+  if (request?.postgresManaged) {
+    request.dirty = true;
+    return;
+  }
   fs.mkdirSync(path.dirname(ctx.opsFile), { recursive: true });
   fs.writeFileSync(ctx.opsFile, JSON.stringify(ctx.data, null, 2));
 }
 
 function persistHoldsContext(ctx) {
+  if (als.getStore()?.postgresManaged) return;
   saveHoldsMap(ctx.holdsFile, ctx.holds);
 }
 
@@ -227,8 +235,54 @@ function runWithWorkspace(workspaceId, defaultStoreFactory, fn) {
 
 async function runWithWorkspaceAsync(workspaceId, defaultStoreFactory, fn) {
   const id = sanitizeWorkspaceId(workspaceId);
-  ensureCache(id, defaultStoreFactory);
-  return als.run({ workspaceId: id }, fn);
+  const ctx = ensureCache(id, defaultStoreFactory);
+  if (!databaseConfigured || !pool) return als.run({ workspaceId: id }, fn);
+
+  const workspaceResult = await pool.query("SELECT id FROM workspaces WHERE id = $1", [id]);
+  if (!workspaceResult.rows[0]) return als.run({ workspaceId: id }, fn);
+
+  return workspaceOpsPg.withTransaction(id, async (client) => {
+    const previousData = JSON.parse(JSON.stringify(ctx.data));
+    const hasProfile = await workspaceOpsPg.hasProfile(client, id);
+    const storedData = hasProfile ? await workspaceOpsPg.loadStore(client, id, defaultStoreFactory) : null;
+    if (storedData) ctx.data = storedData;
+    const before = JSON.stringify(ctx.data);
+    const request = { workspaceId: id, postgresManaged: true, dirty: false };
+    try {
+      const result = await als.run(request, fn);
+      const changed = request.dirty || !hasProfile || JSON.stringify(ctx.data) !== before;
+      if (changed) {
+        await workspaceOpsPg.saveStore(client, id, ctx.data);
+        fs.mkdirSync(path.dirname(ctx.opsFile), { recursive: true });
+        fs.writeFileSync(ctx.opsFile, JSON.stringify(ctx.data, null, 2));
+      }
+      return result;
+    } catch (error) {
+      ctx.data = previousData;
+      if (error?.code === "23505" && String(error.constraint || "").toLowerCase().includes("slug")) {
+        error.statusCode = 409;
+        error.message = "هذا الرابط (slug) مستخدم في مساحة عمل أخرى";
+      }
+      throw error;
+    }
+  });
+}
+
+function isPostgresWorkspace() {
+  return Boolean(als.getStore()?.postgresManaged);
+}
+
+async function resolveWorkspaceIdBySlugAsync(slug) {
+  const clean = String(slug || "").trim().toLowerCase();
+  if (!clean) return null;
+  if (databaseConfigured && pool) {
+    const result = await pool.query(
+      "SELECT workspace_id FROM workspace_ops_profiles WHERE LOWER(slug) = $1 LIMIT 1",
+      [clean]
+    );
+    return result.rows[0]?.workspace_id || null;
+  }
+  return resolveWorkspaceIdBySlug(clean);
 }
 
 function seedWorkspace(workspaceId, { slug, businessName, activityType, locale } = {}, defaultStoreFactory) {
@@ -294,8 +348,10 @@ module.exports = {
   persistHoldsContext,
   runWithWorkspace,
   runWithWorkspaceAsync,
+  isPostgresWorkspace,
   seedWorkspace,
   currentWorkspaceId,
   replaceStoreData,
-  loadSlugIndex
+  loadSlugIndex,
+  resolveWorkspaceIdBySlugAsync
 };
