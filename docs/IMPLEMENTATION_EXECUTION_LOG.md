@@ -12,7 +12,7 @@
 | المرحلة | الحالة | النطاق/المخرج | بوابة الإغلاق |
 | --- | --- | --- | --- |
 | 0. النطاق وحصر السطح | مكتملة للنطاق التقني | ترتيب التنفيذ، جرد مجموعات API، قرارات المجال التقنية، وسجل التنفيذ | كل مجموعة لها مالك تنفيذي، مخاطر، ومجموعة قبول؛ القرارات التجارية/القانونية تسد إطلاق الميزة المرتبطة بها |
-| 1. الهوية والعزل وRBAC | مغلقة مع بوابة منتج مفتوحة | auth fail-closed خارج local، عضوية نشطة، سياسة route × method × role، حماية legacy، BOLA، أحداث workspace، وضع JSON في الإنتاج | حواجز الأمن مغلقة على revision `366e209`؛ بوابة staff↔desk attribution مقبولة مفتوحة (صلاحيات desk للموظف تبقى مرفوضة) |
+| 1. الهوية والعزل وRBAC | مغلقة (بوابة staff نُفِّذت لاحقاً في م2) | auth fail-closed خارج local، عضوية نشطة، سياسة route × method × role، حماية legacy، BOLA، أحداث workspace، وضع JSON في الإنتاج | حواجز الأمن مغلقة على revision `366e209`؛ قرار الربط الكانوني نُفِّذ في المرحلة 2 |
 | 2. سلامة البيانات والترحيل | قيد التنفيذ | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
 | 3. الحجز الذري والتوفر | لم تبدأ | قفل/قيود تداخل، holds، idempotency، حالات الإلغاء وإعادة الجدولة | اختبار تنافس للفترات والمورد والسعة مع أثر commit ذري |
 | 4. الموارد وامتدادات الخدمات | لم تبدأ | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور | قبول مستقل لـ exclusive وrental وsession_capacity وbundle |
@@ -42,7 +42,8 @@
 - افتراض الدور التشغيلي الأولي: owner/admin كاملان؛ manager تشغيل دون بيانات مالية/تجاوزات تسعير؛ staff وviewer يقتصران على قراءات إعداد غير حساسة حتى يربط حساب الموظف بملف/نطاق كائنات. تغيّر هذه السياسة يتطلب قراراً موثقاً واختبارات.
 - واجهات legacy الطبية تتبع نفس خط الأساس: manager+ للقراءة/إنشاء المواعيد؛ owner/admin فقط لـ PATCH `/api/workspace-profile`؛ viewer/staff مرفوضان حتى ربط الموظف.
 - وضع الإنتاج: المصادقة إلزامية؛ التخزين الافتراضي postgres عبر `load-env`؛ JSON مسموح لفحوص production-like المعزولة مع **عدم تجاوز العضوية**؛ التحذير عند JSON في production؛ الرفض الصارم اختياري عبر `MAW3ED_STRICT_PRODUCTION_STORAGE=1` ما لم يُضبط `MAW3ED_ALLOW_JSON_IN_PRODUCTION=1`.
-- **قرار مالك (2026-10-27):** إغلاق حواجز المرحلة 1 الأمنية مع الإبقاء على بوابة staff↔desk attribution مفتوحة ومقبولة؛ لا تُوسَّع صلاحيات desk لدور staff حتى قرار منتج لاحق. استئناف العمل من المرحلة 2.
+- **قرار مالك (2026-10-27):** إغلاق حواجز المرحلة 1 الأمنية ثم اعتماد نموذج staff↔desk الكانوني (انظر أدناه) وتنفيذه الأدنى في المرحلة 2.
+- **قرار مالك — ربط الموظف (كانوني، 2026-10-27):** حساب دخول واحد لعدة مساحات؛ ملف `staff` منفصل؛ جدول ربط `workspace_staff_links` (الفرع = `workspace_id`؛ لا كيان branch موازٍ)؛ داخل المساحة واحد-لواحد مستخدم↔موظف؛ desk لـ `staff` فقط مع ربط نشط وفي نطاق ذلك `staffId`؛ بدون ربط → رفض. التفاصيل: [`STAFF_ACCOUNT_LINKS.md`](STAFF_ACCOUNT_LINKS.md).
 - تبقى قرارات الدفع/الاسترداد، مدد الإلغاء، سياسة الرسائل، والالتزامات القانونية حسب السوق بوابات موقوفة قبل تفعيل الميزات ذات الصلة.
 
 ## سجل الإنجاز
@@ -83,11 +84,10 @@
   - `npm run test:phase1-security` (= ops-rbac + legacy-rbac + bola + workspace-events) → نجاح
   - `node --check` على `runtimePosture.js`, `workspaceEvents.js`, `opsRoutes.js`, `server.js`, `legacyAccess.js`, سكربتات الـ smoke → نجاح
 
-### المرحلة 1 — إغلاق مع بوابة مفتوحة — 2026-10-27
+### المرحلة 1 — إغلاق مع بوابة مفتوحة آنذاك — 2026-10-27
 
 - دُمجت حزم المرحلة 1 إلى `main` (squash `366e209c889f5de234d70e649819937e5e584a87`).
-- قرار المالك: إغلاق حواجز الأمن للمرحلة 1 مع توثيق بوابة **staff↔desk attribution** كمنتج مفتوح مقبول؛ لا يُوسَّع desk لـ staff حتى قرار لاحق.
-- لا تُعاد فتح المرحلة 1 لأعمال ترحيل البيانات؛ الاستئناف من المرحلة 2.
+- عند الإغلاق كانت بوابة staff↔desk مؤجّلة؛ لاحقاً حسم المالك النموذج الكانوني ونُفِّذ الحد الأدنى في حزمة المرحلة 2 `staff-links` (لا إعادة فتح المرحلة 1).
 
 ### المرحلة 2 — الحزمة الأولى: سلامة التشغيل (FK + دفتر ترحيل + مقارنة + استعادة JSON) — 2026-10-27
 
@@ -103,10 +103,19 @@
   - `node --check` على `opsIntegrity.js` وسكربتات migrate/audit/compare/smoke → نجاح
   - لم يُشغَّل migrate ضد Postgres حي في هذه البيئة (لا `DATABASE_URL`)؛ يبقى بند الإثبات المزدوج على 5433.
 
+### المرحلة 2 — الحزمة الثانية: ربط حساب الموظف (junction) وإنفاذ desk — 2026-10-27
+
+- **المفردات:** لا يوجد جدول `branch`؛ العزل التشغيلي هو `workspace_id`. الحساب متعدد المساحات عبر `workspace_members`؛ الملف المهني عبر `workspace_ops_staff` / JSON `staff`.
+- **الترحيل:** [`012_workspace_staff_links.sql`](../db/migrations/012_workspace_staff_links.sql) — جدول الربط + UNIQUE واحد-لواحد + FK مركّب إلى الموظف؛ وإضافة `workspace_members.status` ليطابق استعلام العضوية.
+- **JSON:** `data/workspaces/<id>/staff-links.json` عبر [`staffLinks.js`](../staffLinks.js).
+- **API:** سياقات الحساب `/api/account/contexts` وضمن `/api/account` و`/api/workspaces`؛ ops: `contexts` / `staff-link` / `staff-links` / `staff/:id/account-link`.
+- **إنفاذ:** دور `staff` بلا ربط نشط → 403 على desk؛ مع ربط → desk مقصور على `staffId` (today/preview/check-in/complete)؛ addons/pricing تبقى owner/admin؛ `actorStaffId` من العميل يُتجاهل لدور staff.
+- **التحقق:** `npm run test:staff-links` و`npm run test:ops-rbac` و`npm run test:bola` و`npm run test:ops-integrity` → نجاح.
+
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:ops-integrity` و`node scripts/audit-ops-integrity.js --migrations-only --json`.
-2. على Postgres محلي (5433): طبّق `npm run migrate` مرتين وتأكد أن الثانية `applied=0`.
-3. ابنِ backup/restore لجداول `workspace_ops_*` ثم قارن JSON↔PG لمساحة تجريبية حتى `ok=true`.
-4. لا توسّع صلاحيات staff/desk (بوابة المرحلة 1 المفتوحة تبقى كما هي).
-5. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج.
+1. شغّل `npm run test:phase2-data` (= ops-integrity + staff-links).
+2. على Postgres محلي (5433): طبّق `npm run migrate` مرتين (011+012) وتأكد أن الثانية `applied=0`.
+3. ابنِ backup/restore لجداول `workspace_ops_*` و`workspace_staff_links` ثم قارن JSON↔PG لمساحة تجريبية حتى `ok=true`.
+4. اختياري واجهة: منتقي سياق من `GET /api/account/contexts` عند تعدد العضويات.
+5. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج؛ لا تخترع قرارات دفع/قانونية.

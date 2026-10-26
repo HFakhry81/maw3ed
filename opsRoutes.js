@@ -3,6 +3,7 @@ const { createPlatformAdmin } = require("./platformAdmin");
 const { query, databaseConfigured } = require("./db");
 const workspaceEvents = require("./workspaceEvents");
 const { evaluateRuntimePosture } = require("./runtimePosture");
+const staffLinks = require("./staffLinks");
 
 const platformAdmin = createPlatformAdmin({ query, databaseConfigured, sendJson: () => {} });
 
@@ -46,7 +47,10 @@ const OPS_KNOWN_REQUESTS = new Set([
   "POST /api/ops/appointments",
   "PUT /api/ops/activity-profile",
   "GET /api/ops/stats",
-  "GET /api/ops/events"
+  "GET /api/ops/events",
+  "GET /api/ops/contexts",
+  "GET /api/ops/staff-link",
+  "GET /api/ops/staff-links"
 ]);
 
 function recordOpsEvent(workspaceId, event) {
@@ -62,6 +66,7 @@ function isKnownOpsRequest(requested, method) {
   return OPS_KNOWN_REQUESTS.has(`${method} ${requested}`) ||
     /^\/(?:api\/ops\/staff\/[^/]+|api\/ops\/service-categories\/[^/]+|api\/ops\/services\/[^/]+)$/.test(requested) && ["PATCH", "DELETE"].includes(method) ||
     /^\/api\/ops\/staff\/[^/]+\/(?:commission|payroll|reviews)$/.test(requested) && ["GET", "POST"].includes(method) ||
+    /^\/api\/ops\/staff\/[^/]+\/account-link$/.test(requested) && ["PUT", "DELETE"].includes(method) ||
     /^\/api\/ops\/services\/[^/]+\/providers$/.test(requested) && method === "POST" ||
     /^\/api\/ops\/services\/[^/]+\/providers\/[^/]+$/.test(requested) && method === "DELETE" ||
     /^\/api\/ops\/desk\/appointments\/[^/]+\/addons$/.test(requested) && method === "POST" ||
@@ -70,12 +75,22 @@ function isKnownOpsRequest(requested, method) {
     /^\/api\/ops\/appointments\/[^/]+\/(?:status|pricing)$/.test(requested) && method === "PATCH";
 }
 
-function isOpsRoleAllowed(requested, method, role) {
+function isOpsRoleAllowed(requested, method, role, options = {}) {
   if (!isKnownOpsRequest(requested, method)) return false;
   const requestKey = `${method} ${requested}`;
+  const staffLink = options.staffLink || null;
 
   // These endpoints contain no customer, appointment, staff, expense, or auth data.
   if (OPS_VIEWER_READS.has(requestKey) && ["owner", "admin", "manager", "staff", "viewer"].includes(role)) {
+    return true;
+  }
+
+  // Context/link introspection: any active member may read own selectable context metadata.
+  if (
+    (requested === "/api/ops/contexts" || requested === "/api/ops/staff-link") &&
+    method === "GET" &&
+    ["owner", "admin", "manager", "staff", "viewer"].includes(role)
+  ) {
     return true;
   }
 
@@ -95,12 +110,30 @@ function isOpsRoleAllowed(requested, method, role) {
     return OPS_ADMIN_ROLES.has(role);
   }
 
-  // Staff has no customer/appointment write scope until its account is linked to
-  // a staff record and object-level assignment checks exist.
-  if (role === "staff") return false;
+  // Staff account links are managed by owner/admin only.
+  if (
+    requested === "/api/ops/staff-links" && method === "GET" ||
+    /^\/api\/ops\/staff\/[^/]+\/account-link$/.test(requested)
+  ) {
+    return OPS_ADMIN_ROLES.has(role);
+  }
+
+  // Staff role: fail closed unless an active workspace staff link exists.
+  // Linked staff may use scoped desk routes only (not facility-wide or money routes).
+  if (role === "staff") {
+    if (!staffLink || staffLink.status !== "active" || !staffLink.staffId) return false;
+    if (staffLinks.isStaffForbiddenDeskMoneyRoute(requested, method)) return false;
+    return staffLinks.isDeskRoute(requested, method);
+  }
 
   // Manager can run operational flows but cannot perform owner/admin-only actions above.
   return OPS_MANAGER_ROLES.has(role);
+}
+
+function denyStaffScope() {
+  const error = new Error("Outside linked staff desk scope");
+  error.statusCode = 404;
+  return error;
 }
 
 function clientKey(req) {
@@ -186,6 +219,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     const authRequired = process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
     let workspaceRole = null;
     let actorUserId = null;
+    let actorStaffLink = null;
     if (isOps && authRequired) {
       const user = await requireAppUser(req);
       if (!user) {
@@ -209,7 +243,8 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         throw error;
       }
       workspaceRole = membership.role;
-      if (!isOpsRoleAllowed(requested, req.method, membership.role)) {
+      actorStaffLink = await staffLinks.getActiveLinkForUser(user.id, workspaceId);
+      if (!isOpsRoleAllowed(requested, req.method, membership.role, { staffLink: actorStaffLink })) {
         recordOpsEvent(workspaceId, {
           actor_id: user.id,
           role: membership.role,
@@ -217,9 +252,18 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
           target_type: "route",
           target_id: `${req.method} ${requested}`,
           outcome: "forbidden",
-          details: { reason: "role_not_allowed" }
+          details: {
+            reason: membership.role === "staff" && !actorStaffLink
+              ? "staff_link_required"
+              : "role_not_allowed",
+            staffLinkId: actorStaffLink?.id || null
+          }
         });
-        const error = new Error("This workspace role cannot perform this operation");
+        const error = new Error(
+          membership.role === "staff" && !actorStaffLink
+            ? "Staff desk access requires an active account↔staff link in this workspace"
+            : "This workspace role cannot perform this operation"
+        );
         error.statusCode = 403;
         throw error;
       }
@@ -230,6 +274,100 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     }
 
     return await ops.withWorkspaceAsync(workspaceId, async () => {
+      if (requested === "/api/ops/contexts" && req.method === "GET") {
+        // Selectable desk/ops contexts for the authenticated user.
+        // Client may suggest x-workspace-id; server still proves membership + link.
+        const membership = actorUserId ? await getUserWorkspace(actorUserId, workspaceId) : null;
+        const link = actorStaffLink || (actorUserId
+          ? await staffLinks.getActiveLinkForUser(actorUserId, workspaceId)
+          : null);
+        sendJson(res, 200, {
+          ok: true,
+          current: {
+            workspaceId,
+            role: workspaceRole || membership?.role || null,
+            staffLink: link
+              ? {
+                  id: link.id,
+                  staffId: link.staffId,
+                  roleInWorkspace: link.roleInWorkspace,
+                  status: link.status
+                }
+              : null,
+            deskAllowed: Boolean(
+              workspaceRole &&
+                workspaceRole !== "viewer" &&
+                (OPS_MANAGER_ROLES.has(workspaceRole) ||
+                  (workspaceRole === "staff" && link && link.status === "active"))
+            )
+          }
+        });
+        return true;
+      }
+
+      if (requested === "/api/ops/staff-link" && req.method === "GET") {
+        sendJson(res, 200, {
+          ok: true,
+          workspaceId,
+          staffLink: actorStaffLink
+            ? {
+                id: actorStaffLink.id,
+                staffId: actorStaffLink.staffId,
+                roleInWorkspace: actorStaffLink.roleInWorkspace,
+                status: actorStaffLink.status
+              }
+            : null
+        });
+        return true;
+      }
+
+      if (requested === "/api/ops/staff-links" && req.method === "GET") {
+        const links = await staffLinks.listWorkspaceLinks(workspaceId);
+        sendJson(res, 200, { ok: true, workspaceId, links });
+        return true;
+      }
+
+      const staffAccountLinkMatch = requested.match(/^\/api\/ops\/staff\/([^/]+)\/account-link$/);
+      if (staffAccountLinkMatch && req.method === "PUT") {
+        const body = await parseJsonBody(req);
+        const staffId = decodeURIComponent(staffAccountLinkMatch[1]);
+        const link = await staffLinks.upsertLink({
+          workspaceId,
+          userId: body.userId,
+          staffId,
+          roleInWorkspace: body.roleInWorkspace || "desk",
+          status: body.status || "active",
+          staffExists: async (_ws, id) => Boolean(ops.listStaff().find((person) => person.id === id))
+        });
+        recordOpsEvent(workspaceId, {
+          actor_id: actorUserId,
+          role: workspaceRole,
+          action: "staff_link.upsert",
+          target_type: "staff_link",
+          target_id: link.id,
+          outcome: "success",
+          details: { staffId: link.staffId, userId: link.userId, status: link.status }
+        });
+        sendJson(res, 200, { ok: true, staffLink: link });
+        return true;
+      }
+
+      if (staffAccountLinkMatch && req.method === "DELETE") {
+        const staffId = decodeURIComponent(staffAccountLinkMatch[1]);
+        const link = await staffLinks.suspendLink(workspaceId, { staffId });
+        recordOpsEvent(workspaceId, {
+          actor_id: actorUserId,
+          role: workspaceRole,
+          action: "staff_link.suspend",
+          target_type: "staff_link",
+          target_id: link.id,
+          outcome: "success",
+          details: { staffId: link.staffId, userId: link.userId }
+        });
+        sendJson(res, 200, { ok: true, staffLink: link });
+        return true;
+      }
+
       if (requested === "/api/ops/bootstrap" && req.method === "GET") {
         const canViewFinance = !workspaceRole || OPS_ADMIN_ROLES.has(workspaceRole);
         const stats = ops.getStatsSummary(localData?.appointments || []);
@@ -248,6 +386,14 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
           appointments: ops.listAppointments(),
           stats: canViewFinance ? stats : { appointments: stats.appointments, servicesCount: stats.servicesCount, staffCount: stats.staffCount, customersCount: stats.customersCount },
           activity: ops.getActivityProfile(),
+          staffLink: actorStaffLink
+            ? {
+                id: actorStaffLink.id,
+                staffId: actorStaffLink.staffId,
+                roleInWorkspace: actorStaffLink.roleInWorkspace,
+                status: actorStaffLink.status
+              }
+            : null,
           planUsage: ops.getPlanUsage()
         });
         return true;
@@ -489,33 +635,64 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       }
 
       if (requested === "/api/ops/desk/today" && req.method === "GET") {
-        sendJson(res, 200, {
-          ok: true,
-          desk: ops.listDeskToday({
-            categoryId: requestUrl.searchParams.get("categoryId") || "",
-            date: requestUrl.searchParams.get("date") || ""
-          })
+        let desk = ops.listDeskToday({
+          categoryId: requestUrl.searchParams.get("categoryId") || "",
+          date: requestUrl.searchParams.get("date") || ""
         });
+        if (workspaceRole === "staff" && actorStaffLink?.staffId) {
+          desk = staffLinks.filterDeskPayload(desk, actorStaffLink.staffId);
+        }
+        sendJson(res, 200, { ok: true, desk });
         return true;
       }
 
       if (requested === "/api/ops/desk/preview" && req.method === "POST") {
         const body = await parseJsonBody(req);
-        sendJson(res, 200, {
-          ok: true,
-          ...ops.previewCheckIn(body.token || body.checkInToken)
-        });
+        const preview = ops.previewCheckIn(body.token || body.checkInToken);
+        if (
+          workspaceRole === "staff" &&
+          actorStaffLink?.staffId &&
+          !staffLinks.appointmentInStaffScope(preview.appointment, actorStaffLink.staffId, {
+            allowUnassigned: true
+          })
+        ) {
+          throw denyStaffScope();
+        }
+        sendJson(res, 200, { ok: true, ...preview });
         return true;
       }
 
       if (requested === "/api/ops/desk/check-in" && req.method === "POST") {
         const body = await parseJsonBody(req);
+        const token = body.token || body.checkInToken;
+        const preview = ops.previewCheckIn(token);
+        let actorStaffId = body.actorStaffId || "";
+        let updates = body.updates || null;
+        if (workspaceRole === "staff" && actorStaffLink?.staffId) {
+          if (
+            !staffLinks.appointmentInStaffScope(preview.appointment, actorStaffLink.staffId, {
+              allowUnassigned: true
+            })
+          ) {
+            throw denyStaffScope();
+          }
+          // Never trust client actorStaffId for staff role — force linked record.
+          actorStaffId = actorStaffLink.staffId;
+          if (!String(preview.appointment.staffId || "").trim()) {
+            updates = { ...(updates || {}), staffId: actorStaffLink.staffId };
+          } else if (
+            updates?.staffId &&
+            String(updates.staffId) !== String(actorStaffLink.staffId)
+          ) {
+            throw denyStaffScope();
+          }
+        }
         sendJson(res, 200, {
           ok: true,
           appointment: ops.checkInByToken({
-            token: body.token || body.checkInToken,
-            actorStaffId: body.actorStaffId || "",
-            updates: body.updates || null
+            token,
+            actorStaffId,
+            updates
           })
         });
         return true;
@@ -545,10 +722,21 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
 
       const deskCompleteMatch = requested.match(/^\/api\/ops\/desk\/appointments\/([^/]+)\/complete$/);
       if (deskCompleteMatch && req.method === "POST") {
+        const appointmentId = deskCompleteMatch[1];
+        if (workspaceRole === "staff" && actorStaffLink?.staffId) {
+          const appointment = ops.listAppointments().find((item) => item.id === appointmentId);
+          if (
+            !staffLinks.appointmentInStaffScope(appointment, actorStaffLink.staffId, {
+              allowUnassigned: false
+            })
+          ) {
+            throw denyStaffScope();
+          }
+        }
         const body = await parseJsonBody(req);
         sendJson(res, 200, {
           ok: true,
-          appointment: ops.completeDeskVisit(deskCompleteMatch[1], body)
+          appointment: ops.completeDeskVisit(appointmentId, body)
         });
         return true;
       }
@@ -648,4 +836,4 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
   }
 }
 
-module.exports = { tryHandleOpsApi, isOpsRoleAllowed };
+module.exports = { tryHandleOpsApi, isOpsRoleAllowed, isKnownOpsRequest };

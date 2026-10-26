@@ -6,24 +6,28 @@
     "docs/IMPLEMENTATION_ROADMAP.md",
     "docs/IMPLEMENTATION_EXECUTION_LOG.md",
     "docs/SECURITY_ROUTE_INVENTORY.md",
-    "docs/WORKSPACE_OPS_DATA_INTEGRITY.md"
+    "docs/WORKSPACE_OPS_DATA_INTEGRITY.md",
+    "docs/STAFF_ACCOUNT_LINKS.md"
   ],
   "resume_pointer": {
     "phase": 2,
-    "package": "integrity-baseline",
+    "package": "integrity-baseline+staff-links",
     "next_steps": [
-      "Run migrate twice against local Postgres (port 5433) and confirm second run applies 0 pending files via schema_migrations",
-      "Add PG dump/restore for workspace_ops_* then compare JSON↔PG for a demo workspace until ok=true",
-      "Clean or quarantine medical-demo seed orphans before enforcing audit on seeds in CI",
-      "Keep staff↔desk attribution denied (Phase 1 open product gate) — do not expand staff desk permissions here"
+      "Run migrate twice against local Postgres (port 5433) including 011+012; confirm second run applies 0 pending via schema_migrations",
+      "Add PG dump/restore for workspace_ops_* (+ workspace_staff_links) then compare JSON↔PG for a managed workspace until ok=true",
+      "Optional UI: context selector using GET /api/account/contexts when multiple memberships exist",
+      "Do not invent multi-staff-per-user-in-one-workspace or cross-workspace staff sharing"
     ]
   },
-  "open_product_gates": [
+  "open_product_gates": [],
+  "decisions": [
     {
       "id": "staff_desk_attribution",
       "phase_origin": 1,
-      "status": "accepted_open",
-      "summary": "Staff role remains denied for desk/customer mutations until account↔staff-record linking is product-approved"
+      "status": "decided_implemented_minimal",
+      "decided_at": "2026-10-27",
+      "summary": "Canonical model: login may span many workspaces; staff profile separate; junction workspace_staff_links is one-to-one per workspace (user↔staff); branch=workspace_id; desk only with active link and scoped to that staffId; unlinked staff fail-closed",
+      "doc": "docs/STAFF_ACCOUNT_LINKS.md"
     }
   ],
   "phases": [
@@ -49,42 +53,23 @@
         {
           "id": "ops-rbac",
           "status": "complete_technical",
-          "summary": "/api/ops/* route×method×role policy + membership resolver for DB+JSON",
-          "evidence_commands": [
-            "npm run test:ops-rbac",
-            "node --check opsRoutes.js",
-            "node --check server.js"
-          ]
+          "summary": "/api/ops/* route×method×role policy + membership resolver for DB+JSON"
         },
         {
           "id": "legacy-apis-dev-events-uploads",
           "status": "complete_technical",
-          "summary": "Legacy medical APIs membership+role barriers; development-events local-only + detail sanitization; private uploads gated; branding images remain public",
-          "evidence_commands": [
-            "npm run test:ops-rbac",
-            "npm run test:legacy-rbac",
-            "node --check legacyAccess.js",
-            "node --check server.js",
-            "node --check opsRoutes.js"
-          ]
+          "summary": "Legacy medical APIs membership+role barriers; development-events local-only; uploads gated"
         },
         {
           "id": "bola-workspace-events-production-posture",
           "status": "complete_technical",
-          "summary": "BOLA/function/property smokes; workspace events JSONL + GET /api/ops/events; production JSON posture (membership never skipped; warn + optional strict refuse)",
-          "evidence_commands": [
-            "npm run test:phase1-security",
-            "node --check runtimePosture.js",
-            "node --check workspaceEvents.js",
-            "node --check opsRoutes.js",
-            "node --check server.js"
-          ]
+          "summary": "BOLA smokes; workspace events JSONL; production JSON posture"
         }
       ],
       "open_gate": {
         "id": "staff_desk_attribution",
-        "status": "accepted_open",
-        "summary": "Owner accepted closing Phase 1 security barriers with staff↔desk attribution deferred; staff desk actions stay denied"
+        "status": "resolved_in_phase_2",
+        "summary": "Originally deferred at Phase 1 close; owner decided canonical junction model and minimal enforcement shipped in Phase 2 package staff-links"
       },
       "production_json_posture": {
         "auth_required_in_production": true,
@@ -106,15 +91,25 @@
           "summary": "Composite FK inventory + migration 011; schema_migrations ledger; JSON orphan audit/compare; ops session backup↔restore smoke; SoT doc",
           "evidence_commands": [
             "npm run test:ops-integrity",
-            "node scripts/audit-ops-integrity.js --migrations-only --json",
-            "node --check opsIntegrity.js",
-            "node --check scripts/migrate.js"
+            "node scripts/audit-ops-integrity.js --migrations-only --json"
+          ]
+        },
+        {
+          "id": "staff-links",
+          "status": "complete_technical",
+          "summary": "workspace_staff_links migration 012 + JSON staff-links.json; context APIs; desk RBAC scoped to linked staffId; unlinked staff fail-closed",
+          "evidence_commands": [
+            "npm run test:staff-links",
+            "npm run test:ops-rbac",
+            "node --check staffLinks.js",
+            "node --check opsRoutes.js",
+            "node --check server.js"
           ]
         }
       ],
       "remaining_to_close": [
-        "Idempotent migrate proven twice on live local Postgres",
-        "PG workspace_ops_* backup/restore + JSON↔PG compare ok=true for a managed workspace",
+        "Idempotent migrate proven twice on live local Postgres (011+012)",
+        "PG workspace_ops_* (+ staff links) backup/restore + JSON↔PG compare ok=true",
         "No orphan records under enforced audit for accepted demo/migration datasets"
       ]
     },
@@ -137,7 +132,7 @@
     "phase_1_bola_full_suite": true,
     "phase_1_workspace_events_log": true,
     "phase_1_production_json_posture": true,
-    "phase_1_staff_attribution": false,
+    "phase_1_staff_attribution": true,
     "phase_1_closed": true,
     "phase_1_closed_with_open_gate": true,
     "phase_2_started": true,
@@ -145,6 +140,7 @@
     "phase_2_migration_ledger": true,
     "phase_2_json_compare_audit": true,
     "phase_2_json_backup_restore_drill": true,
+    "phase_2_staff_links": true,
     "phase_2_pg_migrate_twice": false,
     "phase_2_pg_ops_backup_restore": false,
     "phase_2_closed": false

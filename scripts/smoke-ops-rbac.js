@@ -60,6 +60,18 @@ async function main() {
     assert(!isOpsRoleAllowed("/api/ops/bootstrap", "GET", "viewer"), "viewer must not read bootstrap data");
     assert(!isOpsRoleAllowed("/api/ops/customers", "GET", "staff"), "staff must not list all customers");
     assert(!isOpsRoleAllowed("/api/ops/desk/check-in", "POST", "staff"), "staff must not check in until account-to-staff attribution exists");
+    assert(
+      isOpsRoleAllowed("/api/ops/desk/check-in", "POST", "staff", {
+        staffLink: { status: "active", staffId: "staff-linked-1" }
+      }),
+      "linked staff may use desk check-in"
+    );
+    assert(
+      !isOpsRoleAllowed("/api/ops/desk/appointments/appt-1/addons", "POST", "staff", {
+        staffLink: { status: "active", staffId: "staff-linked-1" }
+      }),
+      "linked staff must not mutate desk pricing/addons"
+    );
     assert(!isOpsRoleAllowed("/api/ops/expenses", "GET", "manager"), "manager must not read workspace finances");
     assert(!isOpsRoleAllowed("/api/ops/notifications", "GET", "manager"), "manager must not read notification configuration");
     assert(!isOpsRoleAllowed("/api/ops/stats", "GET", "manager"), "manager must not read financial aggregates");
