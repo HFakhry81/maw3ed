@@ -5,15 +5,16 @@
 ```text
 React/Vite + صفحات HTML ──> Node.js HTTP server (server.js)
                                   ├── /api/admin/* : Clerk + platform roles
-                                  ├── /api/ops/*   : workspace ID من العميل، JSON/opsStore
+                                  ├── /api/ops/*   : workspace ID من العميل؛ مساحات DB عبر workspaceOpsPg، مع JSON/legacy fallback
                                   ├── /api/* قديمة : بعض المسارات تعتمد على معرف workspace الاختياري
                                   └── ملفات static / uploads
 
-opsStore/opsWorkspace ──> ذاكرة العملية + ملفات JSON لكل workspace
-opsPg                  ──> مزامنة جزء من الحجوزات والجداول إلى PostgreSQL
+opsStore/opsWorkspace ──> API مجال موحدة + JSON fallback/cache
+workspaceOpsPg         ──> تحميل/حفظ مطبع داخل transaction لمساحات workspace في DB
+opsPg                  ──> مسار توافق أقدم للحجز مع organization/booking_pages
 ```
 
-الخادم يستخدم `http.createServer` ومسارات يدوية؛ لا تظهر طبقة middleware مركزية تجمع المصادقة، التفويض، الرصد، وحدود الموارد. `db.js` يفعّل PostgreSQL فقط إذا ضبط `MAW3ED_STORAGE=postgres` و`DATABASE_URL` ووجود حزمة `pg`. لا تمثل عبارة Postgres mode دليلاً على نقل كل حالة `opsStore` إلى قاعدة البيانات.
+الخادم يستخدم `http.createServer` ومسارات يدوية؛ لا تظهر طبقة middleware مركزية تجمع المصادقة، التفويض، الرصد، وحدود الموارد. migration 010 و`workspaceOpsPg` يوفّران تخزيناً مطبعاً لمساحات workspace المسجلة في PostgreSQL داخل معاملة وقفل advisory لكل workspace، بينما تستمر مسارات محلية وlegacy وتبقى نسخة JSON مساعدة. `saveStore` يعيد بناء snapshot واسعاً لكل workspace؛ يلزم تدقيق مسارات القراءة/الكتابة والأداء قبل اعتباره مساراً إنتاجياً نهائياً. كما أن schema الحالي لا يتضمن سعة جلسات جماعية أو موارد قابلة للحجز.
 
 ## 2. العمارة الهدفية المقترحة
 
