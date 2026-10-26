@@ -443,7 +443,8 @@ async function requirePlatformAdmin(req) {
 async function getUserWorkspace(userId, workspaceId = null) {
   if (!databaseConfigured) {
     const rows = loadLocalClerkWorkspaces()[userId] || [];
-    return (workspaceId ? rows.find((item) => item.id === workspaceId) : rows[0]) || null;
+    const row = (workspaceId ? rows.find((item) => item.id === workspaceId) : rows[0]) || null;
+    return row?.status === "active" && row.role ? row : null;
   }
   const result = await query(
     `SELECT w.*, ws.role, o.id AS organization_id, o.activity_type AS organization_activity_type,
@@ -457,6 +458,8 @@ async function getUserWorkspace(userId, workspaceId = null) {
        WHERE workspace_id = w.id AND status IN ('active', 'past_due')
        ORDER BY created_at DESC LIMIT 1), 'free')
      WHERE ($2::text IS NULL OR w.id = $2)
+       AND w.status = 'active'
+       AND ws.status = 'active'
      ORDER BY w.created_at ASC LIMIT 1`,
     [userId, workspaceId]
   );

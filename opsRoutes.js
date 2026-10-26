@@ -5,6 +5,90 @@ const { query, databaseConfigured } = require("./db");
 const platformAdmin = createPlatformAdmin({ query, databaseConfigured, sendJson: () => {} });
 
 const rateBuckets = new Map();
+const OPS_ADMIN_ROLES = new Set(["owner", "admin"]);
+const OPS_MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
+const OPS_VIEWER_READS = new Set([
+  "GET /api/ops/activity-templates",
+  "GET /api/ops/working-schedule"
+]);
+const OPS_KNOWN_REQUESTS = new Set([
+  "GET /api/ops/bootstrap",
+  "GET /api/ops/customers",
+  "POST /api/ops/customers",
+  "POST /api/ops/customer-categories",
+  "GET /api/ops/staff",
+  "POST /api/ops/staff",
+  "GET /api/ops/service-categories",
+  "POST /api/ops/service-categories",
+  "GET /api/ops/services",
+  "POST /api/ops/services",
+  "POST /api/ops/uploads/logo",
+  "POST /api/ops/uploads/image",
+  "GET /api/ops/activity-templates",
+  "GET /api/ops/working-schedule",
+  "PUT /api/ops/working-hours",
+  "POST /api/ops/closed-days",
+  "POST /api/ops/specific-days",
+  "GET /api/ops/booking-page",
+  "PUT /api/ops/booking-page",
+  "GET /api/ops/desk/today",
+  "POST /api/ops/desk/preview",
+  "POST /api/ops/desk/check-in",
+  "GET /api/ops/calendar-preferences",
+  "PUT /api/ops/calendar-preferences",
+  "GET /api/ops/notifications",
+  "PUT /api/ops/notifications",
+  "GET /api/ops/expenses",
+  "POST /api/ops/expenses",
+  "GET /api/ops/appointments",
+  "POST /api/ops/appointments",
+  "PUT /api/ops/activity-profile",
+  "GET /api/ops/stats"
+]);
+
+function isKnownOpsRequest(requested, method) {
+  return OPS_KNOWN_REQUESTS.has(`${method} ${requested}`) ||
+    /^\/(?:api\/ops\/staff\/[^/]+|api\/ops\/service-categories\/[^/]+|api\/ops\/services\/[^/]+)$/.test(requested) && ["PATCH", "DELETE"].includes(method) ||
+    /^\/api\/ops\/staff\/[^/]+\/(?:commission|payroll|reviews)$/.test(requested) && ["GET", "POST"].includes(method) ||
+    /^\/api\/ops\/services\/[^/]+\/providers$/.test(requested) && method === "POST" ||
+    /^\/api\/ops\/services\/[^/]+\/providers\/[^/]+$/.test(requested) && method === "DELETE" ||
+    /^\/api\/ops\/desk\/appointments\/[^/]+\/addons$/.test(requested) && method === "POST" ||
+    /^\/api\/ops\/desk\/appointments\/[^/]+\/lines\/[^/]+\/pricing$/.test(requested) && method === "PATCH" ||
+    /^\/api\/ops\/desk\/appointments\/[^/]+\/complete$/.test(requested) && method === "POST" ||
+    /^\/api\/ops\/appointments\/[^/]+\/(?:status|pricing)$/.test(requested) && method === "PATCH";
+}
+
+function isOpsRoleAllowed(requested, method, role) {
+  if (!isKnownOpsRequest(requested, method)) return false;
+  const requestKey = `${method} ${requested}`;
+
+  // These endpoints contain no customer, appointment, staff, expense, or auth data.
+  if (OPS_VIEWER_READS.has(requestKey) && ["owner", "admin", "manager", "staff", "viewer"].includes(role)) {
+    return true;
+  }
+
+  // Workspace settings that define the public identity/activity are owner/admin only.
+  if (requested === "/api/ops/activity-profile" && method === "PUT") {
+    return OPS_ADMIN_ROLES.has(role);
+  }
+
+  // Expenses and appointment financial overrides are restricted to workspace admins.
+  if (
+    requested === "/api/ops/expenses" ||
+    requested === "/api/ops/notifications" ||
+    requested === "/api/ops/stats" ||
+    /^\/api\/ops\/(?:appointments\/[^/]+\/pricing|desk\/appointments\/[^/]+\/lines\/[^/]+\/pricing|desk\/appointments\/[^/]+\/addons)$/.test(requested)
+  ) {
+    return OPS_ADMIN_ROLES.has(role);
+  }
+
+  // Staff has no customer/appointment write scope until its account is linked to
+  // a staff record and object-level assignment checks exist.
+  if (role === "staff") return false;
+
+  // Manager can run operational flows but cannot perform owner/admin-only actions above.
+  return OPS_MANAGER_ROLES.has(role);
+}
 
 function clientKey(req) {
   return String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "local")
@@ -77,6 +161,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     }
 
     const authRequired = process.env.MAW3ED_ENV === "production" || process.env.MAW3ED_REQUIRE_AUTH === "1";
+    let workspaceRole = null;
     if (isOps && authRequired) {
       const user = await requireAppUser(req);
       if (!user) {
@@ -84,13 +169,17 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         error.statusCode = 401;
         throw error;
       }
-      if (databaseConfigured) {
-        const membership = await getUserWorkspace(user.id, workspaceId);
-        if (!membership) {
-          const error = new Error("This workspace is not available for the current account");
-          error.statusCode = 403;
-          throw error;
-        }
+      const membership = await getUserWorkspace(user.id, workspaceId);
+      if (!membership) {
+        const error = new Error("This workspace is not available for the current account");
+        error.statusCode = 403;
+        throw error;
+      }
+      workspaceRole = membership.role;
+      if (!isOpsRoleAllowed(requested, req.method, membership.role)) {
+        const error = new Error("This workspace role cannot perform this operation");
+        error.statusCode = 403;
+        throw error;
       }
     }
 
@@ -100,6 +189,8 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
 
     return await ops.withWorkspaceAsync(workspaceId, async () => {
       if (requested === "/api/ops/bootstrap" && req.method === "GET") {
+        const canViewFinance = !workspaceRole || OPS_ADMIN_ROLES.has(workspaceRole);
+        const stats = ops.getStatsSummary(localData?.appointments || []);
         sendJson(res, 200, {
           ok: true,
           workspaceId: ops.getCurrentWorkspaceId(),
@@ -111,10 +202,9 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
           schedule: ops.getWorkingSchedule(),
           bookingPage: ops.getBookingPage(),
           calendarPreferences: ops.getCalendarPreferences(),
-          notifications: ops.getNotificationSettings(),
-          expenses: ops.listExpenses(),
+          ...(canViewFinance ? { notifications: ops.getNotificationSettings(), expenses: ops.listExpenses() } : {}),
           appointments: ops.listAppointments(),
-          stats: ops.getStatsSummary(localData?.appointments || []),
+          stats: canViewFinance ? stats : { appointments: stats.appointments, servicesCount: stats.servicesCount, staffCount: stats.staffCount, customersCount: stats.customersCount },
           activity: ops.getActivityProfile(),
           planUsage: ops.getPlanUsage()
         });
@@ -474,4 +564,4 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
   }
 }
 
-module.exports = { tryHandleOpsApi };
+module.exports = { tryHandleOpsApi, isOpsRoleAllowed };
