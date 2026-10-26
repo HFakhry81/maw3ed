@@ -43,4 +43,4 @@ Practices in this slice:
 
 ## Related
 
-- [`public-booking-page.md`](public-booking-page.md) · [`architecture-spec.md`](architecture-spec.md) · [`build-plan.md`](build-plan.md) · [`platform-capabilities.md`](platform-capabilities.md)
+- [`public-booking-page.md`](public-booking-page.md) · [`ARCHITECTURE_AND_SECURITY_BASELINE.md`](ARCHITECTURE_AND_SECURITY_BASELINE.md) · [`IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md) · [`PRODUCT_AND_PLATFORM_SPEC.md`](PRODUCT_AND_PLATFORM_SPEC.md)

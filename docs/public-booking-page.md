@@ -50,4 +50,4 @@ Full portal + VPS + DNS/SSL + notification/persistence gaps:
 
 ## Related
 
-- [`build-plan.md`](build-plan.md) · [`platform-capabilities.md`](platform-capabilities.md) · [`architecture-spec.md`](architecture-spec.md)
+- [`IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md) · [`PRODUCT_AND_PLATFORM_SPEC.md`](PRODUCT_AND_PLATFORM_SPEC.md) · [`ARCHITECTURE_AND_SECURITY_BASELINE.md`](ARCHITECTURE_AND_SECURITY_BASELINE.md)
