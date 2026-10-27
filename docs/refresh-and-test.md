@@ -35,6 +35,17 @@ npm run update:all
 npm run ops:backup
 npm run ops:restore
 npm run ops:backups
+npm run ops:pg-backup
+npm run ops:pg-restore
+npm run ops:pg-backups
+```
+
+Postgres ops drill (يتطلب `MAW3ED_STORAGE=postgres` و`DATABASE_URL`):
+
+```bash
+npm run test:ops-pg-backup          # يتخطى بوضوح إن لم يتوفر DB
+npm run test:ops-pg-backup:full     # migrate مرتين + backup/restore/compare
+npm run test:atomic-booking         # المرحلة 3 — حجز ذري JSON
 ```
 
 ## قائمة Windows التفاعلية

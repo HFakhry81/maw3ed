@@ -6,6 +6,7 @@ const opsWorkspace = require("./opsWorkspace");
 const shiftHours = require("./shiftHours");
 const opsDesk = require("./opsDesk");
 const activityTemplates = require("./activityTemplatesCatalog");
+const bookingAtomic = require("./bookingAtomic");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -147,6 +148,9 @@ const slotHolds = {
   set(key, value) {
     ctx().holds.set(key, value);
     return this;
+  },
+  has(key) {
+    return ctx().holds.has(key);
   },
   delete(key) {
     return ctx().holds.delete(key);
@@ -1326,29 +1330,46 @@ function fromMinutes(total) {
 }
 
 function purgeExpiredHolds(now = Date.now()) {
-  let changed = false;
-  for (const [key, expiresAt] of slotHolds.entries()) {
-    if (expiresAt <= now) {
-      slotHolds.delete(key);
-      changed = true;
-    }
-  }
-  if (changed) persistHolds();
+  bookingAtomic.purgeExpiredHoldsOnce(slotHolds, now, persistHolds);
 }
 
 function holdKey(staffId, date, time) {
-  return `${staffId}|${date}|${time}`;
+  return bookingAtomic.holdKey(staffId, date, time);
 }
 
 function rangesOverlap(startA, endA, startB, endB) {
-  return startA < endB && startB < endA;
+  return bookingAtomic.rangesOverlap(startA, endA, startB, endB);
 }
 
 function appointmentBlockMinutes(appointment) {
   const service = store.services.find((item) => item.id === appointment.serviceId);
-  const duration = Number(appointment.durationMinutes || service?.durationMinutes || 30);
-  const buffer = Number(service?.bufferMinutes || 0);
-  return duration + buffer;
+  return bookingAtomic.serviceBlockMinutes(service, appointment);
+}
+
+async function cancelSlotHold({ staffId, date, time, slug = "" } = {}) {
+  const cleanStaffId = String(staffId || "");
+  const cleanDate = String(date || "");
+  const cleanTime = String(time || "");
+  const result = bookingAtomic.releaseHoldOnce(
+    slotHolds,
+    { staffId: cleanStaffId, date: cleanDate, time: cleanTime },
+    persistHolds
+  );
+  let pgFreed = false;
+  if (opsPg.isOpsPgEnabled()) {
+    try {
+      await opsPg.releaseSlotHold({
+        staffId: cleanStaffId || "any",
+        date: cleanDate,
+        time: cleanTime,
+        slug: slug || store.bookingPage?.slug || ""
+      });
+      pgFreed = true;
+    } catch (error) {
+      console.warn("[ops] postgres hold cancel failed:", error.message);
+    }
+  }
+  return { ok: true, freed: result.freed || pgFreed, localFreed: result.freed, pgFreed };
 }
 
 function listStaffSlotsForDay({ staffId, date, blockMinutes, ignoreHolds = false, extraBlocked = [] }) {
@@ -1548,77 +1569,100 @@ async function holdPublicSlot(slug, payload = {}) {
 }
 
 async function createPublicAppointment(slug, payload = {}) {
-  if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
-    fail("صفحة الحجز غير متاحة", 404);
-  }
-  const serviceId = String(payload.serviceId || "");
-  const service = store.services.find((item) => item.id === serviceId);
-  if (!service || !service.publicBooking || service.active === false) fail("الخدمة غير متاحة للحجز العام", 400);
-  assertServiceBookable(service);
-  const date = String(payload.date || "");
-  const time = String(payload.time || "");
-  let staffId = String(payload.staffId || "");
-  // Drop the booker's soft hold before availability re-check so they are not blocked by themselves.
-  if (staffId && staffId !== "any") {
-    slotHolds.delete(holdKey(staffId, date, time));
-    persistHolds();
-  } else {
-    purgeExpiredHolds();
-    for (const key of [...slotHolds.keys()]) {
-      const [, holdDate, holdTime] = key.split("|");
-      if (holdDate === date && holdTime === time) slotHolds.delete(key);
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () => {
+    if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
+      fail("صفحة الحجز غير متاحة", 404);
     }
-    persistHolds();
-  }
-  if (opsPg.isOpsPgEnabled()) {
-    try {
-      await opsPg.releaseSlotHold({ staffId: staffId || "any", date, time, slug });
-    } catch (error) {
-      console.warn("[ops] postgres hold release failed:", error.message);
+    const idempotencyKey = bookingAtomic.normalizeIdempotencyKey(payload.idempotencyKey);
+    if (idempotencyKey) {
+      const existing = bookingAtomic.findAppointmentByIdempotencyKey(
+        store.appointments,
+        idempotencyKey
+      );
+      if (existing) return existing;
     }
-  }
-  if (!staffId || staffId === "any") {
-    const available = await listPublicSlots(slug, { date, serviceId, staffId: "any", ignoreHolds: true });
-    const match = available.slots.find((slot) => slot.time === time);
-    if (!match) fail("لا يوجد موظف متاح في هذا الوقت", 409);
-    staffId = match.staffId;
-  } else {
-    const available = await listPublicSlots(slug, { date, serviceId, staffId, ignoreHolds: true });
-    if (!available.slots.some((slot) => slot.time === time)) fail("هذا الوقت لم يعد متاحاً", 409);
-  }
-  const appointment = createAppointment({
-    ...payload,
-    serviceId,
-    staffId,
-    date,
-    time,
-    customerName: payload.customerName || payload.patientName,
-    phone: payload.phone,
-    email: payload.email,
-    paymentMethod: payload.paymentMethod || "cash"
-  });
-
-  if (opsPg.isOpsPgEnabled() && !opsWorkspace.isPostgresWorkspace()) {
-    const staff = store.staff.find((person) => person.id === appointment.staffId);
-    const category = store.serviceCategories.find((item) => item.id === service.categoryId);
-    try {
-      await opsPg.persistPublicAppointment({
-        slug,
-        appointment,
-        service,
-        staff,
-        phone: payload.phone,
-        email: payload.email,
-        categoryName: category?.name || service.categoryId
+    const serviceId = String(payload.serviceId || "");
+    const service = store.services.find((item) => item.id === serviceId);
+    if (!service || !service.publicBooking || service.active === false) {
+      fail("الخدمة غير متاحة للحجز العام", 400);
+    }
+    assertServiceBookable(service);
+    const date = String(payload.date || "");
+    const time = String(payload.time || "");
+    let staffId = String(payload.staffId || "");
+    // Drop the booker's soft hold before availability re-check so they are not blocked by themselves.
+    if (staffId && staffId !== "any") {
+      bookingAtomic.releaseHoldOnce(slotHolds, { staffId, date, time }, persistHolds);
+    } else {
+      purgeExpiredHolds();
+      for (const key of [...slotHolds.keys()]) {
+        const [, holdDate, holdTime] = key.split("|");
+        if (holdDate === date && holdTime === time) slotHolds.delete(key);
+      }
+      persistHolds();
+    }
+    if (opsPg.isOpsPgEnabled()) {
+      try {
+        await opsPg.releaseSlotHold({ staffId: staffId || "any", date, time, slug });
+      } catch (error) {
+        console.warn("[ops] postgres hold release failed:", error.message);
+      }
+    }
+    if (!staffId || staffId === "any") {
+      const available = await listPublicSlots(slug, {
+        date,
+        serviceId,
+        staffId: "any",
+        ignoreHolds: true
       });
-    } catch (error) {
-      store.appointments = store.appointments.filter((item) => item.id !== appointment.id);
-      persist();
-      throw error;
+      const match = available.slots.find((slot) => slot.time === time);
+      if (!match) fail("لا يوجد موظف متاح في هذا الوقت", 409);
+      staffId = match.staffId;
+    } else {
+      const available = await listPublicSlots(slug, {
+        date,
+        serviceId,
+        staffId,
+        ignoreHolds: true
+      });
+      if (!available.slots.some((slot) => slot.time === time)) fail("هذا الوقت لم يعد متاحاً", 409);
     }
-  }
+    const appointment = createAppointment({
+      ...payload,
+      idempotencyKey: idempotencyKey || undefined,
+      serviceId,
+      staffId,
+      date,
+      time,
+      customerName: payload.customerName || payload.patientName,
+      phone: payload.phone,
+      email: payload.email,
+      paymentMethod: payload.paymentMethod || "cash"
+    });
 
-  return appointment;
+    if (opsPg.isOpsPgEnabled() && !opsWorkspace.isPostgresWorkspace()) {
+      const staff = store.staff.find((person) => person.id === appointment.staffId);
+      const category = store.serviceCategories.find((item) => item.id === service.categoryId);
+      try {
+        await opsPg.persistPublicAppointment({
+          slug,
+          appointment,
+          service,
+          staff,
+          phone: payload.phone,
+          email: payload.email,
+          categoryName: category?.name || service.categoryId
+        });
+      } catch (error) {
+        store.appointments = store.appointments.filter((item) => item.id !== appointment.id);
+        persist();
+        throw error;
+      }
+    }
+
+    return appointment;
+  });
 }
 
 function updateAppointmentStatus(id, status) {
@@ -1720,6 +1764,11 @@ function listAppointments({ from = "", to = "" } = {}) {
 
 function createAppointment(payload) {
   assertPlanCapacity("appointments");
+  const idempotencyKey = bookingAtomic.normalizeIdempotencyKey(payload.idempotencyKey);
+  if (idempotencyKey) {
+    const existing = bookingAtomic.findAppointmentByIdempotencyKey(store.appointments, idempotencyKey);
+    if (existing) return existing;
+  }
   const customerName = String(payload.customerName || payload.patientName || "").trim();
   const date = String(payload.date || "");
   const time = String(payload.time || "");
@@ -1748,11 +1797,14 @@ function createAppointment(payload) {
     ignoreHolds: true
   });
   if (!availableTimes.includes(time)) fail("الموظف غير متاح في هذا الوقت أو خارج ساعات العمل", 409);
-  const collision = store.appointments.find((item) => {
-    if (item.date !== date || item.staffId !== staffId || item.status === "cancelled") return false;
-    const otherStart = toMinutes(item.time);
-    const otherEnd = otherStart + appointmentBlockMinutes(item);
-    return rangesOverlap(start, end, otherStart, otherEnd);
+  // Stronger than equal-start-only: any overlapping [start, end+buffer) collides.
+  const collision = bookingAtomic.findStaffOverlap({
+    appointments: store.appointments,
+    services: store.services,
+    staffId,
+    date,
+    startMinutes: start,
+    endMinutes: end
   });
   if (collision) fail("هذا الموظف محجوز في نفس الوقت", 409);
 
@@ -1817,9 +1869,20 @@ function createAppointment(payload) {
     visitLog: [],
     createdAt: new Date().toISOString()
   };
+  if (idempotencyKey) appointment.idempotencyKey = idempotencyKey;
+  // Re-check idempotency after building customer (another waiter may have committed).
+  if (idempotencyKey) {
+    const raced = bookingAtomic.findAppointmentByIdempotencyKey(store.appointments, idempotencyKey);
+    if (raced) return raced;
+  }
   store.appointments.push(appointment);
   persist();
   return appointment;
+}
+
+function createAppointmentAsync(payload) {
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () => createAppointment(payload));
 }
 
 function listDeskToday({ categoryId = "", date = "" } = {}) {
@@ -2352,6 +2415,7 @@ module.exports = {
   getPublicBooking,
   listPublicSlots,
   holdPublicSlot,
+  cancelSlotHold,
   createPublicAppointment,
   updateAppointmentStatus,
   getCalendarPreferences,
@@ -2362,7 +2426,10 @@ module.exports = {
   createExpense,
   listAppointments,
   createAppointment,
+  createAppointmentAsync,
   setAppointmentPricing,
+  rangesOverlap,
+  appointmentBlockMinutes,
   listDeskToday,
   getPublicPass,
   previewCheckIn,

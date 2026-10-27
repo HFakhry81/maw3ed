@@ -13,8 +13,8 @@
 | --- | --- | --- | --- |
 | 0. النطاق وحصر السطح | مكتملة للنطاق التقني | ترتيب التنفيذ، جرد مجموعات API، قرارات المجال التقنية، وسجل التنفيذ | كل مجموعة لها مالك تنفيذي، مخاطر، ومجموعة قبول؛ القرارات التجارية/القانونية تسد إطلاق الميزة المرتبطة بها |
 | 1. الهوية والعزل وRBAC | مغلقة (بوابة staff نُفِّذت لاحقاً في م2) | auth fail-closed خارج local، عضوية نشطة، سياسة route × method × role، حماية legacy، BOLA، أحداث workspace، وضع JSON في الإنتاج | حواجز الأمن مغلقة على revision `366e209`؛ قرار الربط الكانوني نُفِّذ في المرحلة 2 |
-| 2. سلامة البيانات والترحيل | قيد التنفيذ | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
-| 3. الحجز الذري والتوفر | لم تبدأ | قفل/قيود تداخل، holds، idempotency، حالات الإلغاء وإعادة الجدولة | اختبار تنافس للفترات والمورد والسعة مع أثر commit ذري |
+| 2. سلامة البيانات والترحيل | مكتملة تقنياً | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore لـ `workspace_ops_*` + staff links | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
+| 3. الحجز الذري والتوفر | قيد التنفيذ (حزمة JSON الأولى) | قفل/قيود تداخل، holds، idempotency، حالات الإلغاء وإعادة الجدولة | اختبار تنافس للفترات والمورد والسعة مع أثر commit ذري |
 | 4. الموارد وامتدادات الخدمات | لم تبدأ | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور | قبول مستقل لـ exclusive وrental وsession_capacity وbundle |
 | 5. الرحلات والواجهة | لم تبدأ | onboarding والكتالوج والتقويم والعميل ومكتب التشغيل | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة |
 | 6. الرسائل والفوترة والتكاملات | لم تبدأ | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
@@ -120,10 +120,24 @@
 - **مسؤول المنصة:** `contact.fakhry@gmail.com` فقط (`super_admin`) وبدون أي مساحة؛ المالكان ليسا platform admin.
 - **تنظيف UX:** banners ثنائية اللغة + SAVEPOINT للجداول الاختيارية + إعادة تعيين audit immutable. توليد المستشفى النادر: `node scripts/generate-medical-seed-section.js` (بدون npm alias يومي). راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
 
+### المرحلة 2 — إغلاق: PG ops backup/restore + migrate مرتين — 2026-10-27
+
+- **الأدوات:** [`scripts/ops-pg-backup.js`](../scripts/ops-pg-backup.js) ينسخ/يسترجع `workspace_ops_*` و`workspace_staff_links` فقط. النسخ لا يمسح؛ الاستعادة ترفض العمل بلا هدف صريح. أوامر npm: `ops:pg-backup` / `ops:pg-restore` / `ops:pg-backups`.
+- **التحقق الآلي:** [`scripts/smoke-ops-pg-backup.js`](../scripts/smoke-ops-pg-backup.js) — بدون Postgres يخرج `skipped:true` برسالة واضحة؛ مع `DATABASE_URL` يثبت backup→wipe→restore ثم `compareStores` JSON↔PG `ok=true`. `--migrate-twice` يثبت ledger لـ 011+012 مع `pending=0` في المرّة الثانية.
+- **البذور:** `audit-ops-integrity --seed=medical|education` → `orphanCount=0`.
+- **إثبات الوكيل:** Postgres محلي ephemeral (5432) نجح لـ migrate مرتين + drill. على Sam-PC أعد `npm run migrate` مرتين على 5433 و`npm run test:ops-pg-backup:full` قبل اعتماد بيانات حية.
+- **إغلاق المرحلة 2:** `phase_2_closed=true` في [`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json).
+
+### المرحلة 3 — الحزمة الأولى: نواة الحجز الذري (JSON) — 2026-10-27
+
+- **الوحدة:** [`bookingAtomic.js`](../bookingAtomic.js) — تداخل `[start, end+buffer)`، قفل async لكل مساحة، `idempotencyKey`، تحرير hold مرة واحدة (إلغاء/انتهاء).
+- **التوصيل:** `opsStore.createAppointment` / `createAppointmentAsync` / `createPublicAppointment` / `cancelSlotHold`.
+- **التحقق:** `npm run test:atomic-booking` يغطي: تداخل متزامن (نجاح واحد)، فترات متجاورة، إعادة idempotent، hold cancel/expiry، امتداد buffer. مسار JSON فقط في هذه الحزمة؛ تماثل PG مؤجّل.
+- **خارج النطاق عمداً:** لا `session_capacity` / موارد / تسجيل تعليمي — المرحلة 4.
+
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase2-data`.
-2. على Sam-PC: `npm run seed:demo:restore` ثم `npm run users:cleanup-demo-owners -- --dry-run` ثم `--apply` عند الرضا؛ حدّث المتصفح.
-3. على Postgres محلي (5433): `npm run migrate` مرتين (011+012).
-4. backup/restore لـ `workspace_ops_*` + `workspace_staff_links` ومقارنة JSON↔PG.
-5. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج.
+1. شغّل `npm run test:phase2-data` و`npm run test:phase3-booking`.
+2. على Sam-PC: `MAW3ED_STORAGE=postgres DATABASE_URL=...@127.0.0.1:5433/... npm run migrate` مرتين ثم `npm run test:ops-pg-backup:full`؛ اختيارياً `seed:demo:restore` + `users:cleanup-demo-owners`.
+3. المرحلة 3 التالية: تماثل مسار PostgreSQL للحجز الذري + تمرير `idempotencyKey` عبر HTTP العام/ops.
+4. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج (أنماط الإشغال = المرحلة 4).
