@@ -50,8 +50,13 @@ function loadJsonStore(filePath) {
 }
 
 function loadSeed(name) {
-  if (name !== "medical") throw new Error(`Unsupported seed: ${name}`);
-  return loadJsonStore(path.join(root, "data", "seeds", "medical-demo-ops.json"));
+  const { readDemoSeedBundle, getSectionStore, sectionKeys } = require("./demo-seed-store");
+  const key = name === "talaaee" ? "education" : name;
+  if (!sectionKeys().includes(key)) {
+    throw new Error(`Unsupported seed section: ${name}`);
+  }
+  const bundle = readDemoSeedBundle({ migrate: true });
+  return getSectionStore(bundle, key);
 }
 
 function loadWorkspace(workspaceId) {

@@ -26,10 +26,12 @@ const {
 } = require("./ops-session-backup");
 const { DEFAULT_OWNER_EMAIL } = require("./medical-seed-snapshot");
 const {
-  pickOwnedWorkspace,
-  applyMedicalActivityFields,
-  DEFAULT_OWNER_EMAIL: seedDefaultOwner
-} = require("./seed-medical-demo");
+  SECTION_TARGETS,
+  pickOwnedWorkspaceForSection,
+  applyActivityFields,
+  readDemoSeedBundle,
+  CANONICAL_SEED
+} = require("./demo-seed-store");
 
 const root = path.join(__dirname, "..");
 
@@ -155,46 +157,57 @@ function main() {
   }
   assert(restoreOk, "restore drill did not complete");
 
-  // 6) Medical seed targeting defaults + optional integrity scan
+  // 6) Unified demo seed mapping + integrity scan
   assert(
-    DEFAULT_OWNER_EMAIL === "contact.haitham@yahoo.com" &&
-      seedDefaultOwner === DEFAULT_OWNER_EMAIL,
-    "default medical seed owner must be contact.haitham@yahoo.com"
+    DEFAULT_OWNER_EMAIL === "contact.haitham@gmail.com" &&
+      SECTION_TARGETS.medical.ownerEmail === "contact.haitham@gmail.com" &&
+      SECTION_TARGETS.education.ownerEmail === "contact.haitham@yahoo.com",
+    "medical→gmail and education→yahoo owner mapping"
   );
-  const educationOnly = pickOwnedWorkspace([
-    {
-      id: "ws-edu",
-      name: "مركز طلائع",
-      slug: "talaaee-book",
-      activity_type: "education"
-    }
-  ]);
-  assert(educationOnly.target?.id === "ws-edu", "unique owned non-medical workspace is selectable");
-  const medicalPreferred = pickOwnedWorkspace([
-    { id: "ws-edu", name: "تعليم", activity_type: "education" },
-    { id: "ws-med", name: "طبي", activity_type: "medical" }
-  ]);
-  assert(medicalPreferred.target?.id === "ws-med", "prefer unique medical among owned");
-  const stamped = applyMedicalActivityFields({
-    activityMode: "education",
-    activityTemplateId: "education",
-    activityModeLocked: true
-  });
-  assert(stamped.activityMode === "medical" && stamped.activityModeLocked === false, "restore stamps medical activity");
-  checks.push("seed-medical-target-defaults");
+  assert(
+    SECTION_TARGETS.medical.preferredSlug === "dawybooking" &&
+      SECTION_TARGETS.education.preferredSlug === "talaaee-book",
+    "preferred slugs for demo workspaces"
+  );
+  const byPreferred = pickOwnedWorkspaceForSection(
+    [
+      {
+        id: SECTION_TARGETS.education.preferredWorkspaceId,
+        name: "طلائع",
+        slug: "talaaee-book",
+        activity_type: "education"
+      },
+      { id: "other", name: "أخرى", slug: "other", activity_type: "education" }
+    ],
+    "education"
+  );
+  assert(
+    byPreferred.target?.id === SECTION_TARGETS.education.preferredWorkspaceId,
+    "prefer mapped talaaee workspace id"
+  );
+  const stamped = applyActivityFields(
+    { activityMode: "salon", activityTemplateId: "salon", activityModeLocked: true },
+    "medical"
+  );
+  assert(stamped.activityMode === "medical" && stamped.activityModeLocked === false, "activity stamp");
+  checks.push("seed-demo-target-defaults");
 
-  const seedPath = path.join(root, "data", "seeds", "medical-demo-ops.json");
   let seedNote = null;
-  if (fs.existsSync(seedPath)) {
-    const seedRaw = JSON.parse(fs.readFileSync(seedPath, "utf8"));
-    const seedAudit = auditStore(seedRaw.store || seedRaw, { maxOrphansReport: 5 });
+  if (fs.existsSync(CANONICAL_SEED)) {
+    const bundle = readDemoSeedBundle({ migrate: false });
+    assert(bundle.sections.medical?.store, "unified seed must include medical section");
+    assert(bundle.sections.education?.store, "unified seed must include education section");
+    const seedAudit = auditStore(bundle.sections.medical.store, { maxOrphansReport: 5 });
     seedNote = {
       orphanCount: seedAudit.orphanCount,
       ok: seedAudit.ok,
       sample: seedAudit.orphans,
-      defaultOwnerEmail: DEFAULT_OWNER_EMAIL
+      medicalOwner: SECTION_TARGETS.medical.ownerEmail,
+      educationOwner: SECTION_TARGETS.education.ownerEmail,
+      medicalCounts: bundle.meta.sections.medical,
+      educationCounts: bundle.meta.sections.education
     };
-    checks.push("seed-medical-scanned");
+    checks.push("seed-demo-scanned");
   }
 
   const result = {

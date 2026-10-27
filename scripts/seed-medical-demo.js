@@ -1,21 +1,17 @@
 /**
- * بذرة المستشفى الطبية — المصدر الوحيد الدائم:
- *   data/seeds/medical-demo-ops.json
+ * توليد بذرة المستشفى الطبية (نادراً) ثم حفظها داخل البذرة الموحدة.
  *
- * المسار السعيد للاستعادة (JSON + Postgres ops عند MAW3ED_STORAGE=postgres):
- *   npm run seed:medical:restore
+ * البذرة الموحدة الدائمة:
+ *   data/seeds/maw3ed-demo-ops.json  (أقسام medical + education)
  *
- * الهدف الافتراضي: مساحة يملكها contact.haitham@yahoo.com
- * (إن لم تكن طبية يُحوَّل activity_type إلى medical مع الحفاظ على المالك والـ slug).
+ * المسار السعيد للاستعادة:
+ *   npm run seed:demo:restore
+ *   npm run seed:medical:restore          (= قسم medical فقط → gmail / dawybooking)
  *
- * أوامر:
- *   npm run seed:medical:restore              استعادة البذرة الكانونية
- *   npm run seed:medical:restore -- --replace استبدال كامل بدل الدمج
- *   npm run seed:medical:save                 حفظ مساحة حالية → البذرة الكانونية
- *   npm run seed:medical                      توليد تجريبي ثم حفظ (نادراً)
- *   --owner-email=<email>  /  --workspace=<id>  /  --keep-activity
+ * الهدف الافتراضي للقسم الطبي: contact.haitham@gmail.com
+ * طلائع/education: عبر npm run seed:demo:restore -- --section=education
  *
- * ملاحظة: npm run migrate و npm run seed لا يحمّلان بذرة المستشفى (مخطط/منصة فقط).
+ * ملاحظة: npm run migrate و npm run seed لا يحمّلان بذرة العروض.
  */
 const fs = require("fs");
 const path = require("path");
@@ -773,21 +769,29 @@ async function generateDemo() {
 }
 
 async function main() {
+  // الاستعادة/الحفظ تتم عبر البذرة الموحدة (قسم medical فقط هنا).
+  if (doRestore || doSave) {
+    const { spawnSync } = require("child_process");
+    const forwarded = process.argv.slice(2).filter((item) => item !== "--restore" && item !== "--save");
+    const childArgs = [
+      path.join(__dirname, "seed-demo-workspaces.js"),
+      doRestore ? "--restore" : "--save",
+      "--section=medical",
+      ...forwarded
+    ];
+    const result = spawnSync(process.execPath, childArgs, { stdio: "inherit", env: process.env });
+    process.exitCode = result.status == null ? 1 : result.status;
+    return;
+  }
+
   try {
-    if (doRestore && doSave) {
-      throw new Error("استخدم --restore أو --save فقط، ليس الاثنين معاً");
-    }
     workspaceTarget = await resolveWorkspaceTarget();
     workspaceId = workspaceTarget.id;
     console.log(
-      `[seed-medical] target workspace=${workspaceId}` +
+      `[seed-medical] generate target workspace=${workspaceId}` +
         (workspaceTarget.name ? ` name=${workspaceTarget.name} slug=${workspaceTarget.slug || ""}` : "") +
-        (workspaceTarget.ownerEmail ? ` owner=${workspaceTarget.ownerEmail} role=owner` : " explicit") +
-        (workspaceTarget.activityType ? ` activity=${workspaceTarget.activityType}` : "") +
-        (workspaceTarget.needsMedicalConversion ? " (will convert→medical on restore)" : "")
+        (workspaceTarget.ownerEmail ? ` owner=${workspaceTarget.ownerEmail}` : " explicit")
     );
-    if (doRestore) return await restoreCanonicalToWorkspace();
-    if (doSave) return await saveCanonicalFromWorkspace("save");
     if (workspaceTarget.needsMedicalConversion) {
       await ensureWorkspaceAcceptsMedicalOps(workspaceTarget);
     }

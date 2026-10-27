@@ -112,16 +112,17 @@
 - **إنفاذ:** دور `staff` بلا ربط نشط → 403 على desk؛ مع ربط → desk مقصور على `staffId` (today/preview/check-in/complete)؛ addons/pricing تبقى owner/admin؛ `actorStaffId` من العميل يُتجاهل لدور staff.
 - **التحقق:** `npm run test:staff-links` و`npm run test:ops-rbac` و`npm run test:bola` و`npm run test:ops-integrity` → نجاح.
 
-### المرحلة 2 — تنظيف بذرة المستشفى وهدف المالك — 2026-10-27
+### المرحلة 2 — بذرة موحدة (طبي + طلائع) وتنظيف المستخدمين — 2026-10-27
 
-- **سبب العرض:** الهدف الافتراضي كان `contact.haitham@gmail.com` (مساحة داوي الطبية)، بينما الحساب المطلوب `contact.haitham@yahoo.com` يملك مساحة تعليمية؛ بوابة activity رفضت الاستعادة، و`migrate`/`seed` لا يحمّلان `medical-demo-ops.json`.
-- **الإصلاح:** الافتراضي → yahoo؛ اختيار مساحة طبية إن وُجدت وإلا المساحة الوحيدة المملوكة مع تحويل `activity_type` إلى medical عند الاستعادة (مع الحفاظ على المالك/الـ slug)؛ مسار واحد `npm run seed:medical:restore`؛ حذف aliases/ملفات hospital المكررة. راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
+- **التصحيح النهائي للتعيين:** medical/hospital → `contact.haitham@gmail.com` / dawybooking؛ education/طلائع → `contact.haitham@yahoo.com` / talaaee-book.
+- **ملف واحد:** `data/seeds/maw3ed-demo-ops.json` بقسمين؛ `medical-demo-ops.json` مؤشر فقط.
+- **أمر واحد:** `npm run seed:demo:restore` (أو `--section=medical|education`).
+- **تنظيف مستخدمين:** `npm run users:cleanup-demo-owners` (dry-run ثم `--apply`) يبقي المالكين الاثنين + platform admin (gmail متوقع super_admin). راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
 
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase2-data` (= ops-integrity + staff-links).
-2. على جهاز المالك (Sam-PC): `MAW3ED_STORAGE=postgres` ثم `npm run seed:medical:restore` (أو `--replace`) ثم حدّث المتصفح.
-3. على Postgres محلي (5433): طبّق `npm run migrate` مرتين (011+012) وتأكد أن الثانية `applied=0`.
-4. ابنِ backup/restore لجداول `workspace_ops_*` و`workspace_staff_links` ثم قارن JSON↔PG لمساحة تجريبية حتى `ok=true`.
-5. اختياري واجهة: منتقي سياق من `GET /api/account/contexts` عند تعدد العضويات.
-6. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج؛ لا تخترع قرارات دفع/قانونية.
+1. شغّل `npm run test:phase2-data`.
+2. على Sam-PC: `npm run seed:demo:restore` ثم `npm run users:cleanup-demo-owners -- --dry-run` ثم `--apply` عند الرضا؛ حدّث المتصفح.
+3. على Postgres محلي (5433): `npm run migrate` مرتين (011+012).
+4. backup/restore لـ `workspace_ops_*` + `workspace_staff_links` ومقارنة JSON↔PG.
+5. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج.

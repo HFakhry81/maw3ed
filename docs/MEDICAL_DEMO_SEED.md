@@ -1,36 +1,55 @@
-# بذرة المستشفى الطبية (canonical)
+# بذرة العروض الموحدة (طبي + طلائع)
 
-**الملف الدائم الوحيد:** `data/seeds/medical-demo-ops.json`  
-(ملخص سريع: `data/seeds/medical-demo-summary.json`)
+**ملف واحد دائم:** `data/seeds/maw3ed-demo-ops.json`  
+(ملخص: `data/seeds/maw3ed-demo-summary.json`)
 
-## المسار السعيد (واحد)
+> `data/seeds/medical-demo-ops.json` أصبح مؤشراً فقط إلى الملف الموحد — لا تستخدمه كبذرة ثانية.
+
+## الأقسام والملاك
+
+| القسم | الحساب | المساحة المفضّلة |
+| --- | --- | --- |
+| `medical` | `contact.haitham@gmail.com` | مستشفيات داوي / `dawybooking` / `workspace_67ac2618-fe29-4cb0-b668-b152b4b98592` |
+| `education` | `contact.haitham@yahoo.com` | مركز طلائع التعليمي / `talaaee-book` / `workspace_46d0f604-1bb9-4cd8-958c-d2b370939b41` |
+
+## المسار السعيد
 
 ```bash
-npm run seed:medical:restore
+# استعادة القسمين إلى المالكين الصحيحين
+npm run seed:demo:restore
+
+# قسم واحد
+npm run seed:demo:restore -- --section=medical
+npm run seed:demo:restore -- --section=education --replace
+
+# حفظ مساحة حالية داخل القسم المناسب من الملف الموحد
+npm run seed:demo:save -- --section=medical
+npm run seed:demo:save -- --section=education
 ```
 
-- الهدف الافتراضي: مساحة يملكها **`contact.haitham@yahoo.com`**.
-- إن وُجدت مساحة طبية واحدة مملوكة للحساب تُختار؛ وإلا إن وُجدت مساحة واحدة فقط (حتى لو كانت `education`) تُختار ويُحوَّل `activity_type` إلى **`medical`** أثناء الاستعادة مع الإبقاء على المالك والـ slug.
-- مع `MAW3ED_STORAGE=postgres` تُكتب جداول `workspace_ops_*` عبر مسار ops المعتاد (مرآة JSON أيضاً).
-- للاستبدال الكامل: `npm run seed:medical:restore -- --replace`
-- لتجاوز التحويل إلى medical عمداً: `--keep-activity` (غير موصى به لبذرة المستشفى)
-- تجاوز الهدف: `--owner-email=...` أو `--workspace=<id>`
+Aliases قديمة ما زالت تشير للقسم الطبي فقط:
 
-## ما الذي لا يستعيد المستشفى
+```bash
+npm run seed:medical:restore   # = seed:demo:restore --section=medical
+npm run seed:medical:save
+```
 
-| الأمر | ماذا يفعل |
+عند الاستعادة: إن اختلف `activity_type` عن القسم يُحوَّل مع الإبقاء على المالك والـ slug (`--keep-activity` لتجاوز ذلك).
+
+## ما الذي لا يستعيد العروض
+
+| الأمر | الوظيفة |
 | --- | --- |
-| `npm run migrate` | ترحيل مخطط PostgreSQL فقط |
-| `npm run seed` | بذرة منصة/جداول قديمة من `data/maw3ed-data.json` — **ليست** بذرة المستشفى |
-| `npm run ops:backup` / `ops:restore` | جلسة عمل محلية (`data/workspaces`) وليست البذرة الكانونية |
+| `npm run migrate` | مخطط PostgreSQL فقط |
+| `npm run seed` | بذرة منصة قديمة — ليست عروض المستشفى/طلائع |
 
-## أوامر مساعدة نادرة
+## تنظيف المستخدمين (محلي / Postgres)
+
+يبقي `gmail` + `yahoo` + أي platform admin، ويحذف الباقي بعد مراجعة dry-run:
 
 ```bash
-npm run seed:medical:save      # حفظ مساحة حالية → medical-demo-ops.json
-npm run seed:medical           # توليد طاقم جديد ثم حفظ (لا تستخدمه إلا بوعي)
+npm run users:cleanup-demo-owners -- --dry-run
+npm run users:cleanup-demo-owners -- --apply
 ```
 
-## تنظيف 2026-10-27
-
-أُزيلت المسارات المكررة/القديمة: `hospital:*`, `restore:full-hospital`, `save:full-hospital`, وملفات `restore-full-hospital-data.js` / `save-full-hospital-backup.js` / نصوص CMD المساعدة. التنفيذ الوحيد عبر `scripts/seed-medical-demo.js` + `medical-seed-snapshot.js`.
+`contact.haitham@gmail.com` متوقع أن يكون `super_admin` إن وُجد كمسؤول منصة.

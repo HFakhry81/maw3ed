@@ -49,15 +49,15 @@
 
 - في وضع PostgreSQL، وللمساحات المسجّلة في جدول `workspaces`، يحمّل `/api/ops/*` بيانات مساحة العمل ويحفظها داخل معاملة في الجداول المطبّعة التي تنشئها migration `010_normalized_workspace_ops.sql`.
 - في الوضع المحلي دون PostgreSQL، يستمر التخزين عبر ملفات مساحة العمل JSON.
-- البذرة المحفوظة في `data/seeds/medical-demo-ops.json` تضم بيانات الطاقم والخدمات والمواعيد. المسار السعيد (افتراضياً مساحة `contact.haitham@yahoo.com`، مع تحويل النشاط إلى medical عند الحاجة):
+- البذرة الموحدة في `data/seeds/maw3ed-demo-ops.json` تضم قسم المستشفى (gmail / dawybooking) وقسم طلائع (yahoo / talaaee-book). المسار السعيد:
 
 ```bash
+npm run seed:demo:restore
+# المستشفى فقط:
 npm run seed:medical:restore
-# أو صراحةً:
-npm run seed:medical:restore -- --workspace=WORKSPACE_ID --replace
 ```
 
-`npm run migrate` / `npm run seed` لا يستعيدان بذرة المستشفى (مخطط/منصة فقط). راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
+`npm run migrate` / `npm run seed` لا يستعيدان بذرة العروض. راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
 
 `--replace` يستبدل بيانات التشغيل الحالية في مساحة العمل؛ احفظ نسخة احتياطية قبل استخدامه على بيانات قائمة. حذف الخيار يدمج البذرة مع البيانات الحالية.
 

@@ -32,8 +32,8 @@ echo   10. Seed
 echo   11. Reset ops data       (auto session backup first)
 echo   12. Backup ops session
 echo   13. Restore latest session
-echo   14. Hospital: restore medical demo   (seed:medical:restore)
-echo   15. Hospital: save current as seed   (seed:medical:save)
+echo   14. Demo seeds restore  (medical+talaaee via seed:demo:restore)
+echo   15. Demo seed save section (seed:demo:save --section=...)
 echo.
 echo  [ QA ]
 echo   16. Isolation check
@@ -166,23 +166,23 @@ pause & goto menu
 
 :run_hospital_restore
 cls & color 0E
-echo [HOSPITAL] Restore canonical medical seed (default owner: contact.haitham@yahoo.com)
-echo            Source: data\seeds\medical-demo-ops.json
-echo            Command: npm run seed:medical:restore
-echo            Note: npm run migrate / npm run seed do NOT load this hospital demo.
+echo [DEMO] Restore unified seed (medical -^> gmail/dawybooking, education -^> yahoo/talaaee)
+echo        Source: data\seeds\maw3ed-demo-ops.json
+echo        Command: npm run seed:demo:restore
+echo        Note: npm run migrate / npm run seed do NOT load demo seeds.
 cd /d "%PROJECT_ROOT%" || exit /b 1
-call npm run seed:medical:restore
+call npm run seed:demo:restore
 echo.
 echo Refresh the browser after this finishes.
 pause & goto menu
 
 :run_hospital_save
 cls & color 0A
-echo [HOSPITAL] Save current target workspace into canonical seed
-echo            Writes: data\seeds\medical-demo-ops.json
-echo            Command: npm run seed:medical:save
+echo [DEMO] Save requires an explicit section
+echo        npm run seed:demo:save -- --section=medical
+echo        npm run seed:demo:save -- --section=education
 cd /d "%PROJECT_ROOT%" || exit /b 1
-call npm run seed:medical:save
+call npm run seed:demo:save -- --section=medical
 echo.
 echo Refresh the browser after this finishes.
 pause & goto menu
