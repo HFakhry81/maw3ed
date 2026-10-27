@@ -52,6 +52,17 @@ function evaluateRuntimePosture(env = process.env, { databaseConfigured = false 
     }
   }
 
+  let secrets = null;
+  try {
+    secrets = require("./secretsPosture").evaluateSecretsPosture(env);
+    for (const warning of secrets.warnings || []) warnings.push(warning);
+    if (mode === "production") {
+      for (const error of secrets.errors || []) errors.push(error);
+    }
+  } catch {
+    secrets = null;
+  }
+
   return {
     mode,
     authRequired,
@@ -61,6 +72,9 @@ function evaluateRuntimePosture(env = process.env, { databaseConfigured = false 
     strictStorage,
     membershipRequiredWhenAuth: true,
     jsonSkipsMembership: false,
+    secrets: secrets
+      ? { ok: secrets.ok, inventory: secrets.inventory, warnings: secrets.warnings, errors: secrets.errors }
+      : null,
     warnings,
     errors,
     ok: errors.length === 0

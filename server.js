@@ -1327,32 +1327,47 @@ const server = http.createServer(async (req, res) => {
     }
     if (requested === "/api/health/ready" && req.method === "GET") {
       let outboxSummary = null;
+      let secrets = null;
+      let alerts = null;
       try {
         outboxSummary = require("./outboxDeliveryWorker").workerStatus(process.env);
       } catch {
         outboxSummary = null;
       }
+      try {
+        const secretsPosture = require("./secretsPosture").evaluateSecretsPosture(process.env);
+        secrets = { ok: secretsPosture.ok, inventory: secretsPosture.inventory, warnings: secretsPosture.warnings, errors: secretsPosture.errors };
+      } catch {
+        secrets = null;
+      }
+      try {
+        alerts = require("./metricsAlerts").evaluateAlertStubs();
+      } catch {
+        alerts = null;
+      }
+      const payload = {
+        service: "maw3ed-api",
+        integrations: outboxSummary,
+        secrets,
+        alerts: alerts
+          ? { stub: true, ok: alerts.ok, findings: alerts.findings }
+          : null
+      };
       if (databaseConfigured) {
         try {
           await query("SELECT 1");
-          return sendJson(res, 200, {
-            ok: true,
-            service: "maw3ed-api",
-            ready: true,
-            database: "postgresql",
-            integrations: outboxSummary
-          });
+          return sendJson(res, 200, { ok: true, ready: true, database: "postgresql", ...payload });
         } catch (error) {
-          return sendJson(res, 503, { ok: false, service: "maw3ed-api", ready: false, database: "postgresql-unavailable", error: "database_unavailable" });
+          return sendJson(res, 503, {
+            ok: false,
+            ready: false,
+            database: "postgresql-unavailable",
+            error: "database_unavailable",
+            ...payload
+          });
         }
       }
-      return sendJson(res, 200, {
-        ok: true,
-        service: "maw3ed-api",
-        ready: true,
-        database: "local-memory",
-        integrations: outboxSummary
-      });
+      return sendJson(res, 200, { ok: true, ready: true, database: "local-memory", ...payload });
     }
     if (requested === "/api/activity-templates" && req.method === "GET") {
       const localTemplates = [
