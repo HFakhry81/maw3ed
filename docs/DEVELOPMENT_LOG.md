@@ -13,7 +13,7 @@
 - ملفات Windows: `MAW3ED-UPDATE-ALL.bat` · `MAW3ED-TOOLBOX.bat` · `MAW3ED-QA-SUITE.bat` · `MAW3ED-PREPARE-RELEASE.bat`.
 - سكربتات تشغيل: `scripts/run-backend.cmd` · `run-frontend.cmd` · `run-all.cmd` · `update-all.cmd` / `.ps1` / `.sh`.
 - تجهيز الإصدار: `npm run release:prepare` مع توثيق النشر في `docs/DEPLOY_VPS.md` (Git pull على السيرفر ثم build وإعادة تشغيل `:7000`).
-- المنافذ تبقى معزولة: API/web `7000`، Vite `7100`، Postgres اختياري `5433/maw3ed`.
+- المنافذ تبقى معزولة: API/web `7000`، Vite `7100`، Postgres اختياري `5432/maw3ed`.
 
 ### 2026-09-11 — PostgreSQL وGmail وهوية العلامة
 

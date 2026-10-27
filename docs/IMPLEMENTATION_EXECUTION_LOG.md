@@ -13,9 +13,9 @@
 | --- | --- | --- | --- |
 | 0. النطاق وحصر السطح | مكتملة للنطاق التقني | ترتيب التنفيذ، جرد مجموعات API، قرارات المجال التقنية، وسجل التنفيذ | كل مجموعة لها مالك تنفيذي، مخاطر، ومجموعة قبول؛ القرارات التجارية/القانونية تسد إطلاق الميزة المرتبطة بها |
 | 1. الهوية والعزل وRBAC | مغلقة (بوابة staff نُفِّذت لاحقاً في م2) | auth fail-closed خارج local، عضوية نشطة، سياسة route × method × role، حماية legacy، BOLA، أحداث workspace، وضع JSON في الإنتاج | حواجز الأمن مغلقة على revision `366e209`؛ قرار الربط الكانوني نُفِّذ في المرحلة 2 |
-| 2. سلامة البيانات والترحيل | قيد التنفيذ | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
-| 3. الحجز الذري والتوفر | لم تبدأ | قفل/قيود تداخل، holds، idempotency، حالات الإلغاء وإعادة الجدولة | اختبار تنافس للفترات والمورد والسعة مع أثر commit ذري |
-| 4. الموارد وامتدادات الخدمات | لم تبدأ | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور | قبول مستقل لـ exclusive وrental وsession_capacity وbundle |
+| 2. سلامة البيانات والترحيل | مكتملة تقنياً | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore لـ `workspace_ops_*` + staff links | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
+| 3. الحجز الذري والتوفر | مكتملة تقنياً | قفل/قيود تداخل، holds، idempotency (JSON+PG+HTTP)، عقد timezone/DST للمدة+buffer | اختبار تنافس للفترات مع أثر commit ذري على JSON وPG |
+| 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
 | 5. الرحلات والواجهة | لم تبدأ | onboarding والكتالوج والتقويم والعميل ومكتب التشغيل | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة |
 | 6. الرسائل والفوترة والتكاملات | لم تبدأ | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
 | 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
@@ -101,7 +101,7 @@
   - `node scripts/audit-ops-integrity.js --migrations-only --json` → `ok=true` وقيود 011 موجودة
   - `node scripts/audit-ops-integrity.js --fixture --json` → صفر orphans
   - `node --check` على `opsIntegrity.js` وسكربتات migrate/audit/compare/smoke → نجاح
-  - لم يُشغَّل migrate ضد Postgres حي في هذه البيئة (لا `DATABASE_URL`)؛ يبقى بند الإثبات المزدوج على 5433.
+  - لم يُشغَّل migrate ضد Postgres حي في هذه البيئة (لا `DATABASE_URL`)؛ يبقى بند الإثبات المزدوج على 5432.
 
 ### المرحلة 2 — الحزمة الثانية: ربط حساب الموظف (junction) وإنفاذ desk — 2026-10-27
 
@@ -120,10 +120,42 @@
 - **مسؤول المنصة:** `contact.fakhry@gmail.com` فقط (`super_admin`) وبدون أي مساحة؛ المالكان ليسا platform admin.
 - **تنظيف UX:** banners ثنائية اللغة + SAVEPOINT للجداول الاختيارية + إعادة تعيين audit immutable. توليد المستشفى النادر: `node scripts/generate-medical-seed-section.js` (بدون npm alias يومي). راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
 
+### المرحلة 2 — إغلاق: PG ops backup/restore + migrate مرتين — 2026-10-27
+
+- **الأدوات:** [`scripts/ops-pg-backup.js`](../scripts/ops-pg-backup.js) ينسخ/يسترجع `workspace_ops_*` و`workspace_staff_links` فقط. النسخ لا يمسح؛ الاستعادة ترفض العمل بلا هدف صريح. أوامر npm: `ops:pg-backup` / `ops:pg-restore` / `ops:pg-backups`.
+- **التحقق الآلي:** [`scripts/smoke-ops-pg-backup.js`](../scripts/smoke-ops-pg-backup.js) — بدون Postgres يخرج `skipped:true` برسالة واضحة؛ مع `DATABASE_URL` يثبت backup→wipe→restore ثم `compareStores` JSON↔PG `ok=true`. `--migrate-twice` يثبت ledger لـ 011+012 مع `pending=0` في المرّة الثانية.
+- **البذور:** `audit-ops-integrity --seed=medical|education` → `orphanCount=0`.
+- **إثبات الوكيل:** Postgres محلي ephemeral (5432) نجح لـ migrate مرتين + drill. على Sam-PC أعد `npm run migrate` مرتين على 5432 و`npm run test:ops-pg-backup:full` قبل اعتماد بيانات حية.
+- **إغلاق المرحلة 2:** `phase_2_closed=true` في [`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json).
+
+### المرحلة 3 — الحزمة الأولى: نواة الحجز الذري (JSON) — 2026-10-27
+
+- **الوحدة:** [`bookingAtomic.js`](../bookingAtomic.js) — تداخل `[start, end+buffer)`، قفل async لكل مساحة، `idempotencyKey`، تحرير hold مرة واحدة (إلغاء/انتهاء).
+- **التوصيل:** `opsStore.createAppointment` / `createAppointmentAsync` / `createPublicAppointment` / `cancelSlotHold`.
+- **التحقق:** `npm run test:atomic-booking` يغطي: تداخل متزامن (نجاح واحد)، فترات متجاورة، إعادة idempotent، hold cancel/expiry، امتداد buffer.
+
+### المرحلة 3 — تماثل PostgreSQL + HTTP idempotency + timezone/DST — 2026-10-27
+
+- **ترحيل:** [`013_appointment_idempotency_key.sql`](../db/migrations/013_appointment_idempotency_key.sql) — عمود `idempotency_key` + فهرس فريد جزئي على `(workspace_id, idempotency_key)`.
+- **PG:** `workspaceOpsPg` يحمّل/يحفظ المفتاح؛ مسار المساحة المُدارة يعمل تحت قفل advisory + قفل bookingAtomic. `npm run test:atomic-booking-pg` يثبت التداخل/المتجاور/idempotent/hold وround-trip للمفتاح (يتخطى بلا `DATABASE_URL`).
+- **HTTP:** `Idempotency-Key` أو `body.idempotencyKey` على `POST /api/public/booking/:slug/appointments` و`POST /api/ops/appointments` (الأخير عبر `createAppointmentAsync`). تأكيد البريد بعد commit لمساحة العمل.
+- **Timezone/DST:** `civilDateInTimeZone` + `occupancyInterval` مشتركان؛ `npm run test:booking-timezone` — حدود UTC، مدة+buffer، يوم spring-forward في `America/New_York` بحساب دقائق الجدار.
+- **إغلاق المرحلة 3:** `phase_3_closed=true`. أنماط الإشغال/الموارد/سعة الجلسات = المرحلة 4 فقط.
+- **منفذ Sam-PC:** Postgres الحي على **5432** / قاعدة `maw3ed` (ليس 5433).
+
+### المرحلة 4 — الحزمة الأولى: نواة السعة والموارد (generic) — 2026-10-27
+
+- **الترحيل:** [`014_workspace_capacity_resources_sessions.sql`](../db/migrations/014_workspace_capacity_resources_sessions.sql) — أعمدة `occupancy_mode` / `default_capacity` / `composition_default` على الخدمات؛ جداول `workspace_ops_resources`، `service_resource_requirements`، `session_series`، `session_occurrences`، `session_enrollments`، `attendance_records`، `resource_allocations` مع ملكية tenant وقيود وحدة المقعد.
+- **المحرك:** [`capacityEngine.js`](../capacityEngine.js) + [`capacityOps.js`](../capacityOps.js) موصولان عبر [`opsStore.js`](../opsStore.js)؛ مسار JSON محلي + [`workspaceOpsPg.js`](../workspaceOpsPg.js) load/save؛ جداول السعة في [`scripts/ops-pg-backup.js`](../scripts/ops-pg-backup.js).
+- **القواعد:** لا استنتاج من `activity_mode`/قالب؛ السعة الفعلية لا تتجاوز مقاعد المورد عند `unit=seat`؛ exclusive/rental يمنعان تداخل التخصيص؛ session_capacity يقفل عبر `bookingAtomic` مع رفض الامتلاء والتسجيل المكرر وتحرير المقعد مرة عند الإلغاء؛ bundle يفشل مغلقاً.
+- **التحقق:** `npm run test:capacity-modes` (JSON: exclusive/rental/session_capacity/bundle) و`npm run test:capacity-pg` (migrate 014 + round-trip). مجمّع: `npm run test:phase4-capacity`.
+- **حزمة 2 (إغلاق المرحلة 4):** مسارات ops HTTP للموارد/المتطلبات/الجلسات/التسجيل/الحضور/bundle؛ تخصيص تلقائي لـ exclusive/rental عند `createAppointment` مع تحرير عند الإلغاء؛ `npm run test:capacity-http` و`test:capacity-isolation` (عزل store + BOLA عبر الهيدر).
+- **إغلاق المرحلة 4:** `phase_4_closed=true`. مؤجّل غير حاجز: ضغط تسجيل متزامن على PG، إدارة series في الواجهة، افتراضات قوالب المجالات. **لا تعلن** التعليم/الصالون/التأجير جاهزة للإنتاج.
+- **المرحلة 5:** لم تبدأ على هذا الـ PR — افتح PR متابعة لرحلات المنتج (onboarding/كتالوج/حجز/desk).
+
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase2-data`.
-2. على Sam-PC: `npm run seed:demo:restore` ثم `npm run users:cleanup-demo-owners -- --dry-run` ثم `--apply` عند الرضا؛ حدّث المتصفح.
-3. على Postgres محلي (5433): `npm run migrate` مرتين (011+012).
-4. backup/restore لـ `workspace_ops_*` + `workspace_staff_links` ومقارنة JSON↔PG.
-5. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج.
+1. شغّل `npm run test:phase4-capacity` (modes + PG + HTTP + isolation).
+2. على Sam-PC:  
+   `MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate` ثم `npm run test:phase4-capacity`.
+3. ابدأ المرحلة 5 في **PR جديد**: رحلات onboarding/catalog/booking/desk وفق الخارطة — لا تدّعِ جاهزية مجالات UI.

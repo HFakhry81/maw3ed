@@ -9,7 +9,7 @@
 | --------- | -------- | -------------- | ------------ | -------------- | ------------ |
 | **Fanni** (بدون تغيير) | `E:\UpNexa.com\fanni` | **3000** | — | **8081** | `localhost:5432` / **`fanni_db`** |
 | **UpNexa** | `E:\UpNexa.com\UpNexa` | **5000** | **5173** | **8083** | `localhost:5432` / **`upnexa_db`** |
-| **Maw3ed** | `E:\UpNexa.com\maw3ed` | **7000** | **7100** | — | `localhost:5433` / **`maw3ed`** |
+| **Maw3ed** | `E:\UpNexa.com\maw3ed` | **7000** | **7100** | — | `localhost:5432` / **`maw3ed`** |
 | **Spendi** | `E:\UpNexa.com\finance-app` | — (Supabase) | — | **8082** | سحابي (Supabase) |
 
 ## ماذا كان مكسورًا؟
@@ -54,7 +54,7 @@ CREATE DATABASE upnexa_db;
 
 (Postgres على المنفذ 5432 — نفس السيرفر مع `fanni_db` بأسماء مختلفة، بدون تعارض.)
 
-Maw3ed يبقى على instance/port **5433** وقاعدة **`maw3ed`**.
+Maw3ed يبقى على instance/port **5432** وقاعدة **`maw3ed`**.
 
 ## تشغيل جنبًا إلى جنب
 

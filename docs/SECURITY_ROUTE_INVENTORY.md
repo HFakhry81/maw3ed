@@ -31,8 +31,13 @@
 | `PUT /api/ops/activity-profile` | owner/admin |
 | `GET,PUT /api/ops/notifications` | owner/admin |
 | `GET,POST /api/ops/expenses` | owner/admin |
-| `GET,POST /api/ops/appointments`; `PATCH /api/ops/appointments/:id/status` | owner/admin/manager |
+| `GET,POST /api/ops/appointments`; `PATCH /api/ops/appointments/:id/status` | owner/admin/manager؛ إنشاء الموعد يخصّص مورد exclusive/rental تلقائياً عند وجود متطلب/resourceId |
 | `PATCH /api/ops/appointments/:id/pricing` | owner/admin |
+| `GET,POST /api/ops/resources`; `PATCH /api/ops/resources/:id` | owner/admin/manager؛ موارد tenant-scoped (سعة/حالة/وحدة) |
+| `POST /api/ops/service-resource-requirements` | owner/admin/manager |
+| `GET,POST /api/ops/session-occurrences`; `GET .../:id/availability`; `POST .../:id/enrollments` | owner/admin/manager؛ سعة الجلسة وليست استنتاجاً من القالب |
+| `POST /api/ops/enrollments/:id/cancel`; `POST /api/ops/enrollments/:id/attendance` | owner/admin/manager |
+| `POST /api/ops/resource-allocations/bundle` | owner/admin/manager؛ تخصيص حزمة ذري fail-closed |
 | `GET /api/ops/desk/today`; `POST /api/ops/desk/(preview\|check-in)`; `POST /api/ops/desk/appointments/:id/complete` | owner/admin/manager؛ **staff فقط مع ربط نشط** `workspace_staff_links` (أو JSON المكافئ) وفي نطاق `staffId` المرتبط — بدون ربط → 403 fail-closed |
 | `POST /api/ops/desk/appointments/:id/addons`; `PATCH /api/ops/desk/appointments/:id/lines/:lineId/pricing` | owner/admin فقط (حتى مع ربط staff) |
 | `GET /api/ops/contexts`; `GET /api/ops/staff-link` | أي عضو نشط؛ يعرض السياق المثبت خادميًا والربط الحالي (إن وُجد) |

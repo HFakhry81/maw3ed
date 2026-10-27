@@ -19,7 +19,7 @@ Cursor Desktop (Local)  →  GitHub  →  VPS (:7000)
 | --- | ---: | --- |
 | Node API + ويب الإنتاج | `7000` | `npm start` أو `scripts\run-backend.cmd` |
 | Vite (تطوير React) | `7100` | `npm run dev` أو `scripts\run-frontend.cmd` |
-| PostgreSQL (اختياري) | `5433` | قاعدة `maw3ed` |
+| PostgreSQL (اختياري) | `5432` | قاعدة `maw3ed` |
 
 التفاصيل: [`LOCAL_PORTS.md`](../LOCAL_PORTS.md)
 

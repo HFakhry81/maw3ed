@@ -1,6 +1,13 @@
 const { pool } = require("./db");
 
 const tables = [
+  "workspace_ops_attendance_records",
+  "workspace_ops_session_enrollments",
+  "workspace_ops_resource_allocations",
+  "workspace_ops_session_occurrences",
+  "workspace_ops_session_series",
+  "workspace_ops_service_resource_requirements",
+  "workspace_ops_resources",
   "workspace_ops_appointment_visit_meta",
   "workspace_ops_appointment_visits",
   "workspace_ops_appointment_line_items",
@@ -22,6 +29,16 @@ const tables = [
   "workspace_ops_activity_labels",
   "workspace_ops_social_links"
 ];
+
+const CAPACITY_TABLES = new Set([
+  "workspace_ops_resources",
+  "workspace_ops_service_resource_requirements",
+  "workspace_ops_session_series",
+  "workspace_ops_session_occurrences",
+  "workspace_ops_session_enrollments",
+  "workspace_ops_attendance_records",
+  "workspace_ops_resource_allocations"
+]);
 
 function list(result) {
   return result.rows;
@@ -141,8 +158,20 @@ async function loadStore(client, workspaceId, defaultStoreFactory) {
   const profile = profileResult.rows[0];
   if (!profile) return null;
 
+  // Capacity tables arrive in migration 014. Probe with to_regclass so loadStore
+  // works both inside withTransaction and from standalone clients (no SAVEPOINT).
+  const capacityTablePresent = new Map();
+  for (const table of CAPACITY_TABLES) {
+    const probe = await client.query("SELECT to_regclass($1) AS reg", [`public.${table}`]);
+    capacityTablePresent.set(table, Boolean(probe.rows[0]?.reg));
+  }
+
   const results = {};
   for (const table of tables) {
+    if (CAPACITY_TABLES.has(table) && !capacityTablePresent.get(table)) {
+      results[table] = { rows: [] };
+      continue;
+    }
     results[table] = await client.query(
       `SELECT * FROM ${table} WHERE workspace_id = $1`,
       [workspaceId]
@@ -280,7 +309,10 @@ async function loadStore(client, workspaceId, defaultStoreFactory) {
     autoAccept: row.auto_accept,
     autoComplete: row.auto_complete,
     active: row.active,
-    description: row.description
+    description: row.description,
+    occupancyMode: row.occupancy_mode || "exclusive",
+    defaultCapacity: numberOr(row.default_capacity, 1) || 1,
+    compositionDefault: row.composition_default || "single"
   }));
   const staffById = new Map(data.staff.map((person) => [person.id, person]));
   for (const [serviceId, staffIds] of providers.entries()) {
@@ -340,36 +372,114 @@ async function loadStore(client, workspaceId, defaultStoreFactory) {
     if (visit) visit[row.meta_key] = decodeMeta(row);
     visits.set(row.appointment_id, appointmentVisits);
   }
-  data.appointments = list(results.workspace_ops_appointments).map((row) => ({
+  data.appointments = list(results.workspace_ops_appointments).map((row) => {
+    const appointment = {
+      id: row.id,
+      date: dateOnly(row.appointment_date),
+      time: row.appointment_time,
+      customerId: row.customer_id,
+      customerName: row.customer_name,
+      staffId: row.staff_id,
+      staffName: row.staff_name,
+      serviceId: row.service_id,
+      serviceName: row.service_name,
+      categoryId: row.category_id,
+      durationMinutes: Number(row.duration_minutes),
+      paymentMethod: row.payment_method,
+      paymentStatus: row.payment_status,
+      pricingType: row.pricing_type,
+      priceMin: numberOr(row.price_min),
+      priceMax: numberOr(row.price_max),
+      depositAmount: numberOr(row.deposit_amount),
+      amount: numberOr(row.amount),
+      pricingStatus: row.pricing_status,
+      notes: row.notes,
+      status: row.status,
+      checkInToken: row.check_in_token,
+      checkedInAt: isoOrNull(row.checked_in_at),
+      checkedInByStaffId: row.checked_in_by_staff_id,
+      completedAt: isoOrNull(row.completed_at),
+      lineItems: lineItems.get(row.id) || [],
+      visitLog: visits.get(row.id) || [],
+      createdAt: isoOrNull(row.created_at),
+      updatedAt: isoOrNull(row.updated_at)
+    };
+    if (row.idempotency_key) appointment.idempotencyKey = row.idempotency_key;
+    return appointment;
+  });
+
+  data.resources = list(results.workspace_ops_resources).map((row) => ({
     id: row.id,
-    date: dateOnly(row.appointment_date),
-    time: row.appointment_time,
-    customerId: row.customer_id,
-    customerName: row.customer_name,
-    staffId: row.staff_id,
-    staffName: row.staff_name,
-    serviceId: row.service_id,
-    serviceName: row.service_name,
-    categoryId: row.category_id,
-    durationMinutes: Number(row.duration_minutes),
-    paymentMethod: row.payment_method,
-    paymentStatus: row.payment_status,
-    pricingType: row.pricing_type,
-    priceMin: numberOr(row.price_min),
-    priceMax: numberOr(row.price_max),
-    depositAmount: numberOr(row.deposit_amount),
-    amount: numberOr(row.amount),
-    pricingStatus: row.pricing_status,
-    notes: row.notes,
-    status: row.status,
-    checkInToken: row.check_in_token,
-    checkedInAt: isoOrNull(row.checked_in_at),
-    checkedInByStaffId: row.checked_in_by_staff_id,
-    completedAt: isoOrNull(row.completed_at),
-    lineItems: lineItems.get(row.id) || [],
-    visitLog: visits.get(row.id) || [],
+    name: row.name,
+    resourceType: row.resource_type,
+    capacity: numberOr(row.capacity, 1) || 1,
+    unit: row.unit || "seat",
+    status: row.status || "active",
+    location: row.location || "",
+    metadata: asObject(row.metadata),
     createdAt: isoOrNull(row.created_at),
     updatedAt: isoOrNull(row.updated_at)
+  }));
+  data.serviceResourceRequirements = list(results.workspace_ops_service_resource_requirements).map((row) => ({
+    id: row.id,
+    serviceId: row.service_id,
+    resourceId: row.resource_id,
+    resourceType: row.resource_type,
+    quantity: numberOr(row.quantity, 1) || 1,
+    required: boolOr(row.required, true)
+  }));
+  data.sessionSeries = list(results.workspace_ops_session_series).map((row) => ({
+    id: row.id,
+    serviceId: row.service_id,
+    title: row.title || "",
+    staffId: row.staff_id,
+    resourceId: row.resource_id,
+    defaultCapacity: numberOr(row.default_capacity, 1) || 1,
+    timezone: row.timezone || "Africa/Cairo",
+    status: row.status || "active"
+  }));
+  data.sessionOccurrences = list(results.workspace_ops_session_occurrences).map((row) => ({
+    id: row.id,
+    serviceId: row.service_id,
+    seriesId: row.series_id,
+    staffId: row.staff_id,
+    resourceId: row.resource_id,
+    startsAt: isoOrNull(row.starts_at),
+    endsAt: isoOrNull(row.ends_at),
+    capacity: numberOr(row.capacity, 1) || 1,
+    status: row.status || "scheduled",
+    title: row.title || "",
+    createdAt: isoOrNull(row.created_at),
+    updatedAt: isoOrNull(row.updated_at)
+  }));
+  data.sessionEnrollments = list(results.workspace_ops_session_enrollments).map((row) => ({
+    id: row.id,
+    occurrenceId: row.occurrence_id,
+    customerId: row.customer_id,
+    seats: numberOr(row.seats, 1) || 1,
+    status: row.status || "confirmed",
+    idempotencyKey: row.idempotency_key || "",
+    bookingId: row.booking_id,
+    createdAt: isoOrNull(row.created_at),
+    updatedAt: isoOrNull(row.updated_at)
+  }));
+  data.attendanceRecords = list(results.workspace_ops_attendance_records).map((row) => ({
+    id: row.id,
+    occurrenceId: row.occurrence_id,
+    enrollmentId: row.enrollment_id,
+    status: row.status || "present",
+    recordedAt: isoOrNull(row.recorded_at)
+  }));
+  data.resourceAllocations = list(results.workspace_ops_resource_allocations).map((row) => ({
+    id: row.id,
+    resourceId: row.resource_id,
+    bookingId: row.booking_id,
+    lineItemId: row.line_item_id,
+    occurrenceId: row.occurrence_id,
+    startsAt: isoOrNull(row.starts_at),
+    endsAt: isoOrNull(row.ends_at),
+    status: row.status || "active",
+    createdAt: isoOrNull(row.created_at)
   }));
 
   data.medicalDepartments = list(results.workspace_ops_medical_departments).map((row) => ({
@@ -565,16 +675,37 @@ async function saveStore(client, workspaceId, input) {
   }
 
   const services = clean(data.services);
+  const serviceHasOccupancy = await client.query(
+    `SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public' AND table_name = 'workspace_ops_services'
+       AND column_name = 'occupancy_mode' LIMIT 1`
+  );
+  const serviceColumns = [
+    "workspace_id", "id", "category_id", "name", "duration_minutes", "buffer_minutes", "pricing_type",
+    "price", "price_min", "price_max", "color", "public_booking", "auto_accept", "auto_complete", "active", "description"
+  ];
+  if (serviceHasOccupancy.rows.length) {
+    serviceColumns.push("occupancy_mode", "default_capacity", "composition_default");
+  }
   await insertRows(client, "workspace_ops_services",
-    ["workspace_id", "id", "category_id", "name", "duration_minutes", "buffer_minutes", "pricing_type",
-      "price", "price_min", "price_max", "color", "public_booking", "auto_accept", "auto_complete", "active", "description"],
-    services.map((row) => [
-      workspaceId, String(row.id), String(row.categoryId || ""), String(row.name || ""),
-      numberOr(row.durationMinutes, 30), numberOr(row.bufferMinutes), row.pricingType || "fixed",
-      numberOr(row.price), numberOr(row.priceMin), numberOr(row.priceMax), row.color || "#2474df",
-      boolOr(row.publicBooking, true), boolOr(row.autoAccept), boolOr(row.autoComplete),
-      boolOr(row.active, true), String(row.description || "")
-    ]));
+    serviceColumns,
+    services.map((row) => {
+      const values = [
+        workspaceId, String(row.id), String(row.categoryId || ""), String(row.name || ""),
+        numberOr(row.durationMinutes, 30), numberOr(row.bufferMinutes), row.pricingType || "fixed",
+        numberOr(row.price), numberOr(row.priceMin), numberOr(row.priceMax), row.color || "#2474df",
+        boolOr(row.publicBooking, true), boolOr(row.autoAccept), boolOr(row.autoComplete),
+        boolOr(row.active, true), String(row.description || "")
+      ];
+      if (serviceHasOccupancy.rows.length) {
+        values.push(
+          row.occupancyMode || "exclusive",
+          Math.max(1, numberOr(row.defaultCapacity, 1) || 1),
+          row.compositionDefault || "single"
+        );
+      }
+      return values;
+    }));
   const providerRows = [];
   for (const service of services) {
     for (const staffId of clean(service.providerIds)) {
@@ -602,23 +733,43 @@ async function saveStore(client, workspaceId, input) {
     ]));
 
   const appointments = clean(data.appointments);
+  // idempotency_key column arrives in migration 013; older DBs without it still save.
+  const idempotencyCol = await client.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'workspace_ops_appointments'
+       AND column_name = 'idempotency_key'
+     LIMIT 1`
+  );
+  const supportsIdempotencyKey = idempotencyCol.rows.length > 0;
+
+  const appointmentColumns = [
+    "workspace_id", "id", "appointment_date", "appointment_time", "customer_id", "customer_name",
+    "staff_id", "staff_name", "service_id", "service_name", "category_id", "duration_minutes",
+    "payment_method", "payment_status", "pricing_type", "price_min", "price_max", "deposit_amount",
+    "amount", "pricing_status", "notes", "status", "check_in_token", "checked_in_at",
+    "checked_in_by_staff_id", "completed_at", "created_at", "updated_at"
+  ];
+  if (supportsIdempotencyKey) appointmentColumns.push("idempotency_key");
+
   await insertRows(client, "workspace_ops_appointments",
-    ["workspace_id", "id", "appointment_date", "appointment_time", "customer_id", "customer_name",
-      "staff_id", "staff_name", "service_id", "service_name", "category_id", "duration_minutes",
-      "payment_method", "payment_status", "pricing_type", "price_min", "price_max", "deposit_amount",
-      "amount", "pricing_status", "notes", "status", "check_in_token", "checked_in_at",
-      "checked_in_by_staff_id", "completed_at", "created_at", "updated_at"],
-    appointments.map((row) => [
-      workspaceId, String(row.id), dateOnly(row.date), String(row.time || "00:00"),
-      row.customerId || null, String(row.customerName || ""), row.staffId || null,
-      String(row.staffName || ""), row.serviceId || null, String(row.serviceName || ""),
-      String(row.categoryId || ""), numberOr(row.durationMinutes, 30), row.paymentMethod || "cash",
-      row.paymentStatus || "unpaid", row.pricingType || "fixed", numberOr(row.priceMin),
-      numberOr(row.priceMax), numberOr(row.depositAmount), numberOr(row.amount),
-      row.pricingStatus || "fixed", String(row.notes || ""), row.status || "pending",
-      String(row.checkInToken || ""), row.checkedInAt || null, row.checkedInByStaffId || null,
-      row.completedAt || null, row.createdAt || new Date().toISOString(), row.updatedAt || null
-    ]));
+    appointmentColumns,
+    appointments.map((row) => {
+      const values = [
+        workspaceId, String(row.id), dateOnly(row.date), String(row.time || "00:00"),
+        row.customerId || null, String(row.customerName || ""), row.staffId || null,
+        String(row.staffName || ""), row.serviceId || null, String(row.serviceName || ""),
+        String(row.categoryId || ""), numberOr(row.durationMinutes, 30), row.paymentMethod || "cash",
+        row.paymentStatus || "unpaid", row.pricingType || "fixed", numberOr(row.priceMin),
+        numberOr(row.priceMax), numberOr(row.depositAmount), numberOr(row.amount),
+        row.pricingStatus || "fixed", String(row.notes || ""), row.status || "pending",
+        String(row.checkInToken || ""), row.checkedInAt || null, row.checkedInByStaffId || null,
+        row.completedAt || null, row.createdAt || new Date().toISOString(), row.updatedAt || null
+      ];
+      if (supportsIdempotencyKey) values.push(String(row.idempotencyKey || ""));
+      return values;
+    }));
 
   const lineItemRows = [];
   const visitRows = [];
@@ -660,6 +811,66 @@ async function saveStore(client, workspaceId, input) {
   await insertRows(client, "workspace_ops_appointment_visit_meta",
     ["workspace_id", "appointment_id", "visit_id", "meta_key", "value_type", "value_text"],
     visitMetaRows);
+
+  // Phase 4 capacity tables (skip when migration 014 not applied yet)
+  const hasResources = await client.query("SELECT to_regclass('public.workspace_ops_resources') AS reg");
+  if (hasResources.rows[0]?.reg) {
+    await insertRows(client, "workspace_ops_resources",
+      ["workspace_id", "id", "name", "resource_type", "capacity", "unit", "status", "location", "metadata", "created_at", "updated_at"],
+      clean(data.resources).map((row) => [
+        workspaceId, String(row.id), String(row.name || ""), row.resourceType || "room",
+        Math.max(1, numberOr(row.capacity, 1) || 1), row.unit === "unit" ? "unit" : "seat",
+        row.status || "active", String(row.location || ""),
+        JSON.stringify(row.metadata && typeof row.metadata === "object" ? row.metadata : {}),
+        row.createdAt || new Date().toISOString(), row.updatedAt || null
+      ]));
+    await insertRows(client, "workspace_ops_service_resource_requirements",
+      ["workspace_id", "id", "service_id", "resource_id", "resource_type", "quantity", "required"],
+      clean(data.serviceResourceRequirements).map((row) => [
+        workspaceId, String(row.id), String(row.serviceId), row.resourceId || null,
+        row.resourceType || null, Math.max(1, numberOr(row.quantity, 1) || 1), boolOr(row.required, true)
+      ]));
+    await insertRows(client, "workspace_ops_session_series",
+      ["workspace_id", "id", "service_id", "title", "staff_id", "resource_id", "default_capacity", "timezone", "status"],
+      clean(data.sessionSeries).map((row) => [
+        workspaceId, String(row.id), String(row.serviceId), String(row.title || ""),
+        row.staffId || null, row.resourceId || null,
+        Math.max(1, numberOr(row.defaultCapacity, 1) || 1),
+        row.timezone || "Africa/Cairo", row.status || "active"
+      ]));
+    await insertRows(client, "workspace_ops_session_occurrences",
+      ["workspace_id", "id", "service_id", "series_id", "staff_id", "resource_id",
+        "starts_at", "ends_at", "capacity", "status", "title", "created_at", "updated_at"],
+      clean(data.sessionOccurrences).map((row) => [
+        workspaceId, String(row.id), String(row.serviceId), row.seriesId || null,
+        row.staffId || null, row.resourceId || null, row.startsAt, row.endsAt,
+        Math.max(1, numberOr(row.capacity, 1) || 1), row.status || "scheduled",
+        String(row.title || ""), row.createdAt || new Date().toISOString(), row.updatedAt || null
+      ]));
+    await insertRows(client, "workspace_ops_session_enrollments",
+      ["workspace_id", "id", "occurrence_id", "customer_id", "seats", "status",
+        "idempotency_key", "booking_id", "created_at", "updated_at"],
+      clean(data.sessionEnrollments).map((row) => [
+        workspaceId, String(row.id), String(row.occurrenceId), String(row.customerId),
+        Math.max(1, numberOr(row.seats, 1) || 1), row.status || "confirmed",
+        String(row.idempotencyKey || ""), row.bookingId || null,
+        row.createdAt || new Date().toISOString(), row.updatedAt || null
+      ]));
+    await insertRows(client, "workspace_ops_attendance_records",
+      ["workspace_id", "id", "occurrence_id", "enrollment_id", "status", "recorded_at"],
+      clean(data.attendanceRecords).map((row) => [
+        workspaceId, String(row.id), String(row.occurrenceId), String(row.enrollmentId),
+        row.status || "present", row.recordedAt || new Date().toISOString()
+      ]));
+    await insertRows(client, "workspace_ops_resource_allocations",
+      ["workspace_id", "id", "resource_id", "booking_id", "line_item_id", "occurrence_id",
+        "starts_at", "ends_at", "status", "created_at"],
+      clean(data.resourceAllocations).map((row) => [
+        workspaceId, String(row.id), String(row.resourceId), row.bookingId || null,
+        row.lineItemId || null, row.occurrenceId || null, row.startsAt, row.endsAt,
+        row.status || "active", row.createdAt || new Date().toISOString()
+      ]));
+  }
 
   await client.query(
     "UPDATE workspace_ops_profiles SET updated_at = NOW() WHERE workspace_id = $1",

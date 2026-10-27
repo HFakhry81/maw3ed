@@ -1,8 +1,8 @@
 # سلامة بيانات تشغيل المساحة (JSON ↔ PostgreSQL)
 
 **تاريخ:** 2026-10-27  
-**المرحلة:** 2 — حزمة أولى (جرد FK + مقارنة + دفتر ترحيل + استعادة JSON)  
-**الحالة:** قيد التنفيذ — لا تُعلن المرحلة 2 مكتملة قبل ترحيل PG مجرّب بلا orphan وrestore drill لـ `workspace_ops_*`.
+**المرحلة:** 2 — سلامة البيانات (جرد FK + مقارنة + دفتر ترحيل + استعادة JSON + PG ops backup)  
+**الحالة:** مكتملة تقنياً — أدوات `ops:pg-backup`/`ops:pg-restore` + smoke `test:ops-pg-backup` (+ `--migrate-twice`) تثبت round-trip وidempotent migrate بما في ذلك 011+012. أعد التشغيل على Postgres Sam-PC (5432) قبل اعتماد بيانات حية.
 
 ## ربط الموظف (ذو صلة بالمرحلة 2)
 
@@ -49,7 +49,7 @@
 ## النسخ الاحتياطي والاستعادة
 
 - **JSON المحلي:** `npm run ops:backup` / `npm run ops:restore` عبر `scripts/ops-session-backup.js` (workspaces + ملفات جذر محدودة). التحقق الآلي في `npm run test:ops-integrity` يمرّر drill backup→تلف→restore→compare.
-- **PostgreSQL `workspace_ops_*`:** لم يُغلق بعد في هذه الحزمة؛ المطلوب لاحقًا dump/restore للجداول المطبعّة ثم مقارنة مع JSON. لا تعتمد على `TRUNCATE appointments/slot_holds` وحده كاستعادة تشغيل.
+- **PostgreSQL `workspace_ops_*` + `workspace_staff_links`:** `npm run ops:pg-backup` / `ops:pg-restore` / `ops:pg-backups` عبر [`scripts/ops-pg-backup.js`](../scripts/ops-pg-backup.js). النسخ لا يمسح شيئاً؛ الاستعادة تتطلب هدفاً صريحاً (`--restore=<dir>` أو `--restore-latest`) ثم تحذف فقط جداول التشغيل ضمن النطاق (أو `--workspace=`) وتعيد الإدراج. يفضّل `pg_dump`/`pg_restore` عند التوفر؛ النسخ المقيّد بمساحة يستخدم تصدير SQL عبر `pg`. لا تعتمد على `TRUNCATE appointments/slot_holds` وحده كاستعادة تشغيل.
 
 ## أوامر التحقق لهذه الحزمة
 
@@ -58,9 +58,30 @@ node --check opsIntegrity.js
 node --check scripts/migrate.js
 node --check scripts/audit-ops-integrity.js
 node --check scripts/compare-workspace-ops.js
+node --check scripts/ops-pg-backup.js
 node --check scripts/smoke-ops-integrity.js
+node --check scripts/smoke-ops-pg-backup.js
 npm run test:ops-integrity
+npm run test:ops-pg-backup
 node scripts/audit-ops-integrity.js --migrations-only --json
 ```
 
-عند توفر Postgres المحلي (منفذ 5433 عادةً): `MAW3ED_STORAGE=postgres DATABASE_URL=... npm run migrate` مرتين؛ المرة الثانية يجب أن تطبق 0 ملفات جديدة.
+### على Sam-PC (Postgres عادةً منفذ 5432)
+
+```bash
+export MAW3ED_ENV=local
+export MAW3ED_STORAGE=postgres
+export DATABASE_URL=postgresql://USER:PASS@127.0.0.1:5432/maw3ed
+
+npm run migrate          # مرة 1 — يطبّق المعلّق بما فيه 011+012 إن لزم
+npm run migrate          # مرة 2 — يجب: No pending migrations / applied=0
+
+npm run ops:pg-backup -- --reason=drill
+# أو drill الآلي (migrate-twice + backup→wipe→restore→compare):
+npm run test:ops-pg-backup:full
+
+# مقارنة مساحة JSON مع لقطة PG لنفس المعرّف:
+node scripts/compare-workspace-ops.js --left-workspace=<id> --right-pg=<id> --json
+```
+
+بدون `DATABASE_URL`: `npm run test:ops-pg-backup` يخرج `ok=true` مع `skipped:true` ورسالة واضحة (آمن لـ CI).
