@@ -10,13 +10,13 @@
     "docs/STAFF_ACCOUNT_LINKS.md"
   ],
   "resume_pointer": {
-    "phase": 5,
-    "package": "journeys-core-done-remaining-signed-cancel-pagination-session-public",
+    "phase": 6,
+    "package": "messaging-outbox-billing-webhooks-not-started",
     "next_steps": [
-      "Remaining Phase 5: client signed cancel/reschedule links; list pagination; public session_capacity enrollment journey; broader a11y pass",
-      "Or start Phase 6 (messaging/billing) if owner defers remaining Phase 5 items",
-      "Do not claim education/salon/rental UI production-ready — capacity engine + occupancy fields only",
-      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate && npm run test:phase5-journeys && npm run test:phase4-capacity"
+      "Start Phase 6 on a NEW PR branched from cursor/phase5-product-journeys-84f0: transactional outbox + billing hooks + webhook sandbox",
+      "Keep checkout/SMS/WhatsApp disabled until provider sandbox passes",
+      "Deferred non-blocking from Phase 5: platform-admin exceptional activity unlock (dual confirm + audit + reason) — ticket: phase5-deferred-platform-activity-unlock",
+      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed"
     ]
   },
   "open_product_gates": [],
@@ -28,6 +28,14 @@
       "decided_at": "2026-10-27",
       "summary": "Canonical model: login may span many workspaces; staff profile separate; junction workspace_staff_links is one-to-one per workspace (user↔staff); branch=workspace_id; desk only with active link and scoped to that staffId; unlinked staff fail-closed",
       "doc": "docs/STAFF_ACCOUNT_LINKS.md"
+    },
+    {
+      "id": "phase5-deferred-platform-activity-unlock",
+      "phase_origin": 5,
+      "status": "deferred_documented",
+      "decided_at": "2026-10-27",
+      "summary": "No platform-admin UI/route today unlocks activityModeLocked. Defer until PATCH /api/admin/workspaces gains dual-confirm + audit + reason action; facility UI correctly refuses post-lock changes.",
+      "doc": "docs/IMPLEMENTATION_EXECUTION_LOG.md"
     }
   ],
   "phases": [
@@ -52,26 +60,6 @@
       "name_ar": "سلامة البيانات والترحيل",
       "status": "complete_technical",
       "closed_at": "2026-10-27",
-      "packages": [
-        {
-          "id": "integrity-baseline",
-          "status": "complete_technical"
-        },
-        {
-          "id": "staff-links",
-          "status": "complete_technical"
-        },
-        {
-          "id": "unified-demo-seed",
-          "status": "complete_technical"
-        },
-        {
-          "id": "pg-ops-backup-restore-migrate-twice",
-          "status": "complete_technical",
-          "summary": "Scoped PG backup/restore + migrate-twice including 011+012; Sam-PC live migrate-twice proven on 5432/maw3ed",
-          "owner_machine_note": "Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate (twice) then npm run test:ops-pg-backup:full"
-        }
-      ],
       "remaining_to_close": []
     },
     {
@@ -79,91 +67,33 @@
       "name_ar": "الحجز الذري والتوفر",
       "status": "complete_technical",
       "closed_at": "2026-10-27",
-      "packages": [
-        {
-          "id": "atomic-booking-json-core",
-          "status": "complete_technical",
-          "summary": "bookingAtomic: [start,end+buffer) overlap, async mutex, idempotencyKey, hold cancel/expiry once; JSON smoke",
-          "evidence_commands": [
-            "npm run test:atomic-booking"
-          ]
-        },
-        {
-          "id": "atomic-booking-pg-parity",
-          "status": "complete_technical",
-          "summary": "PG workspace_ops path under advisory lock; migration 013 idempotency_key + unique partial index; smoke overlap/adjacent/idempotent/hold + key round-trip",
-          "evidence_commands": [
-            "npm run test:atomic-booking-pg",
-            "npm run test:atomic-booking-pg (with DATABASE_URL)"
-          ]
-        },
-        {
-          "id": "http-idempotency-key",
-          "status": "complete_technical",
-          "summary": "Public + ops appointment create accept body.idempotencyKey or Idempotency-Key header; ops POST uses createAppointmentAsync; confirmation email after workspace commit",
-          "evidence_commands": [
-            "npm run test:booking-timezone",
-            "node --check opsRoutes.js"
-          ]
-        },
-        {
-          "id": "timezone-dst-contract",
-          "status": "complete_technical",
-          "summary": "civilDateInTimeZone + occupancyInterval shared by slots/booking; DST spring-forward wall-clock minute contract; Cairo vs America/New_York civil date boundary",
-          "evidence_commands": [
-            "npm run test:booking-timezone"
-          ]
-        }
-      ],
-      "remaining_to_close": [],
-      "notes": "Phase 3 closed. Occupancy/resources/session_capacity delivered in Phase 4 package 1 — not claimed as vertical product readiness."
+      "remaining_to_close": []
     },
     {
       "id": 4,
       "name_ar": "الموارد وامتدادات الخدمات",
       "status": "complete_technical",
-      "started_at": "2026-10-27",
       "closed_at": "2026-10-27",
-      "packages": [
-        {
-          "id": "capacity-core-resources-sessions",
-          "status": "complete_technical",
-          "summary": "Generic occupancy core: resources + occupancy_mode exclusive|rental|session_capacity + composition single|bundle; requirements; occurrences/enrollments/attendance; allocations; physical seat cap enforced. Migration 014 + JSON/PG + backup tables.",
-          "evidence_commands": [
-            "npm run test:capacity-modes",
-            "npm run test:capacity-pg"
-          ]
-        },
-        {
-          "id": "capacity-http-autoallocate-isolation",
-          "status": "complete_technical",
-          "summary": "Ops HTTP for resources/requirements/occurrences/enrollments/attendance/bundle; exclusive/rental auto-allocate on appointment create (+ cancel releases); cross-workspace store + HTTP BOLA isolation smokes.",
-          "evidence_commands": [
-            "npm run test:capacity-http",
-            "npm run test:capacity-isolation",
-            "npm run test:phase4-capacity"
-          ],
-          "owner_machine_note": "Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate && npm run test:phase4-capacity"
-        }
-      ],
       "remaining_to_close": [],
-      "deferred_non_blocking": [
-        "Optional PG concurrent enrollment stress under advisory lock",
-        "Session series management UI/API polish",
-        "Vertical template occupancy defaults (still no production-ready claim for education/salon/rental)"
-      ],
-      "notes": "Phase 4 acceptance gate met for generic capacity engine. Do not claim education/salon/rental production-ready. Product journeys = Phase 5."
+      "notes": "Generic capacity engine only — no vertical production claim."
     },
     {
       "id": 5,
       "name_ar": "الرحلات والواجهة",
-      "status": "in_progress",
+      "status": "complete_technical",
       "started_at": "2026-10-27",
+      "closed_at": "2026-10-27",
       "packages": [
         {
           "id": "journeys-core-onboarding-catalog-roles-public",
           "status": "complete_technical",
-          "summary": "Template lock at workspace create + hide industry switch when locked; services occupancyMode/capacity/composition UI; thin ResourcesView; membership-role nav (owner/admin/manager/staff/viewer); linked-staff stripped bootstrap for desk; public book.html occupancy hints + RTL; calendar occupancy note. No Stripe/SMS/WhatsApp; no vertical production claim.",
+          "summary": "Template lock at create; occupancy/resources UI; membership-role nav; linked-staff stripped bootstrap; public occupancy hints.",
+          "evidence_commands": ["npm run test:phase5-journeys"]
+        },
+        {
+          "id": "journeys-manage-pagination-session-a11y",
+          "status": "complete_technical",
+          "summary": "Signed manage cancel/reschedule (HMAC+TTL+single-use) + manage.html; customers/appointments limit/offset paging; public session_capacity list+enroll; basic a11y on touched journeys. Platform unlock deferred.",
           "evidence_commands": [
             "npm run test:phase5-journeys",
             "npm run test:ops-rbac",
@@ -171,16 +101,17 @@
           ]
         }
       ],
-      "remaining_to_close": [
-        "Client signed cancel/reschedule links (age/use limited)",
-        "List pagination/filter/limits for customers/appointments",
-        "Public session_capacity enrollment journey (beyond occupancy label)",
-        "Broader WCAG 2.2 AA pass on touched journeys",
-        "Platform-admin exceptional unlock (dual confirm + audit + reason) UI"
+      "remaining_to_close": [],
+      "deferred_non_blocking": [
+        "phase5-deferred-platform-activity-unlock: platform-admin exceptional activity template unlock (dual confirm + audit + reason)"
       ],
-      "notes": "phase_5_closed is false. Next is finish remaining Phase 5 items or Phase 6 messaging/billing per owner."
+      "notes": "phase_5_closed=true. Do not claim education/salon/rental or Stripe/SMS/WhatsApp ready. Next = Phase 6."
     },
-    { "id": 6, "name_ar": "الرسائل والفوترة والتكاملات", "status": "not_started" },
+    {
+      "id": 6,
+      "name_ar": "الرسائل والفوترة والتكاملات",
+      "status": "not_started"
+    },
     { "id": 7, "name_ar": "التشغيل والخصوصية والاستعادة", "status": "not_started" },
     { "id": 8, "name_ar": "قبول ما قبل الإطلاق", "status": "not_started" },
     { "id": 9, "name_ar": "تجربة محدودة والتوسع", "status": "not_started" }
@@ -222,6 +153,8 @@
     "phase_4_closed": true,
     "phase_5_started": true,
     "phase_5_journeys_core": true,
-    "phase_5_closed": false
+    "phase_5_manage_pagination_session_a11y": true,
+    "phase_5_closed": true,
+    "phase_6_started": false
   }
 }

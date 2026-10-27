@@ -199,12 +199,22 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     const publicHoldMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/hold$/);
     const publicBookMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/appointments$/);
     const publicPassMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/pass\/([^/]+)$/);
+    const publicManageMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/manage\/([^/]+)$/);
+    const publicManageCancelMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/manage\/([^/]+)\/cancel$/);
+    const publicManageRescheduleMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/manage\/([^/]+)\/reschedule$/);
+    const publicSessionsMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/sessions$/);
+    const publicSessionEnrollMatch = requested.match(/^\/api\/public\/booking\/([^/]+)\/sessions\/([^/]+)\/enroll$/);
     const isPublic =
       (publicBookingMatch && req.method === "GET") ||
       (publicSlotsMatch && req.method === "GET") ||
       (publicHoldMatch && req.method === "POST") ||
       (publicBookMatch && req.method === "POST") ||
-      (publicPassMatch && req.method === "GET");
+      (publicPassMatch && req.method === "GET") ||
+      (publicManageMatch && req.method === "GET") ||
+      (publicManageCancelMatch && req.method === "POST") ||
+      (publicManageRescheduleMatch && req.method === "POST") ||
+      (publicSessionsMatch && req.method === "GET") ||
+      (publicSessionEnrollMatch && req.method === "POST");
 
     const isOps = requested.startsWith("/api/ops/");
     if (!isOps && !isPublic) return false;
@@ -212,7 +222,18 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
     let workspaceId = ops.DEFAULT_WORKSPACE_ID;
     if (isPublic) {
       const slug = decodeURIComponent(
-        (publicBookingMatch || publicSlotsMatch || publicHoldMatch || publicBookMatch || publicPassMatch)[1]
+        (
+          publicBookingMatch ||
+          publicSlotsMatch ||
+          publicHoldMatch ||
+          publicBookMatch ||
+          publicPassMatch ||
+          publicManageMatch ||
+          publicManageCancelMatch ||
+          publicManageRescheduleMatch ||
+          publicSessionsMatch ||
+          publicSessionEnrollMatch
+        )[1]
       );
       workspaceId = await publicWorkspaceId(slug);
     } else {
@@ -457,14 +478,29 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       }
 
       if (requested === "/api/ops/customers" && req.method === "GET") {
-        sendJson(res, 200, {
-          ok: true,
-          customers: ops.listCustomers({
-            search: requestUrl.searchParams.get("search") || "",
-            categoryId: requestUrl.searchParams.get("categoryId") || ""
-          }),
-          categories: ops.listCustomerCategories()
+        const limitParam = requestUrl.searchParams.get("limit");
+        const offsetParam = requestUrl.searchParams.get("offset");
+        const listed = ops.listCustomers({
+          search: requestUrl.searchParams.get("search") || "",
+          categoryId: requestUrl.searchParams.get("categoryId") || "",
+          limit: limitParam == null || limitParam === "" ? null : Number(limitParam),
+          offset: offsetParam == null || offsetParam === "" ? 0 : Number(offsetParam)
         });
+        if (Array.isArray(listed)) {
+          sendJson(res, 200, {
+            ok: true,
+            customers: listed,
+            categories: ops.listCustomerCategories(),
+            paging: { total: listed.length, limit: listed.length, offset: 0 }
+          });
+        } else {
+          sendJson(res, 200, {
+            ok: true,
+            customers: listed.items,
+            categories: ops.listCustomerCategories(),
+            paging: listed.paging
+          });
+        }
         return true;
       }
       if (requested === "/api/ops/customers" && req.method === "POST") {
@@ -648,6 +684,7 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         const idempotencyKey = bookingAtomic.resolveIdempotencyKeyFromRequest(req, body);
         if (idempotencyKey) body.idempotencyKey = idempotencyKey;
         const appointment = await ops.createPublicAppointment(publicBookMatch[1], body);
+        const manage = ops.issueManageForAppointment(appointment);
         const notifications = ops.getNotificationSettings();
         const page = ops.getBookingPage();
         if (notifications?.email?.confirmation !== false) {
@@ -655,7 +692,8 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
             to: String(body.email || "").trim(),
             businessTo: String(page.email || "").trim(),
             appointment,
-            page
+            page,
+            manageUrl: manage?.manageUrl || null
           };
         }
         sendJson(res, 201, {
@@ -664,6 +702,8 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
           passUrl: appointment?.checkInToken
             ? `/pass.html?slug=${encodeURIComponent(publicBookMatch[1])}&token=${encodeURIComponent(appointment.checkInToken)}`
             : null,
+          manageUrl: manage?.manageUrl || null,
+          manageExpiresAt: manage?.expiresAt || null,
           workspaceId: ops.getCurrentWorkspaceId()
         });
         return true;
@@ -674,6 +714,54 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         const slug = decodeURIComponent(publicPassMatch[1]);
         const token = decodeURIComponent(publicPassMatch[2]);
         sendJson(res, 200, { ok: true, ...ops.getPublicPass(slug, token) });
+        return true;
+      }
+
+      if (publicManageMatch && req.method === "GET") {
+        assertPublicRateLimit(req, "manage", 60);
+        const slug = decodeURIComponent(publicManageMatch[1]);
+        const token = decodeURIComponent(publicManageMatch[2]);
+        sendJson(res, 200, { ok: true, ...ops.publicManagePreview(slug, token) });
+        return true;
+      }
+      if (publicManageCancelMatch && req.method === "POST") {
+        assertPublicRateLimit(req, "manage-cancel", 20);
+        const slug = decodeURIComponent(publicManageCancelMatch[1]);
+        const token = decodeURIComponent(publicManageCancelMatch[2]);
+        sendJson(res, 200, { ok: true, ...ops.publicManageCancel(slug, token) });
+        return true;
+      }
+      if (publicManageRescheduleMatch && req.method === "POST") {
+        assertPublicRateLimit(req, "manage-reschedule", 20);
+        const slug = decodeURIComponent(publicManageRescheduleMatch[1]);
+        const token = decodeURIComponent(publicManageRescheduleMatch[2]);
+        sendJson(res, 200, {
+          ok: true,
+          ...(await ops.publicManageReschedule(slug, token, await parseJsonBody(req)))
+        });
+        return true;
+      }
+
+      if (publicSessionsMatch && req.method === "GET") {
+        assertPublicRateLimit(req, "sessions", 60);
+        const slug = decodeURIComponent(publicSessionsMatch[1]);
+        sendJson(res, 200, {
+          ok: true,
+          ...ops.listPublicSessionOccurrences(slug, {
+            serviceId: requestUrl.searchParams.get("serviceId") || ""
+          })
+        });
+        return true;
+      }
+      if (publicSessionEnrollMatch && req.method === "POST") {
+        assertPublicRateLimit(req, "session-enroll", 20);
+        const slug = decodeURIComponent(publicSessionEnrollMatch[1]);
+        const occurrenceId = decodeURIComponent(publicSessionEnrollMatch[2]);
+        const body = await parseJsonBody(req);
+        const idempotencyKey = bookingAtomic.resolveIdempotencyKeyFromRequest(req, body);
+        if (idempotencyKey) body.idempotencyKey = idempotencyKey;
+        body.occurrenceId = occurrenceId;
+        sendJson(res, 201, { ok: true, ...(await ops.publicEnrollInSession(slug, body)) });
         return true;
       }
 
@@ -912,13 +1000,27 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       }
 
       if (requested === "/api/ops/appointments" && req.method === "GET") {
-        sendJson(res, 200, {
-          ok: true,
-          appointments: ops.listAppointments({
-            from: requestUrl.searchParams.get("from") || "",
-            to: requestUrl.searchParams.get("to") || ""
-          })
+        const limitParam = requestUrl.searchParams.get("limit");
+        const offsetParam = requestUrl.searchParams.get("offset");
+        const listed = ops.listAppointments({
+          from: requestUrl.searchParams.get("from") || "",
+          to: requestUrl.searchParams.get("to") || "",
+          limit: limitParam == null || limitParam === "" ? null : Number(limitParam),
+          offset: offsetParam == null || offsetParam === "" ? 0 : Number(offsetParam)
         });
+        if (Array.isArray(listed)) {
+          sendJson(res, 200, {
+            ok: true,
+            appointments: listed,
+            paging: { total: listed.length, limit: listed.length, offset: 0 }
+          });
+        } else {
+          sendJson(res, 200, {
+            ok: true,
+            appointments: listed.items,
+            paging: listed.paging
+          });
+        }
         return true;
       }
       if (requested === "/api/ops/appointments" && req.method === "POST") {
