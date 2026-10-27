@@ -801,7 +801,8 @@ async function createWorkspace(user, payload) {
         slug,
         businessName: name,
         activityType: resolvedActivityType,
-        locale
+        locale,
+        lockActivity: payload.lockActivity !== false
       });
     } catch (error) {
       console.warn("[workspace] local ops seed failed:", error.message);
@@ -950,7 +951,8 @@ async function createWorkspace(user, payload) {
       slug: workspace.slug,
       businessName: name,
       activityType: resolvedActivityType,
-      locale
+      locale,
+      lockActivity: payload.lockActivity !== false
     });
     await opsStore.withWorkspaceAsync(workspace.id, async () => {});
   } catch (error) {
@@ -1177,6 +1179,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (requested === "/api/config" && req.method === "GET") {
+      const { getIntegrationCapabilities } = require("./billingCapabilities");
       return sendJson(res, 200, {
         ok: true,
         clerkPublishableKey:
@@ -1185,8 +1188,42 @@ const server = http.createServer(async (req, res) => {
           || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           || null,
         product: "Maw3ed",
-        company: "UpNexa-eg.com"
+        company: "UpNexa-eg.com",
+        integrations: getIntegrationCapabilities(process.env)
       });
+    }
+    if (requested === "/api/integrations/capabilities" && req.method === "GET") {
+      const { getIntegrationCapabilities } = require("./billingCapabilities");
+      return sendJson(res, 200, { ok: true, ...getIntegrationCapabilities(process.env) });
+    }
+    const webhookSandboxMatch = requested.match(/^\/api\/webhooks\/sandbox\/([^/]+)$/);
+    if (webhookSandboxMatch && req.method === "POST") {
+      const provider = decodeURIComponent(webhookSandboxMatch[1]);
+      const rawBody = await readRequestBody(req);
+      let payload = {};
+      try {
+        payload = JSON.parse(rawBody || "{}");
+      } catch {
+        return sendJson(res, 400, { ok: false, error: "Invalid JSON body" });
+      }
+      const { handleSandboxWebhook } = require("./webhookSandbox");
+      try {
+        const result = handleSandboxWebhook({
+          provider,
+          rawBody,
+          signatureHeader: req.headers["x-maw3ed-signature"] || req.headers["x-signature"] || "",
+          eventId: payload.eventId || payload.id,
+          eventType: payload.eventType || payload.type,
+          payload
+        });
+        return sendJson(res, result.replayed ? 200 : 202, result);
+      } catch (error) {
+        return sendJson(res, error.statusCode || 400, {
+          ok: false,
+          error: error.message,
+          code: error.code || null
+        });
+      }
     }
     if (requested === "/api/plans" && req.method === "GET") {
       return sendJson(res, 200, { ok: true, plans: await listPlans() });
@@ -1242,10 +1279,23 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 201, { ok: true, request: await requestManualSubscription(user, payload.planKey) });
     }
     if (requested === "/api/whop/checkout" && req.method === "POST") {
-      return sendJson(res, 410, { ok: false, error: "Paid checkout is temporarily disabled; use /api/billing/request for manual approval." });
+      const { getIntegrationCapabilities, getCheckoutHttpStatus } = require("./billingCapabilities");
+      const caps = getIntegrationCapabilities(process.env);
+      const status = getCheckoutHttpStatus(caps);
+      return sendJson(res, status === 200 ? 200 : 410, {
+        ok: false,
+        error: "Paid checkout is temporarily disabled; use /api/billing/request for manual approval.",
+        code: "CHECKOUT_GATED",
+        hostedCheckout: caps.billing.hostedCheckout,
+        sandboxAcceptance: caps.billing.sandboxAcceptance
+      });
     }
     if (requested === "/api/whop/verify-checkout" && req.method === "POST") {
-      return sendJson(res, 410, { ok: false, error: "Automatic paid activation is disabled; an administrator must approve the request." });
+      return sendJson(res, 410, {
+        ok: false,
+        error: "Automatic paid activation is disabled; an administrator must approve the request.",
+        code: "CHECKOUT_VERIFY_GATED"
+      });
     }
     if (requested.startsWith("/api/admin")) {
       const handled = await getAdminRouter().handle(requested, req, res, requestUrl);
@@ -1276,15 +1326,48 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, service: "maw3ed-api", liveness: true, uptimeMs: Date.now() - startTime });
     }
     if (requested === "/api/health/ready" && req.method === "GET") {
+      let outboxSummary = null;
+      let secrets = null;
+      let alerts = null;
+      try {
+        outboxSummary = require("./outboxDeliveryWorker").workerStatus(process.env);
+      } catch {
+        outboxSummary = null;
+      }
+      try {
+        const secretsPosture = require("./secretsPosture").evaluateSecretsPosture(process.env);
+        secrets = { ok: secretsPosture.ok, inventory: secretsPosture.inventory, warnings: secretsPosture.warnings, errors: secretsPosture.errors };
+      } catch {
+        secrets = null;
+      }
+      try {
+        alerts = require("./metricsAlerts").evaluateAlertStubs();
+      } catch {
+        alerts = null;
+      }
+      const payload = {
+        service: "maw3ed-api",
+        integrations: outboxSummary,
+        secrets,
+        alerts: alerts
+          ? { stub: true, ok: alerts.ok, findings: alerts.findings }
+          : null
+      };
       if (databaseConfigured) {
         try {
           await query("SELECT 1");
-          return sendJson(res, 200, { ok: true, service: "maw3ed-api", ready: true, database: "postgresql" });
+          return sendJson(res, 200, { ok: true, ready: true, database: "postgresql", ...payload });
         } catch (error) {
-          return sendJson(res, 503, { ok: false, service: "maw3ed-api", ready: false, database: "postgresql-unavailable", error: "database_unavailable" });
+          return sendJson(res, 503, {
+            ok: false,
+            ready: false,
+            database: "postgresql-unavailable",
+            error: "database_unavailable",
+            ...payload
+          });
         }
       }
-      return sendJson(res, 200, { ok: true, service: "maw3ed-api", ready: true, database: "local-memory" });
+      return sendJson(res, 200, { ok: true, ready: true, database: "local-memory", ...payload });
     }
     if (requested === "/api/activity-templates" && req.method === "GET") {
       const localTemplates = [

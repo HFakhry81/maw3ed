@@ -9,7 +9,7 @@ execFileSync(process.execPath, [path.join(root, "node_modules", "vite", "bin", "
   stdio: "inherit"
 });
 
-for (const file of ["auth.html", "auth.js", "plans.html", "plans.js", "admin.html", "admin.js", "book.html", "manifest.webmanifest", "sw.js"]) {
+for (const file of ["auth.html", "auth.js", "plans.html", "plans.js", "admin.html", "admin.js", "book.html", "manage.html", "pass.html", "manifest.webmanifest", "sw.js"]) {
   const sourceFile = path.join(root, file);
   if (fs.existsSync(sourceFile)) fs.copyFileSync(sourceFile, path.join(dist, file));
 }

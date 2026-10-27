@@ -41,10 +41,12 @@ async function invoke({ path: apiPath, method = "GET", workspaceId, role = "owne
 async function main() {
   const originalEnv = {
     MAW3ED_ENV: process.env.MAW3ED_ENV,
-    MAW3ED_REQUIRE_AUTH: process.env.MAW3ED_REQUIRE_AUTH
+    MAW3ED_REQUIRE_AUTH: process.env.MAW3ED_REQUIRE_AUTH,
+    SESSION_SECRET: process.env.SESSION_SECRET
   };
   process.env.MAW3ED_ENV = "production";
   process.env.MAW3ED_REQUIRE_AUTH = "1";
+  process.env.SESSION_SECRET = "smoke-workspace-events-session-secret";
 
   const ws = "ws-events-smoke";
   const other = "ws-events-other";
@@ -112,6 +114,8 @@ async function main() {
     else process.env.MAW3ED_ENV = originalEnv.MAW3ED_ENV;
     if (originalEnv.MAW3ED_REQUIRE_AUTH === undefined) delete process.env.MAW3ED_REQUIRE_AUTH;
     else process.env.MAW3ED_REQUIRE_AUTH = originalEnv.MAW3ED_REQUIRE_AUTH;
+    if (originalEnv.SESSION_SECRET === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = originalEnv.SESSION_SECRET;
     for (const id of [ws, other]) {
       try {
         fs.rmSync(path.join(__dirname, "..", "data", "workspaces", id), { recursive: true, force: true });

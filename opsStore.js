@@ -9,6 +9,7 @@ const activityTemplates = require("./activityTemplatesCatalog");
 const bookingAtomic = require("./bookingAtomic");
 const capacityOps = require("./capacityOps");
 const capacityEngine = require("./capacityEngine");
+const bookingActionToken = require("./bookingActionToken");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -213,12 +214,27 @@ function assertUniqueName({ items, value, field = "name", ignoreId = null, kind 
   }
 }
 
-function listCustomers({ search = "", categoryId = "" } = {}) {
+function paginateList(items, { limit = null, offset = 0 } = {}) {
+  const rows = Array.isArray(items) ? items : [];
+  const total = rows.length;
+  const hasLimit = limit != null && limit !== "" && Number.isFinite(Number(limit));
+  if (!hasLimit) {
+    return { items: rows, total, limit: total, offset: 0, paging: { total, limit: total, offset: 0 } };
+  }
+  const lim = Math.min(100, Math.max(1, Number(limit) || 25));
+  const off = Math.max(0, Number(offset) || 0);
+  const slice = rows.slice(off, off + lim);
+  return { items: slice, total, limit: lim, offset: off, paging: { total, limit: lim, offset: off } };
+}
+
+function listCustomers({ search = "", categoryId = "", limit = null, offset = 0 } = {}) {
   const q = search.trim().toLowerCase();
-  return store.customers.filter((customer) => {
+  const filtered = store.customers.filter((customer) => {
     const hay = `${customer.firstName} ${customer.lastName} ${customer.phone} ${customer.email}`.toLowerCase();
     return (!q || hay.includes(q)) && (!categoryId || categoryId === "all" || customer.categoryId === categoryId);
   });
+  if (limit == null || limit === "") return filtered;
+  return paginateList(filtered, { limit, offset });
 }
 
 function createCustomer(payload) {
@@ -1853,10 +1869,12 @@ function createExpense(payload) {
   return expense;
 }
 
-function listAppointments({ from = "", to = "" } = {}) {
-  return store.appointments
+function listAppointments({ from = "", to = "", limit = null, offset = 0 } = {}) {
+  const filtered = store.appointments
     .filter((item) => (!from || item.date >= from) && (!to || item.date <= to))
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+  if (limit == null || limit === "") return filtered;
+  return paginateList(filtered, { limit, offset });
 }
 
 function createAppointment(payload) {
@@ -2076,6 +2094,343 @@ function getPublicPass(slug, token) {
       checkedInAt: enriched.checkedInAt || null
     }
   };
+}
+
+function buildManageUrls(slug, token) {
+  const encoded = encodeURIComponent(token);
+  const safeSlug = encodeURIComponent(slug);
+  return {
+    manageUrl: `/manage.html?slug=${safeSlug}&token=${encoded}`,
+    manageApiPath: `/api/public/booking/${safeSlug}/manage/${encoded}`
+  };
+}
+
+function issueManageForAppointment(appointment) {
+  if (!appointment?.id) return null;
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  const issued = bookingActionToken.issueAppointmentManageToken(workspaceId, appointment.id);
+  const slug = store.bookingPage?.slug || "";
+  const urls = buildManageUrls(slug, issued.token);
+  return {
+    token: issued.token,
+    expiresAt: issued.expiresAt,
+    ...urls
+  };
+}
+
+function publicManagePreview(slug, token) {
+  if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
+    fail("صفحة الحجز غير متاحة", 404);
+  }
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  const payload = bookingActionToken.inspectToken(token);
+  if (String(payload.workspaceId || "") && String(payload.workspaceId) !== String(workspaceId)) {
+    fail("رابط الإدارة غير صالح", 404);
+  }
+  const row = bookingActionToken.getLedgerEntry(workspaceId, payload.jti);
+  if (!row) fail("رابط الإدارة غير معروف أو أُبطل", 404);
+
+  if (payload.kind === "enrollment") {
+    capacityOps.ensureCapacityCollections(store);
+    const enrollment = (store.sessionEnrollments || []).find((item) => item.id === payload.enrollmentId);
+    if (!enrollment) fail("التسجيل غير موجود", 404);
+    const occurrence = (store.sessionOccurrences || []).find((item) => item.id === enrollment.occurrenceId);
+    const service = store.services.find((item) => item.id === occurrence?.serviceId);
+    const customer = store.customers.find((item) => item.id === enrollment.customerId);
+    return {
+      kind: "enrollment",
+      businessName: store.bookingPage.businessName,
+      slug,
+      expiresAt: new Date(payload.exp).toISOString(),
+      canCancel: enrollment.status !== "cancelled" && !row.usedCancel,
+      canReschedule: false,
+      enrollment: {
+        id: enrollment.id,
+        status: enrollment.status,
+        seats: enrollment.seats,
+        occurrenceId: enrollment.occurrenceId,
+        startsAt: occurrence?.startsAt || null,
+        endsAt: occurrence?.endsAt || null,
+        serviceName: service?.name || "",
+        customerName: customer ? `${customer.firstName} ${customer.lastName}`.trim() : ""
+      }
+    };
+  }
+
+  const appointment = store.appointments.find((item) => item.id === payload.appointmentId);
+  if (!appointment) fail("الموعد غير موجود", 404);
+  return {
+    kind: "appointment",
+    businessName: store.bookingPage.businessName,
+    slug,
+    expiresAt: new Date(payload.exp).toISOString(),
+    canCancel: appointment.status !== "cancelled" && appointment.status !== "canceled" && !row.usedCancel,
+    canReschedule:
+      appointment.status !== "cancelled" &&
+      appointment.status !== "canceled" &&
+      appointment.status !== "completed" &&
+      !row.usedReschedule,
+    appointment: {
+      id: appointment.id,
+      date: appointment.date,
+      time: appointment.time,
+      serviceName: appointment.serviceName,
+      staffName: appointment.staffName,
+      customerName: appointment.customerName,
+      status: appointment.status,
+      serviceId: appointment.serviceId || null,
+      staffId: appointment.staffId || null
+    }
+  };
+}
+
+function publicManageCancel(slug, token) {
+  if (store.bookingPage.slug !== slug) fail("صفحة الحجز غير متاحة", 404);
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  const payload = bookingActionToken.inspectToken(token);
+  if (String(payload.workspaceId || "") && String(payload.workspaceId) !== String(workspaceId)) {
+    fail("رابط الإدارة غير صالح", 404);
+  }
+
+  if (payload.kind === "enrollment") {
+    bookingActionToken.assertActionAllowed(workspaceId, payload, "cancel");
+    const result = capacityOps.cancelEnrollment(store, payload.enrollmentId);
+    persist();
+    bookingActionToken.consumeAction(workspaceId, payload, "cancel");
+    return { ok: true, kind: "enrollment", ...result };
+  }
+
+  bookingActionToken.assertActionAllowed(workspaceId, payload, "cancel");
+  const appointment = updateAppointmentStatus(payload.appointmentId, "cancelled");
+  bookingActionToken.consumeAction(workspaceId, payload, "cancel");
+  return { ok: true, kind: "appointment", appointment };
+}
+
+async function publicManageReschedule(slug, token, body = {}) {
+  if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
+    fail("صفحة الحجز غير متاحة", 404);
+  }
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  const payload = bookingActionToken.inspectToken(token);
+  if (payload.kind !== "appointment") fail("إعادة الجدولة متاحة للمواعيد فقط", 400);
+  if (String(payload.workspaceId || "") && String(payload.workspaceId) !== String(workspaceId)) {
+    fail("رابط الإدارة غير صالح", 404);
+  }
+  bookingActionToken.assertActionAllowed(workspaceId, payload, "reschedule");
+
+  const appointment = store.appointments.find((item) => item.id === payload.appointmentId);
+  if (!appointment) fail("الموعد غير موجود", 404);
+  if (appointment.status === "cancelled" || appointment.status === "completed") {
+    fail("لا يمكن إعادة جدولة هذا الموعد", 400);
+  }
+
+  const date = String(body.date || "").trim();
+  const time = String(body.time || "").trim();
+  let staffId = String(body.staffId || appointment.staffId || "").trim();
+  const serviceId = appointment.serviceId || "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(time)) {
+    fail("التاريخ والوقت مطلوبان بصيغة صحيحة");
+  }
+
+  return bookingAtomic.withBookingLock(workspaceId, async () => {
+    bookingActionToken.assertActionAllowed(workspaceId, payload, "reschedule");
+    const available = await listPublicSlots(slug, {
+      date,
+      serviceId,
+      staffId: staffId || "any",
+      ignoreHolds: true
+    });
+    if (staffId === "any" || !staffId) {
+      const match = available.slots.find((slot) => slot.time === time);
+      if (!match) fail("لا يوجد وقت متاح", 409);
+      staffId = match.staffId;
+    } else if (!available.slots.some((slot) => slot.time === time && (!staffId || slot.staffId === staffId))) {
+      // Allow same appointment's current slot to be "kept" only if still listed; otherwise require free slot.
+      const isSame =
+        appointment.date === date && appointment.time === time && appointment.staffId === staffId;
+      if (!isSame) fail("هذا الوقت لم يعد متاحاً", 409);
+    }
+
+    const staff = store.staff.find((person) => person.id === staffId);
+    if (!staff) fail("الموظف غير موجود", 404);
+
+    // Temporarily clear occupancy of this appointment so it does not conflict with itself.
+    const previous = {
+      date: appointment.date,
+      time: appointment.time,
+      staffId: appointment.staffId,
+      staffName: appointment.staffName,
+      status: appointment.status
+    };
+    appointment.status = "cancelled";
+    persist();
+    try {
+      const check = await listPublicSlots(slug, {
+        date,
+        serviceId,
+        staffId,
+        ignoreHolds: true
+      });
+      if (!check.slots.some((slot) => slot.time === time)) {
+        appointment.date = previous.date;
+        appointment.time = previous.time;
+        appointment.staffId = previous.staffId;
+        appointment.staffName = previous.staffName;
+        appointment.status = previous.status;
+        persist();
+        fail("هذا الوقت لم يعد متاحاً", 409);
+      }
+      appointment.date = date;
+      appointment.time = time;
+      appointment.staffId = staffId;
+      appointment.staffName = staff.name;
+      appointment.status = previous.status === "cancelled" ? "confirmed" : previous.status;
+      appointment.updatedAt = new Date().toISOString();
+      appointment.rescheduledAt = appointment.updatedAt;
+      persist();
+      bookingActionToken.consumeAction(workspaceId, payload, "reschedule");
+      return { ok: true, kind: "appointment", appointment };
+    } catch (error) {
+      if (appointment.status === "cancelled" && previous.status !== "cancelled") {
+        appointment.date = previous.date;
+        appointment.time = previous.time;
+        appointment.staffId = previous.staffId;
+        appointment.staffName = previous.staffName;
+        appointment.status = previous.status;
+        persist();
+      }
+      throw error;
+    }
+  });
+}
+
+function listPublicSessionOccurrences(slug, { serviceId = "" } = {}) {
+  if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
+    fail("صفحة الحجز غير متاحة", 404);
+  }
+  const service = store.services.find((item) => item.id === serviceId);
+  if (!service || !service.publicBooking || service.active === false) {
+    fail("الخدمة غير متاحة للحجز العام", 400);
+  }
+  if (capacityEngine.normalizeOccupancyMode(service.occupancyMode) !== "session_capacity") {
+    fail("هذه الخدمة ليست بنمط سعة جلسة", 400);
+  }
+  capacityOps.ensureCapacityCollections(store);
+  const now = Date.now();
+  const rows = capacityOps
+    .listSessionOccurrences(store, { serviceId: service.id, status: "scheduled" })
+    .filter((row) => new Date(row.startsAt).getTime() >= now - 60_000)
+    .map((row) => {
+      const availability = capacityOps.getOccurrenceAvailability(store, row.id);
+      return {
+        id: row.id,
+        serviceId: row.serviceId,
+        title: row.title || service.name,
+        startsAt: row.startsAt,
+        endsAt: row.endsAt,
+        staffId: row.staffId || null,
+        capacity: availability.capacity,
+        remaining: availability.remaining,
+        enrolled: availability.occupied
+      };
+    })
+    .filter((row) => row.remaining > 0)
+    .sort((a, b) => String(a.startsAt).localeCompare(String(b.startsAt)));
+  return {
+    service: {
+      id: service.id,
+      name: service.name,
+      occupancyMode: service.occupancyMode,
+      defaultCapacity: service.defaultCapacity
+    },
+    occurrences: rows
+  };
+}
+
+async function publicEnrollInSession(slug, payload = {}) {
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () => {
+    if (store.bookingPage.slug !== slug || !store.bookingPage.onlineBookingEnabled) {
+      fail("صفحة الحجز غير متاحة", 404);
+    }
+    const occurrenceId = String(payload.occurrenceId || "").trim();
+    const customerName = String(payload.customerName || "").trim();
+    const phone = String(payload.phone || "").trim();
+    const email = String(payload.email || "").trim();
+    const seats = Math.max(1, Number(payload.seats) || 1);
+    if (!occurrenceId || !customerName) fail("الجلسة واسم العميل مطلوبان");
+
+    capacityOps.ensureCapacityCollections(store);
+    const occurrence = store.sessionOccurrences.find((item) => item.id === occurrenceId);
+    if (!occurrence || occurrence.status === "cancelled") fail("الجلسة غير متاحة", 404);
+    const service = store.services.find((item) => item.id === occurrence.serviceId);
+    if (!service || !service.publicBooking || service.active === false) {
+      fail("الخدمة غير متاحة للحجز العام", 400);
+    }
+    if (capacityEngine.normalizeOccupancyMode(service.occupancyMode) !== "session_capacity") {
+      fail("هذه الخدمة ليست بنمط سعة جلسة", 400);
+    }
+
+    let customer = null;
+    if (phone) {
+      customer = store.customers.find(
+        (item) => String(item.phone || "").replace(/\s+/g, "") === phone.replace(/\s+/g, "")
+      );
+    }
+    if (!customer) {
+      customer = store.customers.find(
+        (item) => `${item.firstName} ${item.lastName}`.trim().toLowerCase() === customerName.toLowerCase()
+      );
+    }
+    if (customer) {
+      const [firstName, ...rest] = customerName.split(/\s+/);
+      customer.firstName = firstName || customer.firstName;
+      customer.lastName = rest.join(" ") || customer.lastName;
+      if (phone) customer.phone = phone;
+      if (email) customer.email = email;
+      persist();
+    } else {
+      const [firstName, ...rest] = customerName.split(/\s+/);
+      customer = createCustomer({
+        firstName,
+        lastName: rest.join(" "),
+        phone,
+        email,
+        categoryId: "cat-new"
+      });
+    }
+
+    const enrollment = capacityOps.enrollInOccurrence(store, {
+      occurrenceId,
+      customerId: customer.id,
+      seats,
+      idempotencyKey: payload.idempotencyKey
+    });
+    persist();
+
+    const issued = bookingActionToken.issueEnrollmentManageToken(workspaceId, enrollment.id);
+    const urls = buildManageUrls(slug, issued.token);
+    const availability = capacityOps.getOccurrenceAvailability(store, occurrenceId);
+    return {
+      enrollment,
+      occurrence: {
+        id: occurrence.id,
+        startsAt: occurrence.startsAt,
+        endsAt: occurrence.endsAt,
+        title: occurrence.title || service.name,
+        serviceName: service.name
+      },
+      customer: {
+        id: customer.id,
+        name: `${customer.firstName} ${customer.lastName}`.trim()
+      },
+      remaining: availability.remaining,
+      manageUrl: urls.manageUrl,
+      manageToken: issued.token,
+      expiresAt: issued.expiresAt,
+      note: "تسجيل سعة جلسة — لا يُعلن جاهزية منتج التعليم/الرياضة من هذا المسار"
+    };
+  });
 }
 
 function previewCheckIn(token) {
@@ -2554,6 +2909,13 @@ module.exports = {
   holdPublicSlot,
   cancelSlotHold,
   createPublicAppointment,
+  issueManageForAppointment,
+  publicManagePreview,
+  publicManageCancel,
+  publicManageReschedule,
+  listPublicSessionOccurrences,
+  publicEnrollInSession,
+  paginateList,
   updateAppointmentStatus,
   getCalendarPreferences,
   updateCalendarPreferences,

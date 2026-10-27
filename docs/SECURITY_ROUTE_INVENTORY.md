@@ -17,7 +17,7 @@
 
 | الطريقة والمسار | مستوى الدور المقصود بعد الحزمة الأولى |
 | --- | --- |
-| `GET /api/ops/bootstrap` | owner/admin/manager؛ رد المدير يحذف إعدادات الإشعارات والمالية ويلخص الإحصاءات دون قيم مالية |
+| `GET /api/ops/bootstrap` | owner/admin/manager؛ رد المدير يحذف إعدادات الإشعارات والمالية ويلخص الإحصاءات دون قيم مالية. **staff مربوط:** مسموح برد مُقشَّط لشاشة الحضور فقط (بدون عملاء/مالية). viewer مرفوض |
 | `GET,POST /api/ops/customers`; `POST /api/ops/customer-categories` | owner/admin/manager |
 | `GET,POST /api/ops/staff`; `PATCH,DELETE /api/ops/staff/:id` | owner/admin/manager |
 | `GET,POST /api/ops/staff/:id/(commission\|payroll\|reviews)` | manager+؛ الميزات تظل مغلقة في المجال |
@@ -45,6 +45,8 @@
 | `GET /api/ops/stats` | owner/admin؛ أرقام إجمالية قد تكشف بيانات مالية |
 | `GET /api/ops/events` | owner/admin؛ سجل أحداث تشغيل المساحة (JSONL لكل workspace)؛ منفصل عن development-events |
 | `GET /api/public/booking/:slug`; `GET /api/public/booking/:slug/slots`; `GET /api/public/booking/:slug/pass/:token` | عام محدود؛ لا يُستخدم للوصول إلى endpoint داخلي |
+| `GET/POST /api/public/booking/:slug/manage/:token` (+ `/cancel`, `/reschedule`) | عام موقّع HMAC+TTL؛ إلغاء/إعادة جدولة مرة لكل فعل؛ منفصل عن checkInToken |
+| `GET /api/public/booking/:slug/sessions`; `POST .../sessions/:id/enroll` | عام لخدمات `session_capacity` فقط؛ سعة مقاعد؛ بلا ادعاء عمودي |
 | `POST /api/public/booking/:slug/hold`; `POST /api/public/booking/:slug/appointments` | عام بمعدل/hold؛ يلزم استكمال idempotency والحجز الذري حسب الخطة |
 
 كل مسار `/api/ops/*` غير معروف يفشل في policy helper بدلاً من وراثة صلاحية المدير تلقائياً. هذه السياسة تغطي هذا router فقط؛ لا تثبت RBAC على المسارات القديمة.
@@ -53,7 +55,9 @@
 
 | الطريقة والمسار | المطلوب |
 | --- | --- |
-| `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health`, `/api/health/live`, `/api/health/ready` | عام مع تقليل مخرجات config وحماية readiness من كشف أسرار |
+| `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health`, `/api/health/live`, `/api/health/ready` | عام مع تقليل مخرجات config وحماية readiness من كشف أسرار؛ `config.integrations` يعلن أعلام messaging/billing/webhooks دون أسرار |
+| `GET /api/integrations/capabilities` | عام؛ نفس أعلام التكامل (checkout/SMS/WhatsApp معطّلة صراحةً حتى قبول sandbox) |
+| `POST /api/webhooks/sandbox/:provider` | sandbox فقط؛ يتطلب توقيع HMAC؛ ledger idempotent؛ لا يفعّل اشتراكاً حياً |
 | `GET /api/account`, `/api/account/contexts`, `/api/workspaces`, `/api/entitlements`, `/api/billing/status`; `POST /api/workspaces`, `/api/billing/request` | جلسة؛ قائمة السياقات تشمل عضوية المساحات + `staffLink` النشط لاختيار السياق؛ `x-workspace-id` يختار السياق فقط ولا يمنح صلاحية |
 | `POST /api/whop/checkout`, `/api/whop/verify-checkout` | معطلان حالياً (`410`) |
 | `GET /api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | عند auth: membership + دور manager+ عبر `legacyAccess.js`؛ `x-workspace-id` سياق فقط |
@@ -88,4 +92,5 @@
 - workspace events: [`scripts/smoke-workspace-events.js`](../scripts/smoke-workspace-events.js) (`npm run test:workspace-events`).
 - حزمة مجمّعة: `npm run test:phase1-security` (تشمل `test:staff-links`).
 - ربط staff↔desk: نموذج junction معتمد (`workspace_staff_links` / JSON)؛ بدون ربط نشط يبقى desk لدور staff مرفوضًا. نطاق الزيارات للمربوط فقط؛ تسعير desk يبقى owner/admin.
+- المرحلة 6 (مغلقة): [`scripts/smoke-phase6-integrations.js`](../scripts/smoke-phase6-integrations.js) (`npm run test:phase6-integrations`) — outbox + delivery worker gated + محوّلات sandbox + قبول webhook/checkout مع `hostedCheckout=false`.
 - ترتبط كل تحديثات الحالة بـ [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json)؛ نتائج التنفيذ تُسجل بعد تشغيل الأمر لا بمجرد كتابته هنا.

@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const transactionalOutbox = require("./transactionalOutbox");
 
 const outboxFile = path.join(__dirname, "data", "email-outbox.jsonl");
 
@@ -12,6 +13,7 @@ function encodeBase64Url(value) {
 }
 
 function appendOutbox(entry) {
+  // Legacy human-readable JSONL (kept for local inspection) + transactional outbox row.
   fs.mkdirSync(path.dirname(outboxFile), { recursive: true });
   const current = fs.existsSync(outboxFile) ? fs.readFileSync(outboxFile, "utf8") : "";
   const separator = current.length > 0 && !current.endsWith("\n") ? "\n" : "";
@@ -20,7 +22,26 @@ function appendOutbox(entry) {
     `${separator}${JSON.stringify({ createdAt: new Date().toISOString(), ...entry })}\n`,
     "utf8"
   );
-  return { mode: "development-outbox" };
+  const idempotencyKey = entry.idempotencyKey || null;
+  const html = typeof entry.html === "string" ? entry.html.slice(0, 20000) : null;
+  const queued = transactionalOutbox.enqueue({
+    channel: "email",
+    type: entry.type || "generic",
+    workspaceId: entry.workspaceId || null,
+    idempotencyKey,
+    payload: {
+      to: entry.to || null,
+      subject: entry.subject || null,
+      html,
+      mode: entry.mode || "development"
+    }
+  });
+  return {
+    mode: "development-outbox",
+    outboxId: queued.row.id,
+    outboxCreated: queued.created,
+    idempotentReplay: !queued.created
+  };
 }
 
 async function sendHtmlWithGmail({ to, subject, html }) {
@@ -75,10 +96,10 @@ async function sendHtmlWithSendGrid({ to, subject, html, from }) {
   return { mode: "sendgrid", sender: mailFrom };
 }
 
-async function deliverHtmlEmail({ to, subject, html, type = "generic" }) {
+async function deliverHtmlEmail({ to, subject, html, type = "generic", idempotencyKey = "", workspaceId = null }) {
   if (!to) return { mode: "skipped", reason: "missing-to" };
   if (process.env.MAW3ED_EMAIL_MODE === "outbox") {
-    return appendOutbox({ to, subject, type, mode: "development" });
+    return appendOutbox({ to, subject, html, type, mode: "development", idempotencyKey, workspaceId });
   }
   if (process.env.SENDGRID_API_KEY) {
     return sendHtmlWithSendGrid({ to, subject, html });
@@ -123,7 +144,8 @@ async function sendBookingConfirmationEmail({
   businessTo = "",
   appointment,
   page = {},
-  locale = "ar"
+  locale = "ar",
+  manageUrl = null
 }) {
   if (!to && !businessTo) return { mode: "skipped", reason: "no-recipients" };
   const direction = locale === "ar" ? "rtl" : "ltr";
@@ -132,6 +154,9 @@ async function sendBookingConfirmationEmail({
     locale === "ar"
       ? `تأكيد حجزك — ${appointment.serviceName || "موعد"} · ${brand}`
       : `Booking confirmed — ${appointment.serviceName || "Appointment"} · ${brand}`;
+  const manageBlock = manageUrl
+    ? `<p><a href="${manageUrl}">${locale === "ar" ? "إلغاء أو إعادة جدولة (رابط موقّع)" : "Cancel or reschedule (signed link)"}</a></p>`
+    : "";
   const html = `<div style="font-family:Arial,sans-serif;direction:${direction};max-width:560px">
   <h2 style="color:#0b369c;margin-bottom:8px">${brand}</h2>
   <p>${locale === "ar" ? "تم تأكيد حجزك بنجاح." : "Your booking is confirmed."}</p>
@@ -142,13 +167,23 @@ async function sendBookingConfirmationEmail({
     <tr><td style="padding:6px 0;color:#64748b">${locale === "ar" ? "الوقت" : "Time"}</td><td style="padding:6px 0">${appointment.time || ""}</td></tr>
     <tr><td style="padding:6px 0;color:#64748b">${locale === "ar" ? "الحالة" : "Status"}</td><td style="padding:6px 0">${appointment.status || ""}</td></tr>
   </table>
+  ${manageBlock}
   ${appointment.notes ? `<p style="color:#475569">${locale === "ar" ? "ملاحظات:" : "Notes:"} ${appointment.notes}</p>` : ""}
   <hr><small>UpNexa-eg.com · موعد Maw3ed</small>
 </div>`;
 
   const results = [];
+  const apptKey = appointment?.id || `${appointment?.date || ""}-${appointment?.time || ""}`;
   if (to) {
-    results.push(await deliverHtmlEmail({ to, subject, html, type: "booking-confirmation" }));
+    results.push(
+      await deliverHtmlEmail({
+        to,
+        subject,
+        html,
+        type: "booking-confirmation",
+        idempotencyKey: `booking-confirmation:${apptKey}:${to}`
+      })
+    );
   }
   if (businessTo && businessTo !== to) {
     const businessSubject =
@@ -158,7 +193,8 @@ async function sendBookingConfirmationEmail({
         to: businessTo,
         subject: businessSubject,
         html,
-        type: "booking-confirmation-business"
+        type: "booking-confirmation-business",
+        idempotencyKey: `booking-confirmation-business:${apptKey}:${businessTo}`
       })
     );
   }

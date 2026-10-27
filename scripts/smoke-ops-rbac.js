@@ -50,10 +50,13 @@ async function invoke({ path, method = "GET", user = { id: "user-1" }, membershi
 async function main() {
   const originalEnv = {
     MAW3ED_ENV: process.env.MAW3ED_ENV,
-    MAW3ED_REQUIRE_AUTH: process.env.MAW3ED_REQUIRE_AUTH
+    MAW3ED_REQUIRE_AUTH: process.env.MAW3ED_REQUIRE_AUTH,
+    SESSION_SECRET: process.env.SESSION_SECRET
   };
   process.env.MAW3ED_ENV = "production";
   process.env.MAW3ED_REQUIRE_AUTH = "1";
+  // Production posture (Phase 7) rejects missing/weak SESSION_SECRET before RBAC.
+  process.env.SESSION_SECRET = "smoke-ops-rbac-session-secret-value";
 
   try {
     assert(isOpsRoleAllowed("/api/ops/appointments", "GET", "manager"), "manager should read appointments");
@@ -99,6 +102,8 @@ async function main() {
     else process.env.MAW3ED_ENV = originalEnv.MAW3ED_ENV;
     if (originalEnv.MAW3ED_REQUIRE_AUTH === undefined) delete process.env.MAW3ED_REQUIRE_AUTH;
     else process.env.MAW3ED_REQUIRE_AUTH = originalEnv.MAW3ED_REQUIRE_AUTH;
+    if (originalEnv.SESSION_SECRET === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = originalEnv.SESSION_SECRET;
   }
 }
 

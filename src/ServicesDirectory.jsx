@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { CategoryProvidersTable } from "./ServiceProvidersTable.jsx";
 import { adminsForCategory, sortByKey, compareText } from "./staffRoleGroups.js";
 import { formatMoney } from "./i18n";
+import { occupancyShortBadge, occupancyModeLabel } from "./occupancyLabels.js";
 
 /**
  * Services directory: insight zones + sortable category→service→provider table.
@@ -19,7 +20,8 @@ export function ServicesDirectory({
   onOpenCategoryEdit,
   onToggleCategoryActive,
   onDeleteCategory,
-  reload
+  reload,
+  canWrite = true
 }) {
   const categories = ops?.serviceCategories || [];
   const allServices = ops?.services || [];
@@ -86,12 +88,16 @@ export function ServicesDirectory({
           adminLabel: admins.map((p) => p.name).join("، ") || "—",
           status: service.active === false ? "متوقفة" : (service.publicBooking !== false ? "عامة" : "داخلية"),
           publicBooking: service.publicBooking !== false,
-          active: service.active !== false
+          active: service.active !== false,
+          occupancyMode: service.occupancyMode || "exclusive",
+          occupancyBadge: occupancyShortBadge(service.occupancyMode),
+          occupancyLabel: occupancyModeLabel(service.occupancyMode, locale),
+          defaultCapacity: service.defaultCapacity
         };
       })
       .filter((row) => {
         if (!q) return true;
-        return `${row.categoryName} ${row.name} ${row.providersLabel} ${row.adminLabel}`
+        return `${row.categoryName} ${row.name} ${row.providersLabel} ${row.adminLabel} ${row.occupancyLabel}`
           .toLowerCase()
           .includes(q);
       });
@@ -159,7 +165,9 @@ export function ServicesDirectory({
         <aside className="panel dir-zone category-rail" aria-label="فئات الخدمة">
           <div className="dir-zone-head">
             <b>فئة الخدمة</b>
-            <button type="button" className="ghost-button" onClick={onOpenCategoryCreate}>+ إضافة</button>
+            {canWrite && onOpenCategoryCreate ? (
+              <button type="button" className="ghost-button" onClick={onOpenCategoryCreate}>+ إضافة</button>
+            ) : null}
           </div>
           <button
             type="button"
@@ -181,11 +189,13 @@ export function ServicesDirectory({
                   </span>
                   <span className="cat-count">{count}</span>
                 </button>
-                <div className="row-actions compact">
-                  <button type="button" className="edit-button" onClick={() => onOpenCategoryEdit?.(category)}>تعديل</button>
-                  <button type="button" className="warn-button" onClick={() => onToggleCategoryActive?.(category)}>{inactive ? "تفعيل" : "إيقاف"}</button>
-                  <button type="button" className="danger-button" onClick={() => onDeleteCategory?.(category)}>حذف</button>
-                </div>
+                {canWrite ? (
+                  <div className="row-actions compact">
+                    <button type="button" className="edit-button" onClick={() => onOpenCategoryEdit?.(category)}>تعديل</button>
+                    <button type="button" className="warn-button" onClick={() => onToggleCategoryActive?.(category)}>{inactive ? "تفعيل" : "إيقاف"}</button>
+                    <button type="button" className="danger-button" onClick={() => onDeleteCategory?.(category)}>حذف</button>
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -204,8 +214,11 @@ export function ServicesDirectory({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="بحث خدمة / مقدم / إداري…"
+                  aria-label="بحث الخدمات"
                 />
-                <button type="button" className="primary-button" onClick={onOpenCreate}>+ خدمة</button>
+                {canWrite && onOpenCreate ? (
+                  <button type="button" className="primary-button" onClick={onOpenCreate}>+ خدمة</button>
+                ) : null}
               </div>
             </div>
 
@@ -244,12 +257,13 @@ export function ServicesDirectory({
                           <thead>
                             <tr>
                               <SortTh col="name">الخدمة</SortTh>
+                              <SortTh col="occupancyBadge">الإشغال</SortTh>
                               <SortTh col="providersLabel">مقدم الخدمة</SortTh>
                               <SortTh col="adminLabel">الإداري المختص</SortTh>
                               <SortTh col="duration">الحجز (د)</SortTh>
                               <SortTh col="priceLabel">السعر</SortTh>
                               <SortTh col="status">الحالة</SortTh>
-                              <th>إجراءات</th>
+                              {canWrite ? <th>إجراءات</th> : null}
                             </tr>
                           </thead>
                           <tbody>
@@ -261,18 +275,28 @@ export function ServicesDirectory({
                                     {row.name}
                                   </span>
                                 </td>
+                                <td>
+                                  <span className="status-soft" title={row.occupancyLabel}>
+                                    {row.occupancyBadge}
+                                    {row.occupancyMode === "session_capacity" && row.defaultCapacity
+                                      ? ` · ${row.defaultCapacity}`
+                                      : ""}
+                                  </span>
+                                </td>
                                 <td className={!row.providersCount ? "is-gap-text" : ""}>{row.providersLabel}</td>
                                 <td>{row.adminLabel}</td>
                                 <td>{row.duration}</td>
                                 <td>{row.priceLabel}</td>
                                 <td>{row.status}</td>
-                                <td className="dir-actions">
-                                  <button type="button" className="edit-button" onClick={() => onOpenEdit?.(row.service)}>تعديل</button>
-                                  <button type="button" className="warn-button" onClick={() => onToggleActive?.(row.service)}>
-                                    {row.active ? "إيقاف" : "تفعيل"}
-                                  </button>
-                                  <button type="button" className="danger-button" onClick={() => onDelete?.(row.service)}>حذف</button>
-                                </td>
+                                {canWrite ? (
+                                  <td className="dir-actions">
+                                    <button type="button" className="edit-button" onClick={() => onOpenEdit?.(row.service)}>تعديل</button>
+                                    <button type="button" className="warn-button" onClick={() => onToggleActive?.(row.service)}>
+                                      {row.active ? "إيقاف" : "تفعيل"}
+                                    </button>
+                                    <button type="button" className="danger-button" onClick={() => onDelete?.(row.service)}>حذف</button>
+                                  </td>
+                                ) : null}
                               </tr>
                             ))}
                           </tbody>

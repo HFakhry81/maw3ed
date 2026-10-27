@@ -16,11 +16,11 @@
 | 2. سلامة البيانات والترحيل | مكتملة تقنياً | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore لـ `workspace_ops_*` + staff links | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
 | 3. الحجز الذري والتوفر | مكتملة تقنياً | قفل/قيود تداخل، holds، idempotency (JSON+PG+HTTP)، عقد timezone/DST للمدة+buffer | اختبار تنافس للفترات مع أثر commit ذري على JSON وPG |
 | 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
-| 5. الرحلات والواجهة | لم تبدأ | onboarding والكتالوج والتقويم والعميل ومكتب التشغيل | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة |
-| 6. الرسائل والفوترة والتكاملات | لم تبدأ | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
-| 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
-| 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
-| 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
+| 5. الرحلات والواجهة | مكتملة تقنياً | onboarding+قفل، كتالوج/موارد/إشغال، أدوار، حجز عام+تسجيل جلسة، روابط إدارة موقعة، pagination، a11y أساسية | رحلات المنتج قابلة للتجربة؛ فك قفل القالب لمسؤول المنصة مؤجّل موثّق |
+| 6. الرسائل والفوترة والتكاملات | مكتملة تقنياً | outbox + worker + محوّلات sandbox + قبول webhook | الميزات غير الجاهزة مغلقة صراحةً؛ لا ادعاء دفع حي |
+| 7. التشغيل والخصوصية والاستعادة | مغلقة (بوابات مالك مفتوحة) | أسرار + احتفاظ/تنقيح + stubs رصد + runbooks | drill موقّع على Sam-PC؛ RPO/RTO؛ sink خارجي؛ TLS مضيف |
+| 8. قبول ما قبل الإطلاق | مغلقة آلياً (بوابات مالك مفتوحة) | تجميع smokes + posture + قائمة يدوية | قبول يدوي للمالك؛ drill Sam-PC؛ check:staging على مضيف |
+| 9. تجربة محدودة والتوسع | قالب Go/No-Go فقط | قائمة قرار بلا إطلاق آلي | توقيع مالك على revision محدد — الافتراضي No-Go |
 
 ## حصر مجموعات API (مراجعة ساكنة)
 
@@ -151,11 +151,67 @@
 - **التحقق:** `npm run test:capacity-modes` (JSON: exclusive/rental/session_capacity/bundle) و`npm run test:capacity-pg` (migrate 014 + round-trip). مجمّع: `npm run test:phase4-capacity`.
 - **حزمة 2 (إغلاق المرحلة 4):** مسارات ops HTTP للموارد/المتطلبات/الجلسات/التسجيل/الحضور/bundle؛ تخصيص تلقائي لـ exclusive/rental عند `createAppointment` مع تحرير عند الإلغاء؛ `npm run test:capacity-http` و`test:capacity-isolation` (عزل store + BOLA عبر الهيدر).
 - **إغلاق المرحلة 4:** `phase_4_closed=true`. مؤجّل غير حاجز: ضغط تسجيل متزامن على PG، إدارة series في الواجهة، افتراضات قوالب المجالات. **لا تعلن** التعليم/الصالون/التأجير جاهزة للإنتاج.
-- **المرحلة 5:** لم تبدأ على هذا الـ PR — افتح PR متابعة لرحلات المنتج (onboarding/كتالوج/حجز/desk).
+
+### المرحلة 5 — حزمة الرحلات الأساسية + المتبقيات — 2026-10-27
+
+- **قفل القالب عند الإنشاء:** `seedWorkspace(..., { lockActivity: true })` من `POST /api/workspaces`؛ onboarding يطلب تأكيد القفل؛ شاشة القوالب تُخفى بعد القفل.
+- **الكتالوج والموارد:** `occupancyMode` / سعة / تركيب على الخدمات؛ `ResourcesView` رقيقة — بلا ادعاء جاهزية مجالات رأسية.
+- **أدوار الواجهة:** عضوية خادمية؛ staff مربوط → bootstrap مُقشَّط للـ desk.
+- **روابط إدارة موقعة:** `bookingActionToken` (HMAC + TTL + استخدام مرة لكل فعل)؛ `manage.html` + `GET/POST /api/public/booking/:slug/manage/...` لإلغاء/إعادة جدولة الموعد وإلغاء تسجيل الجلسة — منفصل عن `checkInToken`.
+- **pagination:** `limit`/`offset`/`paging` على `GET /api/ops/customers` و`appointments`؛ ترقيم في شاشة العملاء.
+- **تسجيل جلسة عام:** `GET .../sessions` + `POST .../sessions/:id/enroll` لخدمات `session_capacity` فقط؛ مسار في `book.html`.
+- **a11y أساسية:** skip links، `aria-*`، focus-visible، تسميات على الرحلات الملموسة (حجز/إدارة/onboarding/عملاء).
+- **مؤجّل موثّق:** فك قفل القالب لمسؤول المنصة (لا سطح `admin` حالي لـ `activity_mode_locked`؛ مطلوب confirmation+audit+سبب لاحقاً).
+- **إغلاق المرحلة 5:** `phase_5_closed=true`. **لا تعلن** Stripe/SMS/WhatsApp أو التعليم/الصالون/التأجير جاهزة.
+- **التحقق:** `npm run test:phase5-journeys` (+ `test:ops-rbac` / `test:staff-links`).
+- **التالي:** المرحلة 6 — بدأت على PR منفصل عن فرع المرحلة 5.
+
+### المرحلة 6 — الحزمة الأولى: outbox + فوترة معطّلة + webhook sandbox — 2026-10-27
+
+- **Transactional outbox:** [`transactionalOutbox.js`](../transactionalOutbox.js) — JSONL مع `idempotencyKey`، حالات pending/delivered/dead، backoff عند الفشل. جسر [`email.js`](../email.js) عند `MAW3ED_EMAIL_MODE=outbox`؛ تأكيد الحجز يحمل رابط manage موقّع عند التوفر.
+- **Capability flags:** [`billingCapabilities.js`](../billingCapabilities.js) عبر `GET /api/integrations/capabilities` و`integrations` في `/api/config` — `hostedCheckout=false`، SMS/WhatsApp `not_wired`، Whop checkout يبقى 410.
+- **Webhook sandbox:** [`webhookSandbox.js`](../webhookSandbox.js) + `POST /api/webhooks/sandbox/:provider` — HMAC-SHA256 (`x-maw3ed-signature` / `x-signature`)، ledger idempotent، يُدرج صف outbox منقّح بلا أسرار.
+
+### المرحلة 6 — الحزمة 2 (إغلاق): worker + محوّلات + قبول sandbox — 2026-10-27
+
+- **Delivery worker:** [`outboxDeliveryWorker.js`](../outboxDeliveryWorker.js) + `npm run outbox:worker` — معطّل افتراضياً (`MAW3ED_OUTBOX_WORKER=1` أو `--force`)؛ retries/backoff/dead-letter عبر outbox.
+- **Adapters:** [`providerAdapters.js`](../providerAdapters.js) — بريد sandbox (سجل محلي)؛ SMS/WhatsApp stubs ترفض `PROVIDER_DISABLED`.
+- **Provider webhooks:** [`providerWebhookAdapters.js`](../providerWebhookAdapters.js) لـ Whop/Stripe (تطبيع + إلزام amount/currency لأحداث الدفع) دون تفعيل اشتراك.
+- **قبول sandbox:** [`billingSandboxAcceptance.js`](../billingSandboxAcceptance.js) داخل `test:phase6-integrations` — يثبت العقد ويُبقي `hostedCheckout=false` وHTTP 410.
+- **إغلاق المرحلة 6:** `phase_6_closed=true`. **لا تعلن** Stripe live capture أو WhatsApp/SMS QR أو checkout مستضاف.
+- **التحقق:** `npm run test:phase6-integrations`.
+
+### المرحلة 7 — الحزمة الأولى: أسرار + stubs رصد + runbook استعادة — 2026-10-27
+
+- **Secrets posture:** [`secretsPosture.js`](../secretsPosture.js) — جرد حضور بدون طباعة القيم؛ production يرفض `SESSION_SECRET` الضعيف؛ `redactObject` للسجلات. مدمج في `evaluateRuntimePosture` للإنتاج.
+- **Metrics/alerts stubs:** [`metricsAlerts.js`](../metricsAlerts.js) — عدّادات/مقاييس in-process وتنبيهات outbox dead/backlog بلا بائع خارجي.
+- **Runbook:** [`docs/OPS_BACKUP_RESTORE_RUNBOOK.md`](OPS_BACKUP_RESTORE_RUNBOOK.md) محاذٍ لـ `ops:pg-backup` / `ops:pg-restore` / `test:ops-pg-backup`.
+- **Health:** `/api/health/ready` يعرض inventory أسرار منقّح + findings stubs.
+
+### المرحلة 7 — إغلاق تقني مع بوابات مالك — 2026-10-27
+
+- **احتفاظ/تنقيح:** [`dataRetention.js`](../dataRetention.js) + `npm run retention:purge` — افتراضات تقنية؛ RPO/RTO تبقى `null` / `proposed_pending_owner_approval`.
+- **ملكية تنبيهات:** كتالوج أدوار في `metricsAlerts.ALERT_OWNERSHIP` (`stub_only`).
+- **خصوصية:** [`docs/PRIVACY_REQUESTS_RUNBOOK.md`](PRIVACY_REQUESTS_RUNBOOK.md) قالب عربي — بلا ادعاء قانوني.
+- **إغلاق:** `phase_7_closed=true` مع `closed_with_open_gate` لـ drill Sam-PC الموقّع، اعتماد RPO/RTO، sink خارجي، مراجعة TLS على المضيف.
+- **التحقق:** `npm run test:phase7-ops` و`npm run test:ops-pg-backup`.
+
+### المرحلة 8 — قبول ما قبل الإطلاق (آلي) — 2026-10-27
+
+- **تجميع:** `npm run test:phase-acceptance` يشغّل phases 1–7 + `test:phase8-posture`.
+- **Posture:** [`scripts/smoke-production-posture.js`](../scripts/smoke-production-posture.js) — auth مطلوب في production، JSON الصارم، أسرار fail-closed، checkout/SMS/WhatsApp/Stripe تبقى معطّلة.
+- **قائمة المالك:** [`docs/PRE_LAUNCH_ACCEPTANCE_CHECKLIST.md`](PRE_LAUNCH_ACCEPTANCE_CHECKLIST.md) تفصل الآلي عن اليدوي.
+- **إغلاق آلي:** `phase_8_closed=true` مع `closed_with_open_gate` للقبول اليدوي وdrill Sam-PC و`check:staging` الاختياري على المضيف.
+- **التحقق:** `npm run test:phase8-posture` و`npm run test:phase-acceptance`.
+
+### المرحلة 9 — قالب Go/No-Go فقط — 2026-10-27
+
+- [`docs/GO_NO_GO_CHECKLIST.md`](GO_NO_GO_CHECKLIST.md) — قرار المالك؛ الافتراضي **No-Go**.
+- `phase_9_started=true` و`phase_9_closed=false`. **لا** إطلاق تجريبي ولا تفعيل ميزات إنتاج بواسطة الوكيل.
 
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase4-capacity` (modes + PG + HTTP + isolation).
-2. على Sam-PC:  
-   `MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate` ثم `npm run test:phase4-capacity`.
-3. ابدأ المرحلة 5 في **PR جديد**: رحلات onboarding/catalog/booking/desk وفق الخارطة — لا تدّعِ جاهزية مجالات UI.
+1. شغّل `npm run test:phase-acceptance` و`npm run test:phase8-posture`.
+2. المالك يُكمل القبول اليدوي ثم يوقّع Go/No-Go على revision محدد.
+3. على Sam-PC: `npm run test:ops-pg-backup:full` على `5432` / `maw3ed`.
+4. لا تدمج PRs ولا تفعّل Stripe/WhatsApp/checkout دون قرار صريح.
