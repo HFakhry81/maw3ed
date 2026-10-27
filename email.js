@@ -23,6 +23,7 @@ function appendOutbox(entry) {
     "utf8"
   );
   const idempotencyKey = entry.idempotencyKey || null;
+  const html = typeof entry.html === "string" ? entry.html.slice(0, 20000) : null;
   const queued = transactionalOutbox.enqueue({
     channel: "email",
     type: entry.type || "generic",
@@ -31,6 +32,7 @@ function appendOutbox(entry) {
     payload: {
       to: entry.to || null,
       subject: entry.subject || null,
+      html,
       mode: entry.mode || "development"
     }
   });
@@ -97,7 +99,7 @@ async function sendHtmlWithSendGrid({ to, subject, html, from }) {
 async function deliverHtmlEmail({ to, subject, html, type = "generic", idempotencyKey = "", workspaceId = null }) {
   if (!to) return { mode: "skipped", reason: "missing-to" };
   if (process.env.MAW3ED_EMAIL_MODE === "outbox") {
-    return appendOutbox({ to, subject, type, mode: "development", idempotencyKey, workspaceId });
+    return appendOutbox({ to, subject, html, type, mode: "development", idempotencyKey, workspaceId });
   }
   if (process.env.SENDGRID_API_KEY) {
     return sendHtmlWithSendGrid({ to, subject, html });

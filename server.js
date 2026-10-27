@@ -1279,10 +1279,23 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 201, { ok: true, request: await requestManualSubscription(user, payload.planKey) });
     }
     if (requested === "/api/whop/checkout" && req.method === "POST") {
-      return sendJson(res, 410, { ok: false, error: "Paid checkout is temporarily disabled; use /api/billing/request for manual approval." });
+      const { getIntegrationCapabilities, getCheckoutHttpStatus } = require("./billingCapabilities");
+      const caps = getIntegrationCapabilities(process.env);
+      const status = getCheckoutHttpStatus(caps);
+      return sendJson(res, status === 200 ? 200 : 410, {
+        ok: false,
+        error: "Paid checkout is temporarily disabled; use /api/billing/request for manual approval.",
+        code: "CHECKOUT_GATED",
+        hostedCheckout: caps.billing.hostedCheckout,
+        sandboxAcceptance: caps.billing.sandboxAcceptance
+      });
     }
     if (requested === "/api/whop/verify-checkout" && req.method === "POST") {
-      return sendJson(res, 410, { ok: false, error: "Automatic paid activation is disabled; an administrator must approve the request." });
+      return sendJson(res, 410, {
+        ok: false,
+        error: "Automatic paid activation is disabled; an administrator must approve the request.",
+        code: "CHECKOUT_VERIFY_GATED"
+      });
     }
     if (requested.startsWith("/api/admin")) {
       const handled = await getAdminRouter().handle(requested, req, res, requestUrl);
@@ -1313,15 +1326,33 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, service: "maw3ed-api", liveness: true, uptimeMs: Date.now() - startTime });
     }
     if (requested === "/api/health/ready" && req.method === "GET") {
+      let outboxSummary = null;
+      try {
+        outboxSummary = require("./outboxDeliveryWorker").workerStatus(process.env);
+      } catch {
+        outboxSummary = null;
+      }
       if (databaseConfigured) {
         try {
           await query("SELECT 1");
-          return sendJson(res, 200, { ok: true, service: "maw3ed-api", ready: true, database: "postgresql" });
+          return sendJson(res, 200, {
+            ok: true,
+            service: "maw3ed-api",
+            ready: true,
+            database: "postgresql",
+            integrations: outboxSummary
+          });
         } catch (error) {
           return sendJson(res, 503, { ok: false, service: "maw3ed-api", ready: false, database: "postgresql-unavailable", error: "database_unavailable" });
         }
       }
-      return sendJson(res, 200, { ok: true, service: "maw3ed-api", ready: true, database: "local-memory" });
+      return sendJson(res, 200, {
+        ok: true,
+        service: "maw3ed-api",
+        ready: true,
+        database: "local-memory",
+        integrations: outboxSummary
+      });
     }
     if (requested === "/api/activity-templates" && req.method === "GET") {
       const localTemplates = [

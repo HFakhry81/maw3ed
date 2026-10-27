@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const outbox = require("./transactionalOutbox");
+const { normalizeSandboxProviderEvent } = require("./providerWebhookAdapters");
 
 const DEFAULT_LEDGER_FILE = path.join(__dirname, "data", "webhook-sandbox-ledger.jsonl");
 
@@ -87,7 +88,12 @@ function handleSandboxWebhook({
 }) {
   const cleanProvider = String(provider || "sandbox").toLowerCase().replace(/[^a-z0-9_-]/g, "") || "sandbox";
   verifySignature({ provider: cleanProvider, rawBody, signatureHeader });
-  const id = String(eventId || payload.id || "").trim();
+  const normalized = normalizeSandboxProviderEvent(cleanProvider, {
+    ...payload,
+    eventId: eventId || payload.eventId || payload.id,
+    eventType: eventType || payload.eventType || payload.type
+  });
+  const id = String(normalized.eventId || "").trim();
   if (!id) {
     const error = new Error("eventId is required");
     error.statusCode = 400;
@@ -98,16 +104,16 @@ function handleSandboxWebhook({
     return { ok: true, replayed: true, accepted: false, eventId: id, provider: cleanProvider };
   }
 
-  const type = String(eventType || payload.type || "unknown");
+  const type = String(normalized.eventType || "unknown");
   appendLedger({
     provider: cleanProvider,
     eventId: id,
     eventType: type,
     payloadSummary: {
-      amount: payload.amount ?? null,
-      currency: payload.currency ?? null,
-      workspaceId: payload.workspaceId ?? null,
-      status: payload.status ?? null
+      amount: normalized.amount ?? null,
+      currency: normalized.currency ?? null,
+      workspaceId: normalized.workspaceId ?? null,
+      status: normalized.status ?? null
     }
   });
 
@@ -115,15 +121,15 @@ function handleSandboxWebhook({
   const queued = outbox.enqueue({
     channel: "webhook",
     type: `webhook.${cleanProvider}.${type}`,
-    workspaceId: payload.workspaceId || null,
+    workspaceId: normalized.workspaceId || null,
     idempotencyKey: `webhook:${cleanProvider}:${id}`,
     payload: {
       provider: cleanProvider,
       eventId: id,
       eventType: type,
-      amount: payload.amount ?? null,
-      currency: payload.currency || null,
-      status: payload.status || null
+      amount: normalized.amount ?? null,
+      currency: normalized.currency || null,
+      status: normalized.status || null
     }
   });
 
@@ -133,8 +139,11 @@ function handleSandboxWebhook({
     accepted: true,
     eventId: id,
     provider: cleanProvider,
+    normalized,
     outboxId: queued.row.id,
-    outboxCreated: queued.created
+    outboxCreated: queued.created,
+    activatesSubscription: false,
+    hostedCheckout: false
   };
 }
 

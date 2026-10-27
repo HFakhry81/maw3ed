@@ -92,5 +92,5 @@
 - workspace events: [`scripts/smoke-workspace-events.js`](../scripts/smoke-workspace-events.js) (`npm run test:workspace-events`).
 - حزمة مجمّعة: `npm run test:phase1-security` (تشمل `test:staff-links`).
 - ربط staff↔desk: نموذج junction معتمد (`workspace_staff_links` / JSON)؛ بدون ربط نشط يبقى desk لدور staff مرفوضًا. نطاق الزيارات للمربوط فقط؛ تسعير desk يبقى owner/admin.
-- المرحلة 6 حزمة 1: [`scripts/smoke-phase6-integrations.js`](../scripts/smoke-phase6-integrations.js) (`npm run test:phase6-integrations`) — outbox idempotency + توقيع/إعادة webhook sandbox + أعلام الفوترة.
+- المرحلة 6 (مغلقة): [`scripts/smoke-phase6-integrations.js`](../scripts/smoke-phase6-integrations.js) (`npm run test:phase6-integrations`) — outbox + delivery worker gated + محوّلات sandbox + قبول webhook/checkout مع `hostedCheckout=false`.
 - ترتبط كل تحديثات الحالة بـ [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json)؛ نتائج التنفيذ تُسجل بعد تشغيل الأمر لا بمجرد كتابته هنا.
