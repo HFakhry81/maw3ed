@@ -19,8 +19,8 @@
 | 5. الرحلات والواجهة | مكتملة تقنياً | onboarding+قفل، كتالوج/موارد/إشغال، أدوار، حجز عام+تسجيل جلسة، روابط إدارة موقعة، pagination، a11y أساسية | رحلات المنتج قابلة للتجربة؛ فك قفل القالب لمسؤول المنصة مؤجّل موثّق |
 | 6. الرسائل والفوترة والتكاملات | مكتملة تقنياً | outbox + worker + محوّلات sandbox + قبول webhook | الميزات غير الجاهزة مغلقة صراحةً؛ لا ادعاء دفع حي |
 | 7. التشغيل والخصوصية والاستعادة | مغلقة (بوابات مالك مفتوحة) | أسرار + احتفاظ/تنقيح + stubs رصد + runbooks | drill موقّع على Sam-PC؛ RPO/RTO؛ sink خارجي؛ TLS مضيف |
-| 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
-| 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
+| 8. قبول ما قبل الإطلاق | مغلقة آلياً (بوابات مالك مفتوحة) | تجميع smokes + posture + قائمة يدوية | قبول يدوي للمالك؛ drill Sam-PC؛ check:staging على مضيف |
+| 9. تجربة محدودة والتوسع | قالب Go/No-Go فقط | قائمة قرار بلا إطلاق آلي | توقيع مالك على revision محدد — الافتراضي No-Go |
 
 ## حصر مجموعات API (مراجعة ساكنة)
 
@@ -196,8 +196,22 @@
 - **إغلاق:** `phase_7_closed=true` مع `closed_with_open_gate` لـ drill Sam-PC الموقّع، اعتماد RPO/RTO، sink خارجي، مراجعة TLS على المضيف.
 - **التحقق:** `npm run test:phase7-ops` و`npm run test:ops-pg-backup`.
 
+### المرحلة 8 — قبول ما قبل الإطلاق (آلي) — 2026-10-27
+
+- **تجميع:** `npm run test:phase-acceptance` يشغّل phases 1–7 + `test:phase8-posture`.
+- **Posture:** [`scripts/smoke-production-posture.js`](../scripts/smoke-production-posture.js) — auth مطلوب في production، JSON الصارم، أسرار fail-closed، checkout/SMS/WhatsApp/Stripe تبقى معطّلة.
+- **قائمة المالك:** [`docs/PRE_LAUNCH_ACCEPTANCE_CHECKLIST.md`](PRE_LAUNCH_ACCEPTANCE_CHECKLIST.md) تفصل الآلي عن اليدوي.
+- **إغلاق آلي:** `phase_8_closed=true` مع `closed_with_open_gate` للقبول اليدوي وdrill Sam-PC و`check:staging` الاختياري على المضيف.
+- **التحقق:** `npm run test:phase8-posture` و`npm run test:phase-acceptance`.
+
+### المرحلة 9 — قالب Go/No-Go فقط — 2026-10-27
+
+- [`docs/GO_NO_GO_CHECKLIST.md`](GO_NO_GO_CHECKLIST.md) — قرار المالك؛ الافتراضي **No-Go**.
+- `phase_9_started=true` و`phase_9_closed=false`. **لا** إطلاق تجريبي ولا تفعيل ميزات إنتاج بواسطة الوكيل.
+
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase7-ops`.
-2. ابدأ المرحلة 8 من فرع المرحلة 7: تجميع smokes + قبول production-like + قائمة يدوية للمالك.
-3. على Sam-PC: `npm run test:ops-pg-backup:full` على `5432` / `maw3ed` (بوابة مالك مفتوحة).
+1. شغّل `npm run test:phase-acceptance` و`npm run test:phase8-posture`.
+2. المالك يُكمل القبول اليدوي ثم يوقّع Go/No-Go على revision محدد.
+3. على Sam-PC: `npm run test:ops-pg-backup:full` على `5432` / `maw3ed`.
+4. لا تدمج PRs ولا تفعّل Stripe/WhatsApp/checkout دون قرار صريح.
