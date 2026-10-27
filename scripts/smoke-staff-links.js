@@ -58,6 +58,16 @@ async function main() {
       }),
       "linked staff must not list all customers"
     );
+    assert(
+      isOpsRoleAllowed("/api/ops/bootstrap", "GET", "staff", {
+        staffLink: { status: "active", staffId: staffA }
+      }),
+      "linked staff may load stripped bootstrap for desk UI"
+    );
+    assert(
+      !isOpsRoleAllowed("/api/ops/bootstrap", "GET", "staff"),
+      "unlinked staff must not bootstrap"
+    );
     assert(isDeskRoute("/api/ops/desk/preview", "POST"), "preview is a desk route");
 
     // One-to-one upsert within a workspace (JSON path).

@@ -185,17 +185,24 @@
                 <button type="button" class="chip ${state.categoryId === "all" ? "on" : ""}" data-cat="all">الكل</button>
                 ${categories.map((category) => `<button type="button" class="chip ${state.categoryId === category.id ? "on" : ""}" data-cat="${category.id}">${category.name}</button>`).join("")}
               </div>
-              ${list.map((item) => `
-                <button type="button" class="pick ${state.serviceId === item.id ? "on" : ""}" data-service="${item.id}">
-                  <div><b>${item.name}</b><div class="muted">${item.durationMinutes} د${item.bufferMinutes ? ` · فاصل ${item.bufferMinutes}د` : ""}</div></div>
+              ${list.map((item) => {
+                const mode = String(item.occupancyMode || "exclusive").toLowerCase();
+                const modeHint = mode === "session_capacity"
+                  ? ` · جلسة بسعة ${item.defaultCapacity || 1}`
+                  : mode === "rental"
+                    ? " · تأجير مورد"
+                    : "";
+                return `
+                <button type="button" class="pick ${state.serviceId === item.id ? "on" : ""}" data-service="${item.id}" aria-label="${item.name}${modeHint}">
+                  <div><b>${item.name}</b><div class="muted">${item.durationMinutes} د${item.bufferMinutes ? ` · فاصل ${item.bufferMinutes}د` : ""}${modeHint}</div></div>
                   <div><b>${
                     item.pricingType === "free" ? "مجاني"
                     : item.pricingType === "on_request" ? "عند الطلب"
                     : item.pricingType === "range" ? `E£${item.priceMin ?? item.price ?? 0}–${item.priceMax ?? item.price ?? 0}`
                     : item.price ? `E£${item.price}` : "مجاني"
                   }</b></div>
-                </button>
-              `).join("") || "<p>لا توجد خدمات في هذا القسم.</p>"}
+                </button>`;
+              }).join("") || "<p>لا توجد خدمات في هذا القسم.</p>"}
               <div class="actions">
                 <button class="ghost" id="back1">رجوع</button>
                 <button class="cta" id="to3" ${state.serviceId ? "" : "disabled"}>التالي</button>
@@ -222,7 +229,7 @@
           ${state.step === 4 ? `
             <section class="card stack">
               <h2 style="margin-top:0">التاريخ والوقت المتاح</h2>
-              <p class="muted">${selected ? `${selected.name} · كتلة ${Number(selected.durationMinutes || 0) + Number(selected.bufferMinutes || 0)} دقيقة` : ""}</p>
+              <p class="muted">${selected ? `${selected.name} · كتلة ${Number(selected.durationMinutes || 0) + Number(selected.bufferMinutes || 0)} دقيقة${String(selected.occupancyMode || "").toLowerCase() === "session_capacity" ? ` · سعة ${selected.defaultCapacity || 1}` : String(selected.occupancyMode || "").toLowerCase() === "rental" ? " · تأجير مورد" : ""}` : ""}</p>
               <label>اليوم<input type="date" id="date" value="${state.date}" /></label>
               <div>
                 <b>الأوقات المتاحة</b>

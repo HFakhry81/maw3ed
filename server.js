@@ -801,7 +801,8 @@ async function createWorkspace(user, payload) {
         slug,
         businessName: name,
         activityType: resolvedActivityType,
-        locale
+        locale,
+        lockActivity: payload.lockActivity !== false
       });
     } catch (error) {
       console.warn("[workspace] local ops seed failed:", error.message);
@@ -950,7 +951,8 @@ async function createWorkspace(user, payload) {
       slug: workspace.slug,
       businessName: name,
       activityType: resolvedActivityType,
-      locale
+      locale,
+      lockActivity: payload.lockActivity !== false
     });
     await opsStore.withWorkspaceAsync(workspace.id, async () => {});
   } catch (error) {

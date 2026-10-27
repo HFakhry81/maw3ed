@@ -131,9 +131,10 @@ function isOpsRoleAllowed(requested, method, role, options = {}) {
   }
 
   // Staff role: fail closed unless an active workspace staff link exists.
-  // Linked staff may use scoped desk routes only (not facility-wide or money routes).
+  // Linked staff may use scoped desk routes + a stripped bootstrap for the desk UI shell.
   if (role === "staff") {
     if (!staffLink || staffLink.status !== "active" || !staffLink.staffId) return false;
+    if (requested === "/api/ops/bootstrap" && method === "GET") return true;
     if (staffLinks.isStaffForbiddenDeskMoneyRoute(requested, method)) return false;
     return staffLinks.isDeskRoute(requested, method);
   }
@@ -385,10 +386,46 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
 
       if (requested === "/api/ops/bootstrap" && req.method === "GET") {
         const canViewFinance = !workspaceRole || OPS_ADMIN_ROLES.has(workspaceRole);
+        const staffLinkPayload = actorStaffLink
+          ? {
+              id: actorStaffLink.id,
+              staffId: actorStaffLink.staffId,
+              roleInWorkspace: actorStaffLink.roleInWorkspace,
+              status: actorStaffLink.status
+            }
+          : null;
+        const activity = ops.getActivityProfile();
+        // Linked staff: desk shell only — no customers, expenses, or facility-wide PII dumps.
+        if (workspaceRole === "staff") {
+          const linkedStaffId = actorStaffLink?.staffId || "";
+          sendJson(res, 200, {
+            ok: true,
+            workspaceId: ops.getCurrentWorkspaceId(),
+            workspaceRole: "staff",
+            deskOnly: true,
+            customers: [],
+            customerCategories: [],
+            staff: ops.listStaff().filter((person) => person.id === linkedStaffId || person.active !== false),
+            serviceCategories: ops.listServiceCategories(),
+            services: ops.listServices(),
+            resources: [],
+            sessionOccurrences: [],
+            schedule: ops.getWorkingSchedule(),
+            bookingPage: ops.getBookingPage(),
+            calendarPreferences: ops.getCalendarPreferences(),
+            appointments: [],
+            stats: { appointments: {}, servicesCount: 0, staffCount: 0, customersCount: 0 },
+            activity,
+            staffLink: staffLinkPayload,
+            planUsage: null
+          });
+          return true;
+        }
         const stats = ops.getStatsSummary(localData?.appointments || []);
         sendJson(res, 200, {
           ok: true,
           workspaceId: ops.getCurrentWorkspaceId(),
+          workspaceRole: workspaceRole || null,
           customers: ops.listCustomers(),
           customerCategories: ops.listCustomerCategories(),
           staff: ops.listStaff(),
@@ -402,15 +439,8 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
           ...(canViewFinance ? { notifications: ops.getNotificationSettings(), expenses: ops.listExpenses() } : {}),
           appointments: ops.listAppointments(),
           stats: canViewFinance ? stats : { appointments: stats.appointments, servicesCount: stats.servicesCount, staffCount: stats.staffCount, customersCount: stats.customersCount },
-          activity: ops.getActivityProfile(),
-          staffLink: actorStaffLink
-            ? {
-                id: actorStaffLink.id,
-                staffId: actorStaffLink.staffId,
-                roleInWorkspace: actorStaffLink.roleInWorkspace,
-                status: actorStaffLink.status
-              }
-            : null,
+          activity,
+          staffLink: staffLinkPayload,
           planUsage: ops.getPlanUsage()
         });
         return true;

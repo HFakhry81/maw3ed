@@ -16,7 +16,7 @@
 | 2. سلامة البيانات والترحيل | مكتملة تقنياً | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore لـ `workspace_ops_*` + staff links | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
 | 3. الحجز الذري والتوفر | مكتملة تقنياً | قفل/قيود تداخل، holds، idempotency (JSON+PG+HTTP)، عقد timezone/DST للمدة+buffer | اختبار تنافس للفترات مع أثر commit ذري على JSON وPG |
 | 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
-| 5. الرحلات والواجهة | لم تبدأ | onboarding والكتالوج والتقويم والعميل ومكتب التشغيل | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة |
+| 5. الرحلات والواجهة | قيد التنفيذ (حزمة رحلات أساسية) | onboarding بقفل قالب، كتالوج+occupancy+موارد، دور عضوية، حجز عام RTL | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة؛ متبقٍ: روابط إلغاء موقعة، pagination، تسجيل جلسة عام كامل |
 | 6. الرسائل والفوترة والتكاملات | لم تبدأ | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
 | 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
 | 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
@@ -151,11 +151,20 @@
 - **التحقق:** `npm run test:capacity-modes` (JSON: exclusive/rental/session_capacity/bundle) و`npm run test:capacity-pg` (migrate 014 + round-trip). مجمّع: `npm run test:phase4-capacity`.
 - **حزمة 2 (إغلاق المرحلة 4):** مسارات ops HTTP للموارد/المتطلبات/الجلسات/التسجيل/الحضور/bundle؛ تخصيص تلقائي لـ exclusive/rental عند `createAppointment` مع تحرير عند الإلغاء؛ `npm run test:capacity-http` و`test:capacity-isolation` (عزل store + BOLA عبر الهيدر).
 - **إغلاق المرحلة 4:** `phase_4_closed=true`. مؤجّل غير حاجز: ضغط تسجيل متزامن على PG، إدارة series في الواجهة، افتراضات قوالب المجالات. **لا تعلن** التعليم/الصالون/التأجير جاهزة للإنتاج.
-- **المرحلة 5:** لم تبدأ على هذا الـ PR — افتح PR متابعة لرحلات المنتج (onboarding/كتالوج/حجز/desk).
+
+### المرحلة 5 — حزمة الرحلات الأساسية (onboarding / كتالوج / أدوار / حجز عام) — 2026-10-27
+
+- **قفل القالب عند الإنشاء:** `seedWorkspace(..., { lockActivity: true })` من `POST /api/workspaces`؛ onboarding في `ClerkGate` يطلب تأكيد القفل؛ شاشة القوالب داخل المنشأة تُخفى بعد القفل؛ شريط النشاط عرض فقط (لا تبديل طبي/مرن).
+- **الكتالوج والموارد:** نموذج الخدمة يعرض `occupancyMode` / `defaultCapacity` / `compositionDefault`؛ دليل الخدمات يعرض شارة إشغال؛ شاشة موارد رقيقة (`ResourcesView`) عبر bootstrap `resources` دون ادعاء جاهزية التعليم/الصالون/التأجير.
+- **أدوار الواجهة:** دور العضوية من bootstrap/`/api/workspaces` (وليس localStorage التجريبي)؛ تصفية التنقل لـ viewer/staff/manager؛ staff مربوط يحصل على bootstrap مُقشَّط لمكتب الحضور فقط.
+- **حجز عام + تقويم:** `book.html` يعرض تلميح سعة/تأجير من حقول الخدمة؛ التقويم يمرّر تلميح الإشغال عند الإنشاء؛ RTL عربي قائم.
+- **التحقق:** `npm run test:phase5-journeys` (+ تحديث `test:staff-links` لـ bootstrap staff).
+- **لا تُغلق المرحلة 5 بالكامل:** متبقٍ روابط إلغاء/إعادة جدولة موقعة للعميل، pagination للقوائم، رحلة تسجيل جلسة عامة كاملة، ومراجعة a11y أوسع. **لا تعلن** Stripe/SMS/WhatsApp أو مجالات رأسية جاهزة.
+- **التالي:** إكمال متبقيات المرحلة 5 أو الانتقال للمرحلة 6 (رسائل/فوترة) بعد قرار المالك.
 
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase4-capacity` (modes + PG + HTTP + isolation).
+1. شغّل `npm run test:phase5-journeys` و`npm run test:phase4-capacity`.
 2. على Sam-PC:  
-   `MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate` ثم `npm run test:phase4-capacity`.
-3. ابدأ المرحلة 5 في **PR جديد**: رحلات onboarding/catalog/booking/desk وفق الخارطة — لا تدّعِ جاهزية مجالات UI.
+   `MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate` ثم اختبارات المرحلة 4/5.
+3. متبقيات المرحلة 5: إلغاء/إعادة جدولة موقّعة، pagination، تسجيل جلسة في الحجز العام — أو ابدأ المرحلة 6 إن قرر المالك تأجيلها.
