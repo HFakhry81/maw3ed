@@ -2296,7 +2296,7 @@ function resolveWorkspaceIdForSlug(slug) {
 }
 
 function resolveWorkspaceIdForSlugAsync(slug) {
-  return opsWorkspace.resolveWorkspaceIdBySlugAsync(slug);
+  return opsWorkspace.resolveWorkspaceIdBySlugAsync(slug, defaultStore);
 }
 
 function seedWorkspaceStore(workspaceId, options = {}) {

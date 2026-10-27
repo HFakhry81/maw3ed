@@ -22,6 +22,16 @@ async function main() {
   await ops.withWorkspaceAsync(ops.DEFAULT_WORKSPACE_ID, async () => {
   const reset = ops.resetOpsData();
   const slug = reset.slug;
+  // Sync/async slug resolution must agree after reset (postgres + local).
+  // Regression: async PG-only lookup returned null for maw3ed-demo while sync
+  // resolved local-default — breaking /api/public/booking/* under smoke-http.
+  const syncWorkspaceId = ops.resolveWorkspaceIdForSlug(slug);
+  const asyncWorkspaceId = await ops.resolveWorkspaceIdForSlugAsync(slug);
+  assert(syncWorkspaceId, `sync slug resolve must find "${slug}" after resetOpsData`);
+  assert(
+    asyncWorkspaceId === syncWorkspaceId,
+    `async slug resolve must agree with sync after reset (sync=${syncWorkspaceId}, async=${asyncWorkspaceId})`
+  );
   const date = new Date().toISOString().slice(0, 10);
   const booking = ops.getPublicBooking(slug);
   assert(booking.services.length > 0, "expected public services");
@@ -101,6 +111,7 @@ async function main() {
         ok: true,
         suite: "smoke-public-booking",
         workspaceId: ops.getCurrentWorkspaceId(),
+        resolvedWorkspaceId: asyncWorkspaceId,
         slug,
         date,
         blockMinutes,

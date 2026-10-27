@@ -108,7 +108,9 @@ async function main() {
     const slug = bootstrap.json.bookingPage?.slug || "maw3ed-demo";
     const publicPage = await request("GET", `/api/public/booking/${encodeURIComponent(slug)}`);
     if (publicPage.status !== 200 || !publicPage.json.services?.length) {
-      throw new Error("public booking page failed");
+      throw new Error(
+        `public booking page failed (status=${publicPage.status}, slug=${slug}, error=${publicPage.json?.error || publicPage.json?.message || "n/a"}, storage=${env.MAW3ED_STORAGE || "local"})`
+      );
     }
 
     const serviceId = publicPage.json.services[0].id;
