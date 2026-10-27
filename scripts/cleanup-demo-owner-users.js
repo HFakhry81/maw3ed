@@ -12,8 +12,9 @@
  *   - يضبط platform_role=super_admin + is_platform_admin على fakhry فقط
  *   - يصفّر أعلام المنصة عن المالكين دائماً
  *   - يفصل fakhry عن memberships / staff links
- *   - يحذف المساحات غير المحفوظة أولاً (workspaces.owner_user_id بلا CASCADE)
+ *   - يمسح صفوف workspace_ops_* / staff_links / members ثم يحذف المساحات غير المحفوظة
  *   - يصفّر soft FKs ثم يحذف المستخدمين الزائدين
+ *   - الاستعلامات الاختيارية داخل المعاملة تستخدم SAVEPOINT حتى لا تُجهض المعاملة
  *
  * Usage:
  *   npm run users:cleanup-demo-owners -- --dry-run
@@ -22,6 +23,7 @@
 "use strict";
 
 require("./load-env");
+const crypto = require("crypto");
 const { pool, databaseConfigured, query } = require("../db");
 const {
   KEEP_OWNER_EMAILS,
@@ -47,11 +49,29 @@ function isPlatformAdminRow(user) {
   return Boolean(user.platform_role) || user.is_platform_admin === true;
 }
 
-async function safeClientQuery(client, sql, params = []) {
+function formatPgError(error) {
+  if (!error) return "unknown error";
+  const parts = [error.message || String(error)];
+  if (error.code) parts.push(`code=${error.code}`);
+  if (error.constraint) parts.push(`constraint=${error.constraint}`);
+  if (error.table) parts.push(`table=${error.table}`);
+  if (error.detail) parts.push(`detail=${error.detail}`);
+  return parts.join(" | ");
+}
+
+/** Optional query inside an open TX — missing relation/column must not abort the TX. */
+async function optionalClientQuery(client, sql, params = []) {
+  const sp = `sp_${crypto.randomBytes(6).toString("hex")}`;
+  await client.query(`SAVEPOINT ${sp}`);
   try {
-    return await client.query(sql, params);
+    const result = await client.query(sql, params);
+    await client.query(`RELEASE SAVEPOINT ${sp}`);
+    return result;
   } catch (error) {
-    if (error && (error.code === "42P01" || error.code === "42703")) return { rows: [] };
+    await client.query(`ROLLBACK TO SAVEPOINT ${sp}`).catch(() => null);
+    if (error && (error.code === "42P01" || error.code === "42703")) {
+      return { rows: [], skipped: true, code: error.code };
+    }
     throw error;
   }
 }
@@ -87,16 +107,66 @@ async function loadStaffLinks() {
 
 async function nullSoftUserFks(client, userIds) {
   if (!userIds.length) return;
-  await safeClientQuery(
+  await optionalClientQuery(
     client,
     `UPDATE platform_audit_events SET actor_user_id = NULL WHERE actor_user_id = ANY($1::text[])`,
     [userIds]
   );
-  await safeClientQuery(
+  await optionalClientQuery(
     client,
     `UPDATE platform_settlements SET created_by = NULL WHERE created_by = ANY($1::text[])`,
     [userIds]
   );
+}
+
+/**
+ * Wipe a workspace and dependents before DELETE workspaces.
+ * Mirrors workspaceOpsPg saveStore wipe: deleting workspace_ops_profiles cascades ops children.
+ */
+async function deleteWorkspaceFully(client, workspace) {
+  const workspaceId = workspace.id;
+  const label = workspace.slug || workspace.name || workspaceId;
+
+  // Staff links reference workspace_ops_staff; remove before ops profile wipe.
+  await optionalClientQuery(client, `DELETE FROM workspace_staff_links WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+
+  // Normalized ops graph hangs off workspace_ops_profiles (ON DELETE CASCADE to children).
+  await optionalClientQuery(client, `DELETE FROM workspace_ops_profiles WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+
+  // Platform governance / billing children (also CASCADE from workspaces, but explicit).
+  await optionalClientQuery(client, `DELETE FROM billing_transactions WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+  await optionalClientQuery(client, `DELETE FROM subscription_invoices WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+  await optionalClientQuery(client, `DELETE FROM usage_counters WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+  await optionalClientQuery(client, `DELETE FROM workspace_subscriptions WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+
+  // organizations.workspace_id is ON DELETE SET NULL — clear explicitly for clarity.
+  await optionalClientQuery(client, `UPDATE organizations SET workspace_id = NULL WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+
+  await optionalClientQuery(client, `DELETE FROM workspace_members WHERE workspace_id = $1`, [
+    workspaceId
+  ]);
+
+  try {
+    await client.query(`DELETE FROM workspaces WHERE id = $1`, [workspaceId]);
+  } catch (error) {
+    error.message = `فشل حذف المساحة ${workspaceId} (${label}): ${formatPgError(error)}`;
+    throw error;
+  }
+  console.log(`[cleanup] deleted workspace ${workspaceId} (${label})`);
 }
 
 async function fetchFinalAdminReport(adminEmail) {
@@ -338,10 +408,10 @@ async function main() {
       console.log(`[cleanup] owner not platform admin → ${user.email}`);
     }
 
-    await safeClientQuery(client, `DELETE FROM workspace_staff_links WHERE user_id = $1`, [
+    await optionalClientQuery(client, `DELETE FROM workspace_staff_links WHERE user_id = $1`, [
       platformAdminUser.id
     ]);
-    await safeClientQuery(client, `DELETE FROM workspace_members WHERE user_id = $1`, [
+    await optionalClientQuery(client, `DELETE FROM workspace_members WHERE user_id = $1`, [
       platformAdminUser.id
     ]);
     console.log(`[cleanup] detached ${PLATFORM_ADMIN_EMAIL} from all workspace memberships/staff links`);
@@ -350,10 +420,9 @@ async function main() {
     await nullSoftUserFks(client, removeIds);
 
     // Delete orphan/non-demo workspaces first (includes fakhry-owned haitham-fakhry).
-    // workspaces.owner_user_id has NO ON DELETE CASCADE toward app_users.
+    // workspaces.owner_user_id has NO ON DELETE CASCADE toward app_users — wipe deps then delete.
     for (const workspace of removeWorkspaces) {
-      await client.query(`DELETE FROM workspaces WHERE id = $1`, [workspace.id]);
-      console.log(`[cleanup] deleted workspace ${workspace.id} (${workspace.slug || workspace.name})`);
+      await deleteWorkspaceFully(client, workspace);
     }
 
     for (const user of removeUsers) {
@@ -367,12 +436,17 @@ async function main() {
             .join(", ")}`
         );
       }
-      await client.query(`DELETE FROM app_users WHERE id = $1`, [user.id]);
+      try {
+        await client.query(`DELETE FROM app_users WHERE id = $1`, [user.id]);
+      } catch (error) {
+        error.message = `فشل حذف المستخدم ${user.email}: ${formatPgError(error)}`;
+        throw error;
+      }
       console.log(`[cleanup] deleted user ${user.email} (${user.id})`);
     }
 
     const leftoverMembers = (
-      await safeClientQuery(client, `SELECT workspace_id FROM workspace_members WHERE user_id = $1`, [
+      await optionalClientQuery(client, `SELECT workspace_id FROM workspace_members WHERE user_id = $1`, [
         platformAdminUser.id
       ])
     ).rows;
@@ -415,7 +489,7 @@ async function main() {
 if (require.main === module) {
   main()
     .catch((error) => {
-      console.error("[cleanup] FAILED:", error.message || error);
+      console.error("[cleanup] FAILED:", formatPgError(error));
       process.exitCode = 1;
     })
     .finally(async () => {
