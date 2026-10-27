@@ -17,7 +17,7 @@
 | 3. الحجز الذري والتوفر | مكتملة تقنياً | قفل/قيود تداخل، holds، idempotency (JSON+PG+HTTP)، عقد timezone/DST للمدة+buffer | اختبار تنافس للفترات مع أثر commit ذري على JSON وPG |
 | 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
 | 5. الرحلات والواجهة | مكتملة تقنياً | onboarding+قفل، كتالوج/موارد/إشغال، أدوار، حجز عام+تسجيل جلسة، روابط إدارة موقعة، pagination، a11y أساسية | رحلات المنتج قابلة للتجربة؛ فك قفل القالب لمسؤول المنصة مؤجّل موثّق |
-| 6. الرسائل والفوترة والتكاملات | لم تبدأ / تُفتتح بعد إغلاق م5 | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
+| 6. الرسائل والفوترة والتكاملات | قيد التنفيذ — حزمة 1 تقنية | outbox + أعلام فوترة + webhook sandbox | sandbox/replay/idempotency؛ checkout/SMS/WhatsApp ما زالت معطّلة |
 | 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
 | 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
 | 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
@@ -164,10 +164,18 @@
 - **مؤجّل موثّق:** فك قفل القالب لمسؤول المنصة (لا سطح `admin` حالي لـ `activity_mode_locked`؛ مطلوب confirmation+audit+سبب لاحقاً).
 - **إغلاق المرحلة 5:** `phase_5_closed=true`. **لا تعلن** Stripe/SMS/WhatsApp أو التعليم/الصالون/التأجير جاهزة.
 - **التحقق:** `npm run test:phase5-journeys` (+ `test:ops-rbac` / `test:staff-links`).
-- **التالي:** المرحلة 6 — outbox رسائل + خطاطيف فوترة + sandbox webhooks على PR جديد.
+- **التالي:** المرحلة 6 — بدأت على PR منفصل عن فرع المرحلة 5.
+
+### المرحلة 6 — الحزمة الأولى: outbox + فوترة معطّلة + webhook sandbox — 2026-10-27
+
+- **Transactional outbox:** [`transactionalOutbox.js`](../transactionalOutbox.js) — JSONL مع `idempotencyKey`، حالات pending/delivered/dead، backoff عند الفشل. جسر [`email.js`](../email.js) عند `MAW3ED_EMAIL_MODE=outbox`؛ تأكيد الحجز يحمل رابط manage موقّع عند التوفر.
+- **Capability flags:** [`billingCapabilities.js`](../billingCapabilities.js) عبر `GET /api/integrations/capabilities` و`integrations` في `/api/config` — `hostedCheckout=false`، SMS/WhatsApp `not_wired`، Whop checkout يبقى 410.
+- **Webhook sandbox:** [`webhookSandbox.js`](../webhookSandbox.js) + `POST /api/webhooks/sandbox/:provider` — HMAC-SHA256 (`x-maw3ed-signature` / `x-signature`)، ledger idempotent، يُدرج صف outbox منقّح بلا أسرار.
+- **التحقق:** `npm run test:phase6-integrations` (وتبقى رحلات م5 خضراء عبر `test:phase5-journeys`).
+- **متبقٍ لإغلاق م6:** عامل تسليم يستنزف الـ outbox لمزود حقيقي؛ محوّلات webhook خاصة بالمزود؛ فتح checkout فقط بعد قبول sandbox. **لا تعلن** دفع أو رسائل متعددة القنوات جاهزة.
 
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase5-journeys`.
-2. ابدأ المرحلة 6 من فرع المرحلة 5: outbox transactional / billing hooks / webhook sandbox.
+1. شغّل `npm run test:phase6-integrations` و`npm run test:phase5-journeys`.
+2. الحزمة التالية للمرحلة 6: delivery worker و/أو محوّل مزود بعد قبول sandbox — checkout يبقى مغلقاً.
 3. على Sam-PC عند الحاجة: Postgres `5432` / `maw3ed`.
