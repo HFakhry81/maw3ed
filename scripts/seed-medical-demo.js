@@ -1,17 +1,21 @@
 /**
- * Seed a rich, logically linked medical demo into local ops workspace JSON.
- *
- * Canonical durable backup (survives refresh / ops:reset):
+ * بذرة المستشفى الطبية — المصدر الوحيد الدائم:
  *   data/seeds/medical-demo-ops.json
  *
- * Usage:
- *   npm run seed:medical              generate demo + save canonical backup
- *   npm run seed:medical:save         save current workspace → canonical backup
- *   npm run seed:medical:restore      restore workspace ← canonical backup
- *   node scripts/seed-medical-demo.js --workspace=<id>
- *   node scripts/seed-medical-demo.js --owner-email=<email>
- *   node scripts/seed-medical-demo.js --restore --replace
- *   node scripts/seed-medical-demo.js --keep
+ * المسار السعيد للاستعادة (JSON + Postgres ops عند MAW3ED_STORAGE=postgres):
+ *   npm run seed:medical:restore
+ *
+ * الهدف الافتراضي: مساحة يملكها contact.haitham@yahoo.com
+ * (إن لم تكن طبية يُحوَّل activity_type إلى medical مع الحفاظ على المالك والـ slug).
+ *
+ * أوامر:
+ *   npm run seed:medical:restore              استعادة البذرة الكانونية
+ *   npm run seed:medical:restore -- --replace استبدال كامل بدل الدمج
+ *   npm run seed:medical:save                 حفظ مساحة حالية → البذرة الكانونية
+ *   npm run seed:medical                      توليد تجريبي ثم حفظ (نادراً)
+ *   --owner-email=<email>  /  --workspace=<id>  /  --keep-activity
+ *
+ * ملاحظة: npm run migrate و npm run seed لا يحمّلان بذرة المستشفى (مخطط/منصة فقط).
  */
 const fs = require("fs");
 const path = require("path");
@@ -24,7 +28,8 @@ const {
   canonicalSeedPath,
   readCanonicalSeed,
   writeCanonicalSeed,
-  summarizeStore
+  summarizeStore,
+  DEFAULT_OWNER_EMAIL
 } = require("./medical-seed-snapshot");
 
 const args = process.argv.slice(2);
@@ -33,12 +38,44 @@ const noBackup = args.includes("--no-backup");
 const doRestore = args.includes("--restore");
 const doSave = args.includes("--save");
 const doReplace = args.includes("--replace");
+const keepActivity = args.includes("--keep-activity");
 const wsArg = args.find((a) => a.startsWith("--workspace="));
 const ownerArg = args.find((a) => a.startsWith("--owner-email="));
 const requestedWorkspaceId = wsArg ? wsArg.slice("--workspace=".length).trim() : "";
-const ownerEmail = ownerArg ? ownerArg.slice("--owner-email=".length).trim() : "contact.haitham@gmail.com";
+const ownerEmail = ownerArg ? ownerArg.slice("--owner-email=".length).trim() : DEFAULT_OWNER_EMAIL;
 let workspaceId = requestedWorkspaceId || null;
 let workspaceTarget = null;
+
+function isMedicalActivity(activityType) {
+  const activityTemplates = require("../activityTemplatesCatalog");
+  return activityTemplates.resolveTemplateId(activityType || "") === "medical";
+}
+
+function mapWorkspaceRow(row, extra = {}) {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    activityType: row.activity_type,
+    locale: row.locale,
+    needsMedicalConversion: !isMedicalActivity(row.activity_type),
+    ...extra
+  };
+}
+
+/**
+ * Pick one owned workspace: prefer medical; else unique owned workspace.
+ * Exported for smoke coverage of selection rules.
+ */
+function pickOwnedWorkspace(ownedWorkspaces) {
+  const rows = Array.isArray(ownedWorkspaces) ? ownedWorkspaces : [];
+  if (!rows.length) return { target: null, reason: "none" };
+  const medical = rows.filter((workspace) => isMedicalActivity(workspace.activity_type));
+  if (medical.length === 1) return { target: medical[0], reason: "unique_medical" };
+  if (medical.length > 1) return { target: null, reason: "ambiguous_medical", candidates: medical };
+  if (rows.length === 1) return { target: rows[0], reason: "unique_owned" };
+  return { target: null, reason: "ambiguous_owned", candidates: rows };
+}
 
 async function resolveWorkspaceTarget() {
   if (requestedWorkspaceId) {
@@ -46,7 +83,9 @@ async function resolveWorkspaceTarget() {
     if (safeId !== requestedWorkspaceId) {
       throw new Error(`معرّف مساحة العمل غير صالح: ${requestedWorkspaceId}`);
     }
-    if (!databaseConfigured) return { id: safeId };
+    if (!databaseConfigured) {
+      return { id: safeId, needsMedicalConversion: false, explicit: true };
+    }
 
     const result = await query(
       `SELECT id, name, slug, activity_type, locale
@@ -58,19 +97,7 @@ async function resolveWorkspaceTarget() {
     if (!target) {
       throw new Error(`مساحة العمل غير موجودة أو غير نشطة: ${safeId}`);
     }
-    const activityTemplates = require("../activityTemplatesCatalog");
-    if (activityTemplates.resolveTemplateId(target.activity_type) !== "medical") {
-      throw new Error(
-        `مساحة العمل "${target.name}" (${target.id}) ليست مساحة طبية؛ لن تُربط بها بذرة المستشفى.`
-      );
-    }
-    return {
-      id: target.id,
-      name: target.name,
-      slug: target.slug,
-      activityType: target.activity_type,
-      locale: target.locale
-    };
+    return mapWorkspaceRow(target, { explicit: true });
   }
 
   if (!databaseConfigured) {
@@ -93,37 +120,77 @@ async function resolveWorkspaceTarget() {
     [ownerEmail]
   );
   const ownedWorkspaces = result.rows;
-  const labWorkspaces = ownedWorkspaces.filter((workspace) =>
-    /معمل|lab|ma3mal/i.test(`${workspace.name || ""} ${workspace.slug || ""}`)
+  const picked = pickOwnedWorkspace(ownedWorkspaces);
+
+  if (!picked.target) {
+    const list = (picked.candidates || ownedWorkspaces)
+      .map((workspace) => `${workspace.name} [${workspace.activity_type}] (${workspace.id})`)
+      .join(", ");
+    const available = ownedWorkspaces.length ? list || "—" : "لا توجد مساحة نشطة مملوكة لهذا الحساب";
+    throw new Error(
+      `تعذّر تحديد مساحة عمل فريدة للحساب ${ownerEmail} (سبب: ${picked.reason}). المساحات: ${available}. ` +
+        "مرّر --workspace=<id> لتحديد المساحة المطلوبة."
+    );
+  }
+
+  return mapWorkspaceRow(picked.target, { ownerEmail, pickReason: picked.reason });
+}
+
+/**
+ * Convert workspace activity to medical so hospital ops seed can apply.
+ * Preserves ownership and slug; updates workspaces / organizations / ops profile when present.
+ */
+async function ensureWorkspaceAcceptsMedicalOps(target) {
+  if (!target || keepActivity) return { converted: false, skipped: Boolean(keepActivity) };
+  if (!target.needsMedicalConversion && isMedicalActivity(target.activityType)) {
+    return { converted: false };
+  }
+  if (!databaseConfigured) {
+    console.warn(
+      "[seed-medical] PostgreSQL غير مفعّل — لن يُحدَّث activity_type في جدول workspaces؛ ستُضبط حقول النشاط داخل ملف ops فقط."
+    );
+    target.activityType = "medical";
+    target.needsMedicalConversion = false;
+    return { converted: true, persistence: "ops-only" };
+  }
+
+  const id = target.id;
+  console.log(
+    `[seed-medical] تحويل نشاط المساحة إلى medical (كان: ${target.activityType || "unknown"}) مع الإبقاء على المالك والـ slug=${target.slug || ""}`
   );
-  const candidates = labWorkspaces.length ? labWorkspaces : ownedWorkspaces.length === 1 ? ownedWorkspaces : [];
+  await query(
+    `UPDATE workspaces
+     SET activity_type = 'medical', updated_at = NOW()
+     WHERE id = $1`,
+    [id]
+  );
+  await query(
+    `UPDATE organizations
+     SET activity_type = 'medical'
+     WHERE workspace_id = $1`,
+    [id]
+  );
+  await query(
+    `UPDATE workspace_ops_profiles
+     SET activity_mode = 'medical',
+         activity_template_id = 'medical',
+         activity_mode_locked = FALSE,
+         updated_at = NOW()
+     WHERE workspace_id = $1`,
+    [id]
+  );
+  target.activityType = "medical";
+  target.needsMedicalConversion = false;
+  return { converted: true, persistence: "postgres" };
+}
 
-  if (candidates.length !== 1) {
-    const available = ownedWorkspaces.length
-      ? ownedWorkspaces.map((workspace) => `${workspace.name} (${workspace.id})`).join(", ")
-      : "لا توجد مساحة نشطة مملوكة لهذا الحساب";
-    throw new Error(
-      `تعذّر تحديد مساحة المعمل بشكل فريد للحساب ${ownerEmail}. المساحات المملوكة: ${available}. ` +
-      "مرّر --workspace=<id> لتحديد المساحة المطلوبة."
-    );
-  }
-
-  const target = candidates[0];
-  const activityTemplates = require("../activityTemplatesCatalog");
-  if (activityTemplates.resolveTemplateId(target.activity_type) !== "medical") {
-    throw new Error(
-      `مساحة العمل "${target.name}" (${target.id}) ليست مساحة طبية؛ لن تُربط بها بذرة المستشفى.`
-    );
-  }
-
-  return {
-    id: target.id,
-    name: target.name,
-    slug: target.slug,
-    activityType: target.activity_type,
-    locale: target.locale,
-    ownerEmail
-  };
+function applyMedicalActivityFields(store) {
+  if (!store || typeof store !== "object") return store;
+  store.activityMode = "medical";
+  store.activityTemplateId = "medical";
+  // Unlock so restored medical catalog is not blocked by a prior education lock.
+  store.activityModeLocked = false;
+  return store;
 }
 
 const SHIFTS = [
@@ -424,6 +491,11 @@ async function restoreCanonicalToWorkspace() {
   const { meta, store } = readCanonicalSeed();
   console.log(`[seed-medical] restoring from ${path.relative(process.cwd(), canonicalSeedPath())}`);
   console.log(`[seed-medical] seed meta:`, meta);
+  console.log(
+    `[seed-medical] default owner email=${DEFAULT_OWNER_EMAIL}; active target owner=${workspaceTarget?.ownerEmail || "(explicit workspace)"}`
+  );
+
+  const activityResult = await ensureWorkspaceAcceptsMedicalOps(workspaceTarget);
 
   const counts = await ops.withWorkspaceAsync(workspaceId, async () => {
     if (!noBackup) {
@@ -432,14 +504,20 @@ async function restoreCanonicalToWorkspace() {
     }
     const ctx = opsWorkspace.getContext(() => cloneStore(store));
     const next = doReplace ? cloneStore(store) : mergeSeedStore(ctx.data, store);
+    applyMedicalActivityFields(next);
     applyWorkspaceIdentity(next, ctx);
     opsWorkspace.replaceStoreData(ctx, next);
-    return { ...summarizeStore(ctx.data), mode: doReplace ? "replace" : "merge" };
+    return {
+      ...summarizeStore(ctx.data),
+      mode: doReplace ? "replace" : "merge",
+      activityConversion: activityResult
+    };
   });
 
   console.log("[seed-medical] restore done");
   console.log(JSON.stringify(counts, null, 2));
   console.log("حدّث صفحة المتصفح لرؤية البيانات المسترجعة.");
+  console.log("تذكير: npm run migrate / npm run seed لا يستعيدان بذرة المستشفى.");
   return counts;
 }
 
@@ -703,18 +781,32 @@ async function main() {
     workspaceId = workspaceTarget.id;
     console.log(
       `[seed-medical] target workspace=${workspaceId}` +
-      (workspaceTarget.name ? ` name=${workspaceTarget.name} slug=${workspaceTarget.slug || ""}` : "") +
-      (workspaceTarget.ownerEmail ? ` owner=${workspaceTarget.ownerEmail} role=owner` : " explicit")
+        (workspaceTarget.name ? ` name=${workspaceTarget.name} slug=${workspaceTarget.slug || ""}` : "") +
+        (workspaceTarget.ownerEmail ? ` owner=${workspaceTarget.ownerEmail} role=owner` : " explicit") +
+        (workspaceTarget.activityType ? ` activity=${workspaceTarget.activityType}` : "") +
+        (workspaceTarget.needsMedicalConversion ? " (will convert→medical on restore)" : "")
     );
     if (doRestore) return await restoreCanonicalToWorkspace();
     if (doSave) return await saveCanonicalFromWorkspace("save");
+    if (workspaceTarget.needsMedicalConversion) {
+      await ensureWorkspaceAcceptsMedicalOps(workspaceTarget);
+    }
     return await generateDemo();
   } finally {
     if (pool) await pool.end();
   }
 }
 
-main().catch((error) => {
-  console.error("[seed-medical] FAILED:", error.message || error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error("[seed-medical] FAILED:", error.message || error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  DEFAULT_OWNER_EMAIL,
+  isMedicalActivity,
+  pickOwnedWorkspace,
+  applyMedicalActivityFields
+};

@@ -11,12 +11,12 @@
   ],
   "resume_pointer": {
     "phase": 2,
-    "package": "integrity-baseline+staff-links",
+    "package": "integrity-baseline+staff-links+medical-seed-target",
     "next_steps": [
+      "On owner Sam-PC: npm run seed:medical:restore (default contact.haitham@yahoo.com) with MAW3ED_STORAGE=postgres, then refresh browser",
       "Run migrate twice against local Postgres (port 5433) including 011+012; confirm second run applies 0 pending via schema_migrations",
       "Add PG dump/restore for workspace_ops_* (+ workspace_staff_links) then compare JSON↔PG for a managed workspace until ok=true",
-      "Optional UI: context selector using GET /api/account/contexts when multiple memberships exist",
-      "Do not invent multi-staff-per-user-in-one-workspace or cross-workspace staff sharing"
+      "Optional UI: context selector using GET /api/account/contexts when multiple memberships exist"
     ]
   },
   "open_product_gates": [],
@@ -105,6 +105,15 @@
             "node --check opsRoutes.js",
             "node --check server.js"
           ]
+        },
+        {
+          "id": "medical-seed-target",
+          "status": "complete_technical",
+          "summary": "Default medical restore owner contact.haitham@yahoo.com; auto medical activity conversion; collapsed hospital restore to seed:medical:restore only",
+          "evidence_commands": [
+            "npm run test:ops-integrity",
+            "node --check scripts/seed-medical-demo.js"
+          ]
         }
       ],
       "remaining_to_close": [
@@ -141,6 +150,7 @@
     "phase_2_json_compare_audit": true,
     "phase_2_json_backup_restore_drill": true,
     "phase_2_staff_links": true,
+    "phase_2_medical_seed_target": true,
     "phase_2_pg_migrate_twice": false,
     "phase_2_pg_ops_backup_restore": false,
     "phase_2_closed": false

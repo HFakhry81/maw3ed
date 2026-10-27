@@ -24,6 +24,12 @@ const {
   createSessionBackup,
   restoreSessionBackup
 } = require("./ops-session-backup");
+const { DEFAULT_OWNER_EMAIL } = require("./medical-seed-snapshot");
+const {
+  pickOwnedWorkspace,
+  applyMedicalActivityFields,
+  DEFAULT_OWNER_EMAIL: seedDefaultOwner
+} = require("./seed-medical-demo");
 
 const root = path.join(__dirname, "..");
 
@@ -149,7 +155,34 @@ function main() {
   }
   assert(restoreOk, "restore drill did not complete");
 
-  // 6) Medical seed optional integrity signal (report only — do not fail Phase 2 package on seed orphans)
+  // 6) Medical seed targeting defaults + optional integrity scan
+  assert(
+    DEFAULT_OWNER_EMAIL === "contact.haitham@yahoo.com" &&
+      seedDefaultOwner === DEFAULT_OWNER_EMAIL,
+    "default medical seed owner must be contact.haitham@yahoo.com"
+  );
+  const educationOnly = pickOwnedWorkspace([
+    {
+      id: "ws-edu",
+      name: "مركز طلائع",
+      slug: "talaaee-book",
+      activity_type: "education"
+    }
+  ]);
+  assert(educationOnly.target?.id === "ws-edu", "unique owned non-medical workspace is selectable");
+  const medicalPreferred = pickOwnedWorkspace([
+    { id: "ws-edu", name: "تعليم", activity_type: "education" },
+    { id: "ws-med", name: "طبي", activity_type: "medical" }
+  ]);
+  assert(medicalPreferred.target?.id === "ws-med", "prefer unique medical among owned");
+  const stamped = applyMedicalActivityFields({
+    activityMode: "education",
+    activityTemplateId: "education",
+    activityModeLocked: true
+  });
+  assert(stamped.activityMode === "medical" && stamped.activityModeLocked === false, "restore stamps medical activity");
+  checks.push("seed-medical-target-defaults");
+
   const seedPath = path.join(root, "data", "seeds", "medical-demo-ops.json");
   let seedNote = null;
   if (fs.existsSync(seedPath)) {
@@ -158,7 +191,8 @@ function main() {
     seedNote = {
       orphanCount: seedAudit.orphanCount,
       ok: seedAudit.ok,
-      sample: seedAudit.orphans
+      sample: seedAudit.orphans,
+      defaultOwnerEmail: DEFAULT_OWNER_EMAIL
     };
     checks.push("seed-medical-scanned");
   }

@@ -1,6 +1,9 @@
 /**
  * Canonical medical demo seed snapshot — durable backup under data/seeds/.
  * Not wiped by ops:reset / refresh (those only touch data/workspaces/).
+ *
+ * الاستعادة الفعلية عبر: npm run seed:medical:restore
+ * (لا تستخدم npm run migrate / npm run seed لبذرة المستشفى)
  */
 const fs = require("fs");
 const path = require("path");
@@ -9,6 +12,8 @@ const rootDir = path.join(__dirname, "..");
 const SEEDS_DIR = path.join(rootDir, "data", "seeds");
 const CANONICAL_SEED = path.join(SEEDS_DIR, "medical-demo-ops.json");
 const SEED_NAME = "medical-demo";
+/** Default hospital-demo owner on the product owner's local machines. */
+const DEFAULT_OWNER_EMAIL = "contact.haitham@yahoo.com";
 
 function ensureSeedsDir() {
   fs.mkdirSync(SEEDS_DIR, { recursive: true });
@@ -21,7 +26,7 @@ function canonicalSeedPath() {
 function readCanonicalSeed() {
   if (!fs.existsSync(CANONICAL_SEED)) {
     const error = new Error(
-      `لا توجد نسخة بذرة محفوظة في ${path.relative(rootDir, CANONICAL_SEED)}\nشغّل: npm run seed:medical   ثم   npm run seed:medical:save`
+      `لا توجد نسخة بذرة محفوظة في ${path.relative(rootDir, CANONICAL_SEED)}\nالمسار المتوقع: data/seeds/medical-demo-ops.json — للاستعادة: npm run seed:medical:restore`
     );
     error.code = "SEED_MISSING";
     throw error;
@@ -73,6 +78,7 @@ module.exports = {
   SEED_NAME,
   SEEDS_DIR,
   CANONICAL_SEED,
+  DEFAULT_OWNER_EMAIL,
   canonicalSeedPath,
   ensureSeedsDir,
   readCanonicalSeed,

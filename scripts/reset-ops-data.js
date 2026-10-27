@@ -81,7 +81,7 @@ async function main() {
 
   console.log("[SUCCESS] Operational data reset completed.");
   console.log("[HINT] Restore last session: npm run ops:restore");
-  console.log("[HINT] Restore medical demo only: npm run seed:medical:restore");
+  console.log("[HINT] استعادة بذرة المستشفى: npm run seed:medical:restore  (ليس npm run seed / migrate)");
 }
 
 main()

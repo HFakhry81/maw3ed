@@ -65,6 +65,16 @@ MAW3ED-TOOLBOX.bat
 
 تقارير: `data/last-update-report.json` · `data/last-refresh-report.json`
 
+## بذرة المستشفى الطبية (ليست migrate/seed)
+
+`npm run migrate` و`npm run seed` يحدّثان المخطط/بذرة المنصة فقط. لاستعادة بيانات المستشفى الكاملة من `data/seeds/medical-demo-ops.json` إلى مساحة المالك الافتراضي (`contact.haitham@yahoo.com`):
+
+```bash
+npm run seed:medical:restore
+```
+
+التفاصيل: [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
+
 تخطّي التثبيت عند التكرار السريع:
 
 ```bat
