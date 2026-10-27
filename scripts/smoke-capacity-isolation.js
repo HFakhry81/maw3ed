@@ -7,6 +7,7 @@ delete process.env.DATABASE_URL;
 process.env.MAW3ED_STORAGE = "local";
 process.env.MAW3ED_ENV = "production";
 process.env.MAW3ED_REQUIRE_AUTH = "1";
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || "smoke-capacity-isolation-session-secret";
 
 delete require.cache[require.resolve("../db")];
 delete require.cache[require.resolve("../opsPg")];

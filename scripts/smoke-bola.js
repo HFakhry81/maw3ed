@@ -69,12 +69,14 @@ async function main() {
     MAW3ED_REQUIRE_AUTH: process.env.MAW3ED_REQUIRE_AUTH,
     MAW3ED_STORAGE: process.env.MAW3ED_STORAGE,
     MAW3ED_STRICT_PRODUCTION_STORAGE: process.env.MAW3ED_STRICT_PRODUCTION_STORAGE,
-    MAW3ED_ALLOW_JSON_IN_PRODUCTION: process.env.MAW3ED_ALLOW_JSON_IN_PRODUCTION
+    MAW3ED_ALLOW_JSON_IN_PRODUCTION: process.env.MAW3ED_ALLOW_JSON_IN_PRODUCTION,
+    SESSION_SECRET: process.env.SESSION_SECRET
   };
 
   process.env.MAW3ED_ENV = "production";
   process.env.MAW3ED_REQUIRE_AUTH = "1";
   process.env.MAW3ED_STORAGE = "local";
+  process.env.SESSION_SECRET = "smoke-bola-session-secret-value";
 
   const wsA = "ws-bola-a";
   const wsB = "ws-bola-b";
