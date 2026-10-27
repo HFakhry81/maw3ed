@@ -60,7 +60,6 @@
 | `POST /api/webhooks/sandbox/:provider` | sandbox فقط؛ يتطلب توقيع HMAC؛ ledger idempotent؛ لا يفعّل اشتراكاً حياً |
 | `GET /api/account`, `/api/account/contexts`, `/api/workspaces`, `/api/entitlements`, `/api/billing/status`; `POST /api/workspaces`, `/api/billing/request` | جلسة؛ قائمة السياقات تشمل عضوية المساحات + `staffLink` النشط لاختيار السياق؛ `x-workspace-id` يختار السياق فقط ولا يمنح صلاحية |
 | `POST /api/whop/checkout`, `/api/whop/verify-checkout` | معطلان حالياً (`410`) |
-
 | `GET /api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | عند auth: membership + دور manager+ عبر `legacyAccess.js`؛ `x-workspace-id` سياق فقط |
 | `PATCH /api/workspace-profile` | عند auth: owner/admin فقط |
 | `POST /api/appointments` | عند auth: membership + دور manager+ |
