@@ -10,16 +10,23 @@
     "docs/STAFF_ACCOUNT_LINKS.md"
   ],
   "resume_pointer": {
-    "phase": 8,
-    "package": "prelaunch-acceptance-not-started",
+    "phase": 9,
+    "package": "go-no-go-checklist-stub",
     "next_steps": [
-      "Start Phase 8 on a NEW PR from cursor/phase7-ops-privacy-restore-84f0: aggregate phase1–7 smokes + production-like posture + owner manual checklist",
-      "Owner gates still open from Phase 7: signed Sam-PC restore drill, RPO/RTO approval, external alert sink, host TLS review",
-      "Hosted checkout / SMS / WhatsApp / Stripe live capture remain disabled",
-      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run test:ops-pg-backup:full"
+      "Owner completes PRE_LAUNCH_ACCEPTANCE_CHECKLIST manual section and signs GO_NO_GO_CHECKLIST — agent must not auto-launch pilot",
+      "Owner gates: Sam-PC restore drill (5432/maw3ed), RPO/RTO approval, external alert sink, host TLS",
+      "Keep Stripe live / pay link / WhatsApp-SMS QR / hosted checkout disabled until explicit product unlock",
+      "Optional HTTP gate: npm run check:staging on an isolated port"
     ]
   },
-  "open_product_gates": [],
+  "open_product_gates": [
+    "stripe_live_capture",
+    "customer_quote_pay_link",
+    "whatsapp_sms_qr_pass",
+    "hosted_checkout",
+    "phase5_platform_activity_unlock",
+    "phase7_owner_ops_gates"
+  ],
   "decisions": [
     {
       "id": "staff_desk_attribution",
@@ -172,8 +179,55 @@
       ],
       "notes": "phase_7_closed=true with open owner gates. Do not claim production ops/SLA complete."
     },
-    { "id": 8, "name_ar": "قبول ما قبل الإطلاق", "status": "not_started" },
-    { "id": 9, "name_ar": "تجربة محدودة والتوسع", "status": "not_started" }
+    {
+      "id": 8,
+      "name_ar": "قبول ما قبل الإطلاق",
+      "status": "closed_with_open_gate",
+      "started_at": "2026-10-27",
+      "closed_at": "2026-10-27",
+      "packages": [
+        {
+          "id": "prelaunch-acceptance-aggregator-posture-checklist",
+          "status": "complete_technical",
+          "summary": "test:phase-acceptance aggregates phase1–7 + phase8 posture; smoke-production-posture covers auth/storage/secrets and keeps checkout/SMS/WhatsApp gated; PRE_LAUNCH_ACCEPTANCE_CHECKLIST documents automated vs owner-manual gates.",
+          "evidence_commands": [
+            "npm run test:phase8-posture",
+            "npm run test:phase-acceptance"
+          ]
+        }
+      ],
+      "remaining_to_close": [],
+      "open_gate": {
+        "id": "phase8_manual_owner_acceptance",
+        "status": "open_owner_manual",
+        "items": [
+          "Manual phone/browser booking journey + RTL",
+          "Signed Sam-PC PG restore drill",
+          "Optional npm run check:staging on deploy-like host",
+          "Confirm disabled features are not marketed"
+        ]
+      },
+      "notes": "phase_8_closed=true for automated gates only when test:phase-acceptance is green. Manual owner gates remain open."
+    },
+    {
+      "id": 9,
+      "name_ar": "تجربة محدودة والتوسع",
+      "status": "in_progress",
+      "started_at": "2026-10-27",
+      "packages": [
+        {
+          "id": "go-no-go-checklist-stub",
+          "status": "complete_technical",
+          "summary": "GO_NO_GO_CHECKLIST.md stub only — default No-Go until owner signs. No pilot launch, no production feature enablement by agent.",
+          "evidence_commands": []
+        }
+      ],
+      "remaining_to_close": [
+        "Owner-signed Go on a specific revision",
+        "Limited pilot with cooperating facility after privacy approval"
+      ],
+      "notes": "phase_9_started=true; phase_9_closed=false. Agent must not auto-launch."
+    }
   ],
   "checklist": {
     "phase_0_inventory": true,
@@ -223,7 +277,12 @@
     "phase_7_retention_privacy_ownership_close": true,
     "phase_7_closed": true,
     "phase_7_closed_with_open_gate": true,
-    "phase_8_started": false,
-    "phase_9_started": false
+    "phase_8_started": true,
+    "phase_8_acceptance_aggregator": true,
+    "phase_8_closed": true,
+    "phase_8_closed_with_open_gate": true,
+    "phase_9_started": true,
+    "phase_9_go_no_go_stub": true,
+    "phase_9_closed": false
   }
 }
