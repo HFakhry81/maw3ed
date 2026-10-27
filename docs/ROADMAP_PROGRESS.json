@@ -11,12 +11,12 @@
   ],
   "resume_pointer": {
     "phase": 7,
-    "package": "ops-privacy-restore-not-started",
+    "package": "ops-secrets-metrics-backup-runbook-package1",
     "next_steps": [
-      "Start Phase 7 on a NEW PR branched from cursor/phase6-messaging-billing-84f0: secrets posture, metrics/alerts stubs, backup/restore runbook aligned with ops:pg-backup",
-      "Hosted checkout / SMS / WhatsApp / Stripe live capture remain disabled (Phase 6 closed with features gated)",
+      "Phase 7 package 1 landed (secrets posture + metrics/alert stubs + OPS_BACKUP_RESTORE_RUNBOOK). Next: retention policy numbers with owner, real alert sinks, TLS/header hardening review, privacy request runbooks",
+      "Hosted checkout / SMS / WhatsApp / Stripe live capture remain disabled",
       "Deferred non-blocking from Phase 5: phase5-deferred-platform-activity-unlock",
-      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed"
+      "On Sam-PC: re-run npm run test:ops-pg-backup:full against 5432/maw3ed"
     ]
   },
   "open_product_gates": [],
@@ -135,7 +135,27 @@
       ],
       "notes": "phase_6_closed=true. Do not claim Stripe live capture, WhatsApp QR, or multi-channel messaging production-ready. Next = Phase 7."
     },
-    { "id": 7, "name_ar": "التشغيل والخصوصية والاستعادة", "status": "not_started" },
+    {
+      "id": 7,
+      "name_ar": "التشغيل والخصوصية والاستعادة",
+      "status": "in_progress",
+      "started_at": "2026-10-27",
+      "packages": [
+        {
+          "id": "ops-secrets-metrics-backup-runbook-package1",
+          "status": "complete_technical",
+          "summary": "secretsPosture (prod fail-closed, redaction); metricsAlerts stubs (outbox dead/backlog); OPS_BACKUP_RESTORE_RUNBOOK aligned with ops:pg-backup/restore; health/ready exposes redacted secrets inventory + alert findings.",
+          "evidence_commands": ["npm run test:phase7-ops", "npm run test:ops-pg-backup", "npm run test:phase6-integrations"]
+        }
+      ],
+      "remaining_to_close": [
+        "Owner-approved RPO/RTO and retention numbers",
+        "External alert sink (Slack/email/PagerDuty) — stubs only today",
+        "TLS/Nginx/header hardening review on real deploy host",
+        "Privacy request / deletion export runbook with legal owner"
+      ],
+      "notes": "phase_7_started=true; package 1 only. Do not claim production ops complete."
+    },
     { "id": 8, "name_ar": "قبول ما قبل الإطلاق", "status": "not_started" },
     { "id": 9, "name_ar": "تجربة محدودة والتوسع", "status": "not_started" }
   ],
@@ -182,6 +202,7 @@
     "phase_6_outbox_billing_webhooks_package1": true,
     "phase_6_worker_adapters_sandbox_acceptance": true,
     "phase_6_closed": true,
-    "phase_7_started": false
+    "phase_7_started": true,
+    "phase_7_secrets_metrics_backup_runbook_package1": true
   }
 }

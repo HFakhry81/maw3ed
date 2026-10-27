@@ -18,7 +18,7 @@
 | 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
 | 5. الرحلات والواجهة | مكتملة تقنياً | onboarding+قفل، كتالوج/موارد/إشغال، أدوار، حجز عام+تسجيل جلسة، روابط إدارة موقعة، pagination، a11y أساسية | رحلات المنتج قابلة للتجربة؛ فك قفل القالب لمسؤول المنصة مؤجّل موثّق |
 | 6. الرسائل والفوترة والتكاملات | مكتملة تقنياً | outbox + worker + محوّلات sandbox + قبول webhook | الميزات غير الجاهزة مغلقة صراحةً؛ لا ادعاء دفع حي |
-| 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
+| 7. التشغيل والخصوصية والاستعادة | قيد التنفيذ — حزمة 1 | أسرار + stubs رصد + runbook استعادة | RPO/RTO معتمد، sink تنبيه حقيقي، hardening مضيف |
 | 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
 | 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
 
@@ -181,8 +181,17 @@
 - **إغلاق المرحلة 6:** `phase_6_closed=true`. **لا تعلن** Stripe live capture أو WhatsApp/SMS QR أو checkout مستضاف.
 - **التحقق:** `npm run test:phase6-integrations`.
 
+### المرحلة 7 — الحزمة الأولى: أسرار + stubs رصد + runbook استعادة — 2026-10-27
+
+- **Secrets posture:** [`secretsPosture.js`](../secretsPosture.js) — جرد حضور بدون طباعة القيم؛ production يرفض `SESSION_SECRET` الضعيف؛ `redactObject` للسجلات. مدمج في `evaluateRuntimePosture` للإنتاج.
+- **Metrics/alerts stubs:** [`metricsAlerts.js`](../metricsAlerts.js) — عدّادات/مقاييس in-process وتنبيهات outbox dead/backlog بلا بائع خارجي.
+- **Runbook:** [`docs/OPS_BACKUP_RESTORE_RUNBOOK.md`](OPS_BACKUP_RESTORE_RUNBOOK.md) محاذٍ لـ `ops:pg-backup` / `ops:pg-restore` / `test:ops-pg-backup`.
+- **Health:** `/api/health/ready` يعرض inventory أسرار منقّح + findings stubs.
+- **التحقق:** `npm run test:phase7-ops` (+ الإبقاء على `test:phase6-integrations` و`test:ops-pg-backup`).
+- **متبقٍ لإغلاق م7:** RPO/RTO بموافقة المالك، sink تنبيه حقيقي، مراجعة TLS/headers على المضيف، runbook طلبات خصوصية.
+
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase6-integrations`.
-2. ابدأ المرحلة 7 من فرع المرحلة 6: أسرار / stubs رصد / runbook استعادة مع `ops:pg-backup`.
-3. على Sam-PC عند الحاجة: Postgres `5432` / `maw3ed`.
+1. شغّل `npm run test:phase7-ops` و`npm run test:phase6-integrations`.
+2. الحزمة التالية للمرحلة 7: سياسات احتفاظ/RPO أو hardening مضيف — بلا اختراع SLA.
+3. على Sam-PC: `npm run test:ops-pg-backup:full` على `5432` / `maw3ed`.
