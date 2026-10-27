@@ -49,12 +49,12 @@
 
 - في وضع PostgreSQL، وللمساحات المسجّلة في جدول `workspaces`، يحمّل `/api/ops/*` بيانات مساحة العمل ويحفظها داخل معاملة في الجداول المطبّعة التي تنشئها migration `010_normalized_workspace_ops.sql`.
 - في الوضع المحلي دون PostgreSQL، يستمر التخزين عبر ملفات مساحة العمل JSON.
-- البذرة الموحدة في `data/seeds/maw3ed-demo-ops.json` تضم قسم المستشفى (gmail / dawybooking) وقسم طلائع (yahoo / talaaee-book). المسار السعيد:
+- البذرة الموحدة في `data/seeds/maw3ed-demo-ops.json` تضم قسم المستشفى (`contact.haitham@gmail.com` / dawybooking) وقسم طلائع (`contact.haitham@yahoo.com` / talaaee-book). مسؤول المنصة `contact.fakhry@gmail.com` بلا مساحة. المسار السعيد:
 
 ```bash
 npm run seed:demo:restore
-# المستشفى فقط:
 npm run seed:demo:restore -- --section=medical
+npm run users:cleanup-demo-owners -- --dry-run
 ```
 
 `npm run migrate` / `npm run seed` لا يستعيدان بذرة العروض. راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
