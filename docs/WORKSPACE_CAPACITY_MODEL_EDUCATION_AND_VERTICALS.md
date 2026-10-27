@@ -230,11 +230,11 @@ erDiagram
 | المطلوب | الوضع الحالي في المستودع | القرار/الفجوة |
 | --- | --- | --- |
 | Workspace باسم المؤسسة ونشاطها | `workspaces`, `workspace_members`, `workspace_ops_profiles`; قوالب activity تشمل education وغيرها | أساس مناسب لإنشاء مساحة طلائع؛ يلزم تفعيل صلاحيات backend لكل عضوية قبل التشغيل الفعلي. |
-| أسماء وترجمة النشاط | `activity_templates`, labels, `activity_mode` | يغير العرض؛ لا يحدد هل الحجز حصري أم بسعة. أضف `occupancy_mode` للخدمة/الجلسة وافصل عنه `composition` للحجز المفرد/المركب. |
+| أسماء وترجمة النشاط | `activity_templates`, labels, `activity_mode`؛ و`occupancy_mode`/`composition_default` على الخدمات منذ 014 | العرض من القالب؛ سياسة الإشغال صريحة على الخدمة ولا تُستنتج من القالب. |
 | الصف/المسار/المادة/الفصل | تصنيفات وخدمات عامة فقط؛ يوجد medical departments | أنشئ جداول امتداد تعليمية (program/track/subject/term/offering) أو mapping موثق بينها وبين services. |
 | المعلم متعدد المواد والصفوف | `workspace_ops_service_providers` يدعم خدمة↔staff | استخدمه لإسناد التأهيل، وأضف إسناد المدرس/القاعة الفعلي لكل occurrence حتى لا تختلط أهلية التدريس بجدول الأسبوع. |
-| القاعات والموارد | لا يوجد `workspace_ops_resources` في migration 010 | فجوة واضحة: أضف resources وسعتها وحجزها وعلاقتها بالموقع/الجلسة. |
-| مجموعة من الطلاب في وقت واحد | appointment يحفظ customer واحداً، لا capacity أو enrollment | فجوة مانعة للتعليم الجماعي: أضف occurrences + enrollments/attendees + attendance. |
+| القاعات والموارد | migration **014** + `workspace_ops_resources` / allocations (JSON+PG) عبر `capacityOps` | نواة عامة موجودة؛ مسارات HTTP/UI وربط التخصيص التلقائي عند إنشاء الموعد ما زالت ناقصة — لا تعلن الصالون/التأجير جاهزين. |
+| مجموعة من الطلاب في وقت واحد | occurrences + enrollments + attendance في 014 و`capacityEngine` (اختبارات session_capacity) | نواة السعة موجودة؛ لا رحلة تعليم إنتاجية ولا قالب education مفعّل كمنتج جاهز قبل إغلاق بوابات المرحلة 4 المتبقية وواجهات المرحلة 5. |
 | خدمات متعددة لحجز واحد | line items موجودة ومحمولة من Postgres | أساس جزئي جيد، لكنه لا يحجز وقتاً/مقدماً/موردًا منفصلاً لكل بند. |
 | دوام موظفي الاستقبال | جداول staff hours موجودة، لكن لا تعني صلاحيات/نوع الدوام | أضف ربط مستخدم/دور وميّز `work_shift` عن `provider_availability` كي لا يظهر الاستقبال كخدمة قابلة للحجز. |
 | مفاتيح أجنبية tenant-safe | علاقات الخدمات/الفئات ومقدمي الخدمة مركبة في بعض الجداول | أكمل FKs المركبة للخدمة/الموظف/العميل من booking، وأضف RLS/تفويض مركزي كدفاع إضافي. |

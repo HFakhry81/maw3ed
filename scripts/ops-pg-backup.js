@@ -31,6 +31,13 @@ const latestPointerPath = path.join(backupsRoot, "latest.json");
 
 /** Child tables first for DELETE; profiles last. Dump order reverses for INSERT. */
 const WORKSPACE_OPS_CHILD_TABLES = [
+  "workspace_ops_attendance_records",
+  "workspace_ops_session_enrollments",
+  "workspace_ops_resource_allocations",
+  "workspace_ops_session_occurrences",
+  "workspace_ops_session_series",
+  "workspace_ops_service_resource_requirements",
+  "workspace_ops_resources",
   "workspace_ops_appointment_visit_meta",
   "workspace_ops_appointment_visits",
   "workspace_ops_appointment_line_items",

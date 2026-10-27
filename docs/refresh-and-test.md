@@ -49,6 +49,9 @@ npm run test:atomic-booking         # المرحلة 3 — حجز ذري JSON
 npm run test:booking-timezone       # عقد timezone/DST + Idempotency-Key helper
 npm run test:atomic-booking-pg      # تماثل PG (يتخطى بلا DATABASE_URL)
 npm run test:phase3-booking         # JSON + timezone + PG
+npm run test:capacity-modes         # المرحلة 4 — exclusive/rental/session_capacity/bundle (JSON)
+npm run test:capacity-pg            # مرحلة 4 — migrate 014 + round-trip (يتخطى بلا DATABASE_URL)
+npm run test:phase4-capacity        # JSON + PG لسعة الموارد
 ```
 
 ## قائمة Windows التفاعلية

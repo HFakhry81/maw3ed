@@ -7,6 +7,8 @@ const shiftHours = require("./shiftHours");
 const opsDesk = require("./opsDesk");
 const activityTemplates = require("./activityTemplatesCatalog");
 const bookingAtomic = require("./bookingAtomic");
+const capacityOps = require("./capacityOps");
+const capacityEngine = require("./capacityEngine");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -93,7 +95,15 @@ function defaultStore() {
     medicalDepartments: [],
     activityLabels: {},
     activityLabelsI18n: null,
-    planKey: "free"
+    planKey: "free",
+    // Phase 4 capacity collections (generic; not inferred from activity_mode)
+    resources: [],
+    serviceResourceRequirements: [],
+    sessionSeries: [],
+    sessionOccurrences: [],
+    sessionEnrollments: [],
+    attendanceRecords: [],
+    resourceAllocations: []
   };
   // Local default / demo workspace stays medical; new workspaces re-seed via applyTemplateToStoreData.
   activityTemplates.applyTemplateToStoreData(base, "medical", "ar", { replaceStaff: false });
@@ -1131,7 +1141,10 @@ function createService(payload) {
     autoAccept: Boolean(payload.autoAccept),
     autoComplete: Boolean(payload.autoComplete),
     active: payload.active !== false,
-    description: String(payload.description || "")
+    description: String(payload.description || ""),
+    occupancyMode: capacityEngine.normalizeOccupancyMode(payload.occupancyMode, "exclusive"),
+    defaultCapacity: Math.max(1, Number(payload.defaultCapacity) || 1),
+    compositionDefault: capacityEngine.normalizeComposition(payload.compositionDefault, "single")
   };
   assertServiceProviders(service);
   store.services.unshift(service);
@@ -1189,11 +1202,82 @@ function updateService(id, payload) {
   if (payload.autoAccept != null) service.autoAccept = Boolean(payload.autoAccept);
   if (payload.autoComplete != null) service.autoComplete = Boolean(payload.autoComplete);
   if (payload.active != null) service.active = Boolean(payload.active);
+  if (payload.occupancyMode != null || payload.defaultCapacity != null || payload.compositionDefault != null) {
+    capacityOps.setServiceOccupancy(store, id, payload);
+  }
   if (requestedProviderIds) service.providerIds = requestedProviderIds;
   assertServiceProviders(service);
   sanitizeAndSyncStaffServiceLinks();
   persist();
   return enrichService(service);
+}
+
+function withCapacityMutation(fn) {
+  capacityOps.ensureCapacityCollections(store);
+  const result = fn(store);
+  persist();
+  return result;
+}
+
+function createResource(payload) {
+  return withCapacityMutation((data) => capacityOps.createResource(data, payload));
+}
+
+function listResources(query = {}) {
+  capacityOps.ensureCapacityCollections(store);
+  return capacityOps.listResources(store, query);
+}
+
+function requireServiceResource(payload) {
+  return withCapacityMutation((data) => capacityOps.requireServiceResource(data, payload));
+}
+
+function createSessionOccurrence(payload) {
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () =>
+    withCapacityMutation((data) => capacityOps.createSessionOccurrence(data, payload))
+  );
+}
+
+function enrollInOccurrence(payload) {
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () =>
+    withCapacityMutation((data) => capacityOps.enrollInOccurrence(data, payload))
+  );
+}
+
+function cancelEnrollment(enrollmentId) {
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () =>
+    withCapacityMutation((data) => capacityOps.cancelEnrollment(data, enrollmentId))
+  );
+}
+
+function recordAttendance(payload) {
+  return withCapacityMutation((data) => capacityOps.recordAttendance(data, payload));
+}
+
+function allocateResourceForBooking(payload) {
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () =>
+    withCapacityMutation((data) => capacityOps.allocateResourceForBooking(data, payload))
+  );
+}
+
+function createBundleAllocations(items) {
+  const workspaceId = opsWorkspace.currentWorkspaceId(defaultStore);
+  return bookingAtomic.withBookingLock(workspaceId, async () =>
+    withCapacityMutation((data) => capacityOps.createBundleAllocations(data, items))
+  );
+}
+
+function releaseAllocation(allocationId) {
+  return withCapacityMutation((data) => capacityOps.releaseAllocation(data, allocationId));
+}
+
+function getOccurrenceAvailability(occurrenceId) {
+  capacityOps.ensureCapacityCollections(store);
+  return capacityOps.getOccurrenceAvailability(store, occurrenceId);
 }
 
 function deleteService(id) {
@@ -2435,6 +2519,17 @@ module.exports = {
   setAppointmentPricing,
   rangesOverlap,
   appointmentBlockMinutes,
+  createResource,
+  listResources,
+  requireServiceResource,
+  createSessionOccurrence,
+  enrollInOccurrence,
+  cancelEnrollment,
+  recordAttendance,
+  allocateResourceForBooking,
+  createBundleAllocations,
+  releaseAllocation,
+  getOccurrenceAvailability,
   listDeskToday,
   getPublicPass,
   previewCheckIn,

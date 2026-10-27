@@ -15,7 +15,7 @@
 | 1. الهوية والعزل وRBAC | مغلقة (بوابة staff نُفِّذت لاحقاً في م2) | auth fail-closed خارج local، عضوية نشطة، سياسة route × method × role، حماية legacy، BOLA، أحداث workspace، وضع JSON في الإنتاج | حواجز الأمن مغلقة على revision `366e209`؛ قرار الربط الكانوني نُفِّذ في المرحلة 2 |
 | 2. سلامة البيانات والترحيل | مكتملة تقنياً | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore لـ `workspace_ops_*` + staff links | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
 | 3. الحجز الذري والتوفر | مكتملة تقنياً | قفل/قيود تداخل، holds، idempotency (JSON+PG+HTTP)، عقد timezone/DST للمدة+buffer | اختبار تنافس للفترات مع أثر commit ذري على JSON وPG |
-| 4. الموارد وامتدادات الخدمات | لم تبدأ | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور | قبول مستقل لـ exclusive وrental وsession_capacity وbundle |
+| 4. الموارد وامتدادات الخدمات | جارية (حزمة 1 مكتملة) | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور | قبول مستقل لـ exclusive وrental وsession_capacity وbundle |
 | 5. الرحلات والواجهة | لم تبدأ | onboarding والكتالوج والتقويم والعميل ومكتب التشغيل | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة |
 | 6. الرسائل والفوترة والتكاملات | لم تبدأ | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
 | 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
@@ -143,9 +143,17 @@
 - **إغلاق المرحلة 3:** `phase_3_closed=true`. أنماط الإشغال/الموارد/سعة الجلسات = المرحلة 4 فقط.
 - **منفذ Sam-PC:** Postgres الحي على **5432** / قاعدة `maw3ed` (ليس 5433).
 
+### المرحلة 4 — الحزمة الأولى: نواة السعة والموارد (generic) — 2026-10-27
+
+- **الترحيل:** [`014_workspace_capacity_resources_sessions.sql`](../db/migrations/014_workspace_capacity_resources_sessions.sql) — أعمدة `occupancy_mode` / `default_capacity` / `composition_default` على الخدمات؛ جداول `workspace_ops_resources`، `service_resource_requirements`، `session_series`، `session_occurrences`، `session_enrollments`، `attendance_records`، `resource_allocations` مع ملكية tenant وقيود وحدة المقعد.
+- **المحرك:** [`capacityEngine.js`](../capacityEngine.js) + [`capacityOps.js`](../capacityOps.js) موصولان عبر [`opsStore.js`](../opsStore.js)؛ مسار JSON محلي + [`workspaceOpsPg.js`](../workspaceOpsPg.js) load/save؛ جداول السعة في [`scripts/ops-pg-backup.js`](../scripts/ops-pg-backup.js).
+- **القواعد:** لا استنتاج من `activity_mode`/قالب؛ السعة الفعلية لا تتجاوز مقاعد المورد عند `unit=seat`؛ exclusive/rental يمنعان تداخل التخصيص؛ session_capacity يقفل عبر `bookingAtomic` مع رفض الامتلاء والتسجيل المكرر وتحرير المقعد مرة عند الإلغاء؛ bundle يفشل مغلقاً.
+- **التحقق:** `npm run test:capacity-modes` (JSON: exclusive/rental/session_capacity/bundle) و`npm run test:capacity-pg` (migrate 014 + round-trip). مجمّع: `npm run test:phase4-capacity`.
+- **غير مكتمل في المرحلة 4:** مسارات HTTP/ops للسعة، ربط التخصيص التلقائي عند إنشاء الموعد، اختبارات عزل cross-workspace للموارد/التسجيلات، وواجهة المجالات. **لا تعلن** التعليم/الصالون/التأجير جاهزة للإنتاج.
+
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase3-booking` (JSON + timezone + PG إن وُجد `DATABASE_URL`).
+1. شغّل `npm run test:phase4-capacity` (JSON + PG إن وُجد `DATABASE_URL`).
 2. على Sam-PC:  
-   `MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate` ثم `npm run test:phase3-booking` و`npm run test:ops-pg-backup:full`.
-3. ابدأ المرحلة 4 فقط عند اعتماد المالك: `occupancy_mode` / موارد / `session_capacity` — لا تعلن التعليم/الصالون/التأجير جاهزة قبل ذلك.
+   `MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate` ثم `npm run test:phase4-capacity` (وأعد `test:ops-pg-backup:full` بعد 014).
+3. المتبقي قبل المرحلة 5: HTTP/ops للموارد والتسجيل، auto-allocate على حجز exclusive/rental، عزل cross-workspace؛ لا تدّعِ جاهزية مجالات UI.
