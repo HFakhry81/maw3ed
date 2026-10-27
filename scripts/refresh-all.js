@@ -122,7 +122,7 @@ function main() {
   steps.push(run("reset-ops-data", nodeBin(), ["scripts/reset-ops-data.js", "--skip-session-backup"], { soft: true, capture: true }));
   // Temporary medical demo for smoke tests; user session is restored at the end.
   steps.push(
-    run("seed-medical-restore", nodeBin(), ["scripts/seed-medical-demo.js", "--restore", "--no-backup"], {
+    run("seed-demo-restore", nodeBin(), ["scripts/seed-demo-workspaces.js", "--restore", "--no-backup"], {
       soft: true,
       capture: true
     })

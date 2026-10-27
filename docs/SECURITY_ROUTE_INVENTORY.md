@@ -1,6 +1,6 @@
 # جرد واجهات Maw3ed وطبقات الوصول
 
-**مراجعة ساكنة:** 2026-10-27 (حدّثت حواجز المرحلة 1 للحزمة الثانية). قائمة المسارات معلنة في `server.js`, `opsRoutes.js`, `platformAdminRoutes.js`, `legacyAccess.js`; لا يغطي هذا الجرد أي endpoint أضيف ديناميكياً أو من proxy خارجي. يجب مقارنة القائمة باختبار runtime قبل الإطلاق. حالة المراحل: [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json).
+**مراجعة ساكنة:** 2026-10-27 (حدّثت حواجز المرحلة 1 + ربط staff↔desk للمرحلة 2). قائمة المسارات معلنة في `server.js`, `opsRoutes.js`, `platformAdminRoutes.js`, `legacyAccess.js`, `staffLinks.js`; لا يغطي هذا الجرد أي endpoint أضيف ديناميكياً أو من proxy خارجي. يجب مقارنة القائمة باختبار runtime قبل الإطلاق. حالة المراحل: [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json).
 
 ## فئات الوصول
 
@@ -33,8 +33,10 @@
 | `GET,POST /api/ops/expenses` | owner/admin |
 | `GET,POST /api/ops/appointments`; `PATCH /api/ops/appointments/:id/status` | owner/admin/manager |
 | `PATCH /api/ops/appointments/:id/pricing` | owner/admin |
-| `GET /api/ops/desk/today`; `POST /api/ops/desk/(preview\|check-in)`; `POST /api/ops/desk/appointments/:id/complete` | owner/admin/manager؛ staff ينتظر ربط حسابه بسجل الموظف قبل كشف/تغيير بيانات المرضى |
-| `POST /api/ops/desk/appointments/:id/addons`; `PATCH /api/ops/desk/appointments/:id/lines/:lineId/pricing` | owner/admin |
+| `GET /api/ops/desk/today`; `POST /api/ops/desk/(preview\|check-in)`; `POST /api/ops/desk/appointments/:id/complete` | owner/admin/manager؛ **staff فقط مع ربط نشط** `workspace_staff_links` (أو JSON المكافئ) وفي نطاق `staffId` المرتبط — بدون ربط → 403 fail-closed |
+| `POST /api/ops/desk/appointments/:id/addons`; `PATCH /api/ops/desk/appointments/:id/lines/:lineId/pricing` | owner/admin فقط (حتى مع ربط staff) |
+| `GET /api/ops/contexts`; `GET /api/ops/staff-link` | أي عضو نشط؛ يعرض السياق المثبت خادميًا والربط الحالي (إن وُجد) |
+| `GET /api/ops/staff-links`; `PUT/DELETE /api/ops/staff/:id/account-link` | owner/admin؛ إنشاء/تعليق ربط واحد-لواحد (مستخدم↔موظف) داخل المساحة |
 | `GET /api/ops/stats` | owner/admin؛ أرقام إجمالية قد تكشف بيانات مالية |
 | `GET /api/ops/events` | owner/admin؛ سجل أحداث تشغيل المساحة (JSONL لكل workspace)؛ منفصل عن development-events |
 | `GET /api/public/booking/:slug`; `GET /api/public/booking/:slug/slots`; `GET /api/public/booking/:slug/pass/:token` | عام محدود؛ لا يُستخدم للوصول إلى endpoint داخلي |
@@ -47,7 +49,7 @@
 | الطريقة والمسار | المطلوب |
 | --- | --- |
 | `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health`, `/api/health/live`, `/api/health/ready` | عام مع تقليل مخرجات config وحماية readiness من كشف أسرار |
-| `GET /api/account`, `/api/workspaces`, `/api/entitlements`, `/api/billing/status`; `POST /api/workspaces`, `/api/billing/request` | جلسة؛ ربط الـ workspace بالعضوية؛ RBAC/امتلاك لكل write |
+| `GET /api/account`, `/api/account/contexts`, `/api/workspaces`, `/api/entitlements`, `/api/billing/status`; `POST /api/workspaces`, `/api/billing/request` | جلسة؛ قائمة السياقات تشمل عضوية المساحات + `staffLink` النشط لاختيار السياق؛ `x-workspace-id` يختار السياق فقط ولا يمنح صلاحية |
 | `POST /api/whop/checkout`, `/api/whop/verify-checkout` | معطلان حالياً (`410`) |
 | `GET /api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | عند auth: membership + دور manager+ عبر `legacyAccess.js`؛ `x-workspace-id` سياق فقط |
 | `PATCH /api/workspace-profile` | عند auth: owner/admin فقط |
@@ -79,6 +81,6 @@
 - legacy/uploads/dev-events: [`scripts/smoke-legacy-rbac.js`](../scripts/smoke-legacy-rbac.js) (`npm run test:legacy-rbac`).
 - BOLA/function/property: [`scripts/smoke-bola.js`](../scripts/smoke-bola.js) (`npm run test:bola`).
 - workspace events: [`scripts/smoke-workspace-events.js`](../scripts/smoke-workspace-events.js) (`npm run test:workspace-events`).
-- حزمة مجمّعة: `npm run test:phase1-security`.
-- هذه الاختبارات لا تغطي كل مسارات المنصة أو كل حقول الرد؛ ربط staff↔desk ما زال بوابة مفتوحة.
+- حزمة مجمّعة: `npm run test:phase1-security` (تشمل `test:staff-links`).
+- ربط staff↔desk: نموذج junction معتمد (`workspace_staff_links` / JSON)؛ بدون ربط نشط يبقى desk لدور staff مرفوضًا. نطاق الزيارات للمربوط فقط؛ تسعير desk يبقى owner/admin.
 - ترتبط كل تحديثات الحالة بـ [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json)؛ نتائج التنفيذ تُسجل بعد تشغيل الأمر لا بمجرد كتابته هنا.

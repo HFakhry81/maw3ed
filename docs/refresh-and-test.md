@@ -65,6 +65,23 @@ MAW3ED-TOOLBOX.bat
 
 تقارير: `data/last-update-report.json` · `data/last-refresh-report.json`
 
+## بذرة العروض الموحدة (ليست migrate/seed)
+
+`npm run migrate` و`npm run seed` يحدّثان المخطط/بذرة المنصة فقط. لاستعادة المستشفى + طلائع من `data/seeds/maw3ed-demo-ops.json`:
+
+```bash
+npm run seed:demo:restore
+npm run users:cleanup-demo-owners -- --dry-run   # ثم --apply عند الرضا
+```
+
+| | |
+| --- | --- |
+| medical | `contact.haitham@gmail.com` / `dawybooking` |
+| education | `contact.haitham@yahoo.com` / `talaaee-book` |
+| platform admin | `contact.fakhry@gmail.com` (بلا مساحة) |
+
+التفاصيل: [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md) · قائمة Toolbox: `toolbox/MAW3ED-TOOLBOX.bat` (14–16).
+
 تخطّي التثبيت عند التكرار السريع:
 
 ```bat

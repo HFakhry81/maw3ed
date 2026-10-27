@@ -1,22 +1,35 @@
 {
-  "$schema_note": "Machine-readable companion to IMPLEMENTATION_EXECUTION_LOG.md. Update both after every package. Status values: not_started | in_progress | complete_technical | blocked.",
+  "$schema_note": "Machine-readable companion to IMPLEMENTATION_EXECUTION_LOG.md. Update both after every package. Status values: not_started | in_progress | complete_technical | blocked | closed_with_open_gate.",
   "updated_at": "2026-10-27",
   "project": "maw3ed",
   "source_of_truth": [
     "docs/IMPLEMENTATION_ROADMAP.md",
     "docs/IMPLEMENTATION_EXECUTION_LOG.md",
-    "docs/SECURITY_ROUTE_INVENTORY.md"
+    "docs/SECURITY_ROUTE_INVENTORY.md",
+    "docs/WORKSPACE_OPS_DATA_INTEGRITY.md",
+    "docs/STAFF_ACCOUNT_LINKS.md"
   ],
   "resume_pointer": {
-    "phase": 1,
-    "package": "bola-workspace-events-production-posture",
+    "phase": 2,
+    "package": "integrity-baseline+staff-links+unified-demo-seed",
     "next_steps": [
-      "Owner decision: close Phase 1 with staff↔desk attribution left as documented open gate, or implement account↔staff record linking first",
-      "If linking is approved: map user↔staff + object scope, then allow only attributed desk actions; keep staff denied until then",
-      "Optional later: migrate workspace events JSONL to append-only Postgres table (requires migration — not Phase 1)",
-      "Do not start Phase 2 migration/seed/reset until Phase 1 close or explicit owner override"
+      "On Sam-PC: npm run seed:demo:restore (medical→gmail/dawybooking, education→yahoo/talaaee), then users:cleanup-demo-owners --dry-run/--apply",
+      "Run migrate twice against local Postgres (port 5433) including 011+012; confirm second run applies 0 pending via schema_migrations",
+      "Add PG dump/restore for workspace_ops_* (+ workspace_staff_links) then compare JSON↔PG for a managed workspace until ok=true",
+      "Optional UI: context selector using GET /api/account/contexts when multiple memberships exist"
     ]
   },
+  "open_product_gates": [],
+  "decisions": [
+    {
+      "id": "staff_desk_attribution",
+      "phase_origin": 1,
+      "status": "decided_implemented_minimal",
+      "decided_at": "2026-10-27",
+      "summary": "Canonical model: login may span many workspaces; staff profile separate; junction workspace_staff_links is one-to-one per workspace (user↔staff); branch=workspace_id; desk only with active link and scoped to that staffId; unlinked staff fail-closed",
+      "doc": "docs/STAFF_ACCOUNT_LINKS.md"
+    }
+  ],
   "phases": [
     {
       "id": 0,
@@ -33,46 +46,31 @@
     {
       "id": 1,
       "name_ar": "الهوية والعزل وRBAC",
-      "status": "in_progress",
+      "status": "closed_with_open_gate",
+      "closed_at": "2026-10-27",
+      "closed_revision": "366e209c889f5de234d70e649819937e5e584a87",
       "packages": [
         {
           "id": "ops-rbac",
           "status": "complete_technical",
-          "summary": "/api/ops/* route×method×role policy + membership resolver for DB+JSON",
-          "evidence_commands": [
-            "npm run test:ops-rbac",
-            "node --check opsRoutes.js",
-            "node --check server.js"
-          ]
+          "summary": "/api/ops/* route×method×role policy + membership resolver for DB+JSON"
         },
         {
           "id": "legacy-apis-dev-events-uploads",
           "status": "complete_technical",
-          "summary": "Legacy medical APIs membership+role barriers; development-events local-only + detail sanitization; private uploads gated; branding images remain public",
-          "evidence_commands": [
-            "npm run test:ops-rbac",
-            "npm run test:legacy-rbac",
-            "node --check legacyAccess.js",
-            "node --check server.js",
-            "node --check opsRoutes.js"
-          ]
+          "summary": "Legacy medical APIs membership+role barriers; development-events local-only; uploads gated"
         },
         {
           "id": "bola-workspace-events-production-posture",
           "status": "complete_technical",
-          "summary": "BOLA/function/property smokes; workspace events JSONL + GET /api/ops/events; production JSON posture (membership never skipped; warn + optional strict refuse)",
-          "evidence_commands": [
-            "npm run test:phase1-security",
-            "node --check runtimePosture.js",
-            "node --check workspaceEvents.js",
-            "node --check opsRoutes.js",
-            "node --check server.js"
-          ]
+          "summary": "BOLA smokes; workspace events JSONL; production JSON posture"
         }
       ],
-      "remaining_to_close": [
-        "Staff account↔staff-record attribution before expanding staff desk permissions (product decision; not invented in Phase 1 packages)"
-      ],
+      "open_gate": {
+        "id": "staff_desk_attribution",
+        "status": "resolved_in_phase_2",
+        "summary": "Originally deferred at Phase 1 close; owner decided canonical junction model and minimal enforcement shipped in Phase 2 package staff-links"
+      },
       "production_json_posture": {
         "auth_required_in_production": true,
         "json_skips_membership": false,
@@ -82,7 +80,50 @@
         "strict_allow_override_env": "MAW3ED_ALLOW_JSON_IN_PRODUCTION=1"
       }
     },
-    { "id": 2, "name_ar": "سلامة البيانات والترحيل", "status": "not_started" },
+    {
+      "id": 2,
+      "name_ar": "سلامة البيانات والترحيل",
+      "status": "in_progress",
+      "packages": [
+        {
+          "id": "integrity-baseline",
+          "status": "complete_technical",
+          "summary": "Composite FK inventory + migration 011; schema_migrations ledger; JSON orphan audit/compare; ops session backup↔restore smoke; SoT doc",
+          "evidence_commands": [
+            "npm run test:ops-integrity",
+            "node scripts/audit-ops-integrity.js --migrations-only --json"
+          ]
+        },
+        {
+          "id": "staff-links",
+          "status": "complete_technical",
+          "summary": "workspace_staff_links migration 012 + JSON staff-links.json; context APIs; desk RBAC scoped to linked staffId; unlinked staff fail-closed",
+          "evidence_commands": [
+            "npm run test:staff-links",
+            "npm run test:ops-rbac",
+            "node --check staffLinks.js",
+            "node --check opsRoutes.js",
+            "node --check server.js"
+          ]
+        },
+        {
+          "id": "unified-demo-seed",
+          "status": "complete_technical",
+          "summary": "Single maw3ed-demo-ops.json with medical→gmail/dawybooking and education→yahoo/talaaee; seed:demo:restore; users:cleanup-demo-owners",
+          "evidence_commands": [
+            "npm run test:ops-integrity",
+            "node --check scripts/demo-seed-store.js",
+            "node --check scripts/seed-demo-workspaces.js",
+            "node --check scripts/cleanup-demo-owner-users.js"
+          ]
+        }
+      ],
+      "remaining_to_close": [
+        "Idempotent migrate proven twice on live local Postgres (011+012)",
+        "PG workspace_ops_* (+ staff links) backup/restore + JSON↔PG compare ok=true",
+        "No orphan records under enforced audit for accepted demo/migration datasets"
+      ]
+    },
     { "id": 3, "name_ar": "الحجز الذري والتوفر", "status": "not_started" },
     { "id": 4, "name_ar": "الموارد وامتدادات الخدمات", "status": "not_started" },
     { "id": 5, "name_ar": "الرحلات والواجهة", "status": "not_started" },
@@ -102,8 +143,19 @@
     "phase_1_bola_full_suite": true,
     "phase_1_workspace_events_log": true,
     "phase_1_production_json_posture": true,
-    "phase_1_staff_attribution": false,
-    "phase_1_closed": false,
-    "phase_2_started": false
+    "phase_1_staff_attribution": true,
+    "phase_1_closed": true,
+    "phase_1_closed_with_open_gate": true,
+    "phase_2_started": true,
+    "phase_2_fk_inventory": true,
+    "phase_2_migration_ledger": true,
+    "phase_2_json_compare_audit": true,
+    "phase_2_json_backup_restore_drill": true,
+    "phase_2_staff_links": true,
+    "phase_2_medical_seed_target": true,
+    "phase_2_unified_demo_seed": true,
+    "phase_2_pg_migrate_twice": false,
+    "phase_2_pg_ops_backup_restore": false,
+    "phase_2_closed": false
   }
 }

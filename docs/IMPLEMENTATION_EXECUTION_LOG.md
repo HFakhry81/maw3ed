@@ -2,8 +2,6 @@
 
 هذا السجل هو الحالة التشغيلية للخطة في [`IMPLEMENTATION_ROADMAP.md`](IMPLEMENTATION_ROADMAP.md). يحدّث بعد كل حزمة؛ لا تُعلّم مرحلة مكتملة إلا مع مخرجاتها ودليل قبولها. حالات الاختبار تسجل كـ «لم تُشغّل» حتى تنفيذها فعلياً.
 
-**المرافق الآلي:** [`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json) — جدول حالة المراحل + checklist + `resume_pointer` يُحدَّث مع هذا السجل بعد كل حزمة (لا يستبدله).
-
 **آخر تحديث:** 2026-10-27  
 **المشروع:** `E:\UpNexa.com\maw3ed`  
 **النطاق:** منصة Maw3ed الحالية. الأولوية للنواة الطبية الموجودة؛ لا تُعلن قوالب التعليم/الرياضة/الصالون/التأجير جاهزة قبل امتدادات السعة والموارد.  
@@ -14,8 +12,8 @@
 | المرحلة | الحالة | النطاق/المخرج | بوابة الإغلاق |
 | --- | --- | --- | --- |
 | 0. النطاق وحصر السطح | مكتملة للنطاق التقني | ترتيب التنفيذ، جرد مجموعات API، قرارات المجال التقنية، وسجل التنفيذ | كل مجموعة لها مالك تنفيذي، مخاطر، ومجموعة قبول؛ القرارات التجارية/القانونية تسد إطلاق الميزة المرتبطة بها |
-| 1. الهوية والعزل وRBAC | قيد التنفيذ | auth fail-closed خارج local، عضوية نشطة، سياسة route × method × role لـ ops والـ legacy، حماية development-events والملفات الخاصة | مصفوفة قبول 401/403/404 وBOLA/property/function-level؛ تغطية DB وJSON أو منع JSON في الإنتاج |
-| 2. سلامة البيانات والترحيل | لم تبدأ | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
+| 1. الهوية والعزل وRBAC | مغلقة (بوابة staff نُفِّذت لاحقاً في م2) | auth fail-closed خارج local، عضوية نشطة، سياسة route × method × role، حماية legacy، BOLA، أحداث workspace، وضع JSON في الإنتاج | حواجز الأمن مغلقة على revision `366e209`؛ قرار الربط الكانوني نُفِّذ في المرحلة 2 |
+| 2. سلامة البيانات والترحيل | قيد التنفيذ | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
 | 3. الحجز الذري والتوفر | لم تبدأ | قفل/قيود تداخل، holds، idempotency، حالات الإلغاء وإعادة الجدولة | اختبار تنافس للفترات والمورد والسعة مع أثر commit ذري |
 | 4. الموارد وامتدادات الخدمات | لم تبدأ | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور | قبول مستقل لـ exclusive وrental وsession_capacity وbundle |
 | 5. الرحلات والواجهة | لم تبدأ | onboarding والكتالوج والتقويم والعميل ومكتب التشغيل | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة |
@@ -24,30 +22,17 @@
 | 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
 | 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
 
-## قائمة تحقق سريعة (تُزامن مع ROADMAP_PROGRESS.json)
-
-- [x] المرحلة 0 — جرد API وقرارات تقنية وسجل تنفيذ
-- [x] المرحلة 1 — حزمة `/api/ops/*` RBAC + membership
-- [x] المرحلة 1 — حزمة legacy medical APIs + development-events + uploads
-- [x] المرحلة 1 — اختبارات BOLA/حقول صلاحية (function/property/object) عبر المستأجرين
-- [x] المرحلة 1 — سجل أحداث تشغيل workspace (JSONL لكل مساحة، بلا migration)
-- [x] المرحلة 1 — قرار/فرض وضع production لـ DB مقابل JSON (عضوية إجبارية + تحذير/strict اختياري)
-- [ ] المرحلة 1 — ربط حساب staff↔سجل موظف قبل توسيع desk (بوابة منتج موثّقة؛ لم تُخترع في هذه الحزمة)
-- [ ] إغلاق المرحلة 1 بالكامل (متوقف على بوابة staff أعلاه أو قرار مالك صريح بقبولها مفتوحة بعد الإطلاق المحدود)
-- [ ] بدء المرحلة 2 (ترحيل/seed/reset) — **ممنوع قبل إغلاق بوابة المرحلة 1**
-
 ## حصر مجموعات API (مراجعة ساكنة)
 
 | مجموعة | المسارات | الحالة التي يجب أن يفرضها الخادم |
 | --- | --- | --- |
 | عامة/تهيئة | `/api/config`, `/api/plans`, `/api/activity-templates`, `/api/health*`, `/api/public/booking/*` | allowlist فقط؛ بيانات صفحة عامة محدودة، rate limit، والإنشاء العام عبر إثبات/hold وسياسة الحجز |
 | الحساب والمساحات | `/api/account`, `/api/workspaces`, `/api/entitlements`, `/api/billing/*` | Clerk؛ ربط كل فعل بالحساب ومساحة مسموحة؛ عدم قبول tenant من العميل كإذن |
-| تشغيل workspace | كل `/api/ops/*` | auth خارج local، عضوية نشطة للمساحة المختارة، ثم دور مناسب للroute/الفعل/البيانات؛ `GET /api/ops/events` للمالك/المسؤول |
-| قديم/مجال طبي | `/api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | auth/عضوية/RBAC tenant-aware عبر `legacyAccess.js` عند تفعيل auth؛ إزالة الاستثناءات القديمة أو تعطيلها بعد ترحيل العملاء |
-| سجل التطوير | `/api/development-events` | local فقط؛ مع auth عند `MAW3ED_REQUIRE_AUTH`/production-like؛ تنقية حقول حساسة وحد حجم |
-| سجل تشغيل workspace | `data/workspaces/<id>/events.jsonl` عبر `GET /api/ops/events` | append-only لكل مساحة؛ منفصل عن development-events؛ بلا جدول PG حتى مرحلة لاحقة |
+| تشغيل workspace | كل `/api/ops/*` | auth خارج local، عضوية نشطة للمساحة المختارة، ثم دور مناسب للroute/الفعل/البيانات |
+| قديم/مجال طبي | `/api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | auth/عضوية/RBAC tenant-aware؛ إزالة الاستثناءات القديمة أو تعطيلها بعد ترحيل العملاء |
+| سجل التطوير | `/api/development-events` | local فقط أو مسؤول مصادق عليه؛ منع جمع PII، حدود واحتفاظ |
 | مسؤول المنصة | `/api/admin/*` | دور منصة مستقل، فصل واجبات للأفعال عالية المخاطر، سجل platform audit |
-| ملفات | `/data/uploads/*` | صور العلامة ضمن workspace تبقى عامة لصفحة الحجز؛ غير الصور و`/data/uploads` العامة تتطلب عضوية/جلسة عند تفعيل auth؛ منع traversal |
+| ملفات | `/data/uploads/*` | فحص ملكية ونوع/حجم/مسار؛ لا تعرض ملفات خاصة عبر static handler |
 
 ## قرارات التنفيذ المثبتة حتى الآن
 
@@ -57,6 +42,8 @@
 - افتراض الدور التشغيلي الأولي: owner/admin كاملان؛ manager تشغيل دون بيانات مالية/تجاوزات تسعير؛ staff وviewer يقتصران على قراءات إعداد غير حساسة حتى يربط حساب الموظف بملف/نطاق كائنات. تغيّر هذه السياسة يتطلب قراراً موثقاً واختبارات.
 - واجهات legacy الطبية تتبع نفس خط الأساس: manager+ للقراءة/إنشاء المواعيد؛ owner/admin فقط لـ PATCH `/api/workspace-profile`؛ viewer/staff مرفوضان حتى ربط الموظف.
 - وضع الإنتاج: المصادقة إلزامية؛ التخزين الافتراضي postgres عبر `load-env`؛ JSON مسموح لفحوص production-like المعزولة مع **عدم تجاوز العضوية**؛ التحذير عند JSON في production؛ الرفض الصارم اختياري عبر `MAW3ED_STRICT_PRODUCTION_STORAGE=1` ما لم يُضبط `MAW3ED_ALLOW_JSON_IN_PRODUCTION=1`.
+- **قرار مالك (2026-10-27):** إغلاق حواجز المرحلة 1 الأمنية ثم اعتماد نموذج staff↔desk الكانوني (انظر أدناه) وتنفيذه الأدنى في المرحلة 2.
+- **قرار مالك — ربط الموظف (كانوني، 2026-10-27):** حساب دخول واحد لعدة مساحات؛ ملف `staff` منفصل؛ جدول ربط `workspace_staff_links` (الفرع = `workspace_id`؛ لا كيان branch موازٍ)؛ داخل المساحة واحد-لواحد مستخدم↔موظف؛ desk لـ `staff` فقط مع ربط نشط وفي نطاق ذلك `staffId`؛ بدون ربط → رفض. التفاصيل: [`STAFF_ACCOUNT_LINKS.md`](STAFF_ACCOUNT_LINKS.md).
 - تبقى قرارات الدفع/الاسترداد، مدد الإلغاء، سياسة الرسائل، والالتزامات القانونية حسب السوق بوابات موقوفة قبل تفعيل الميزات ذات الصلة.
 
 ## سجل الإنجاز
@@ -97,9 +84,46 @@
   - `npm run test:phase1-security` (= ops-rbac + legacy-rbac + bola + workspace-events) → نجاح
   - `node --check` على `runtimePosture.js`, `workspaceEvents.js`, `opsRoutes.js`, `server.js`, `legacyAccess.js`, سكربتات الـ smoke → نجاح
 
+### المرحلة 1 — إغلاق مع بوابة مفتوحة آنذاك — 2026-10-27
+
+- دُمجت حزم المرحلة 1 إلى `main` (squash `366e209c889f5de234d70e649819937e5e584a87`).
+- عند الإغلاق كانت بوابة staff↔desk مؤجّلة؛ لاحقاً حسم المالك النموذج الكانوني ونُفِّذ الحد الأدنى في حزمة المرحلة 2 `staff-links` (لا إعادة فتح المرحلة 1).
+
+### المرحلة 2 — الحزمة الأولى: سلامة التشغيل (FK + دفتر ترحيل + مقارنة + استعادة JSON) — 2026-10-27
+
+- **مصدر الحقيقة:** وثّقت في [`WORKSPACE_OPS_DATA_INTEGRITY.md`](WORKSPACE_OPS_DATA_INTEGRITY.md) متى يكون JSON أو `workspace_ops_*` مصدر الحقيقة، مع مسار المقارنة قبل التحويل.
+- **FK مركبة:** جرد في [`opsIntegrity.js`](../opsIntegrity.js)؛ أُضيفت [`db/migrations/011_workspace_ops_composite_fks.sql`](../db/migrations/011_workspace_ops_composite_fks.sql) لقيود المواعيد/البنود/الزيارات بعد تحويل السلاسل الفارغة إلى `NULL`. بقيت `category_id` / `staff.service_category_id` فجوات soft موثّقة.
+- **ترحيل idempotent:** [`scripts/migrate.js`](../scripts/migrate.js) يستخدم جدول `schema_migrations` ويتخطى الملفات المسجّلة؛ يدعم `--dry-run`.
+- **أدوات:** `audit-ops-integrity.js` و`compare-workspace-ops.js` (JSON↔JSON؛ و`--right-pg` عند توفر Postgres).
+- **استعادة:** drill في `smoke-ops-integrity` عبر `ops-session-backup` (بدون لمس `latest.json`)؛ مسار dump/restore لـ PG `workspace_ops_*` ما زال متبقياً.
+- **التحقق (شُغّل فعلياً في هذه الجلسة):**
+  - `npm run test:ops-integrity` → `{"ok":true,"suite":"smoke-ops-integrity",...}` مع فحوص inventory/ledger/orphan/compare/backup-restore
+  - `node scripts/audit-ops-integrity.js --migrations-only --json` → `ok=true` وقيود 011 موجودة
+  - `node scripts/audit-ops-integrity.js --fixture --json` → صفر orphans
+  - `node --check` على `opsIntegrity.js` وسكربتات migrate/audit/compare/smoke → نجاح
+  - لم يُشغَّل migrate ضد Postgres حي في هذه البيئة (لا `DATABASE_URL`)؛ يبقى بند الإثبات المزدوج على 5433.
+
+### المرحلة 2 — الحزمة الثانية: ربط حساب الموظف (junction) وإنفاذ desk — 2026-10-27
+
+- **المفردات:** لا يوجد جدول `branch`؛ العزل التشغيلي هو `workspace_id`. الحساب متعدد المساحات عبر `workspace_members`؛ الملف المهني عبر `workspace_ops_staff` / JSON `staff`.
+- **الترحيل:** [`012_workspace_staff_links.sql`](../db/migrations/012_workspace_staff_links.sql) — جدول الربط + UNIQUE واحد-لواحد + FK مركّب إلى الموظف؛ وإضافة `workspace_members.status` ليطابق استعلام العضوية.
+- **JSON:** `data/workspaces/<id>/staff-links.json` عبر [`staffLinks.js`](../staffLinks.js).
+- **API:** سياقات الحساب `/api/account/contexts` وضمن `/api/account` و`/api/workspaces`؛ ops: `contexts` / `staff-link` / `staff-links` / `staff/:id/account-link`.
+- **إنفاذ:** دور `staff` بلا ربط نشط → 403 على desk؛ مع ربط → desk مقصور على `staffId` (today/preview/check-in/complete)؛ addons/pricing تبقى owner/admin؛ `actorStaffId` من العميل يُتجاهل لدور staff.
+- **التحقق:** `npm run test:staff-links` و`npm run test:ops-rbac` و`npm run test:bola` و`npm run test:ops-integrity` → نجاح.
+
+### المرحلة 2 — بذرة موحدة (طبي + طلائع) وتنظيف المستخدمين — 2026-10-27
+
+- **التصحيح النهائي للتعيين:** medical/hospital → `contact.haitham@gmail.com` / dawybooking؛ education/طلائع → `contact.haitham@yahoo.com` / talaaee-book.
+- **ملف واحد:** `data/seeds/maw3ed-demo-ops.json` بقسمين (medical + education) — لا ملف بذرة ثانٍ.
+- **أوامر العرض:** `npm run seed:demo:restore` / `seed:demo:save` / `users:cleanup-demo-owners`.
+- **مسؤول المنصة:** `contact.fakhry@gmail.com` فقط (`super_admin`) وبدون أي مساحة؛ المالكان ليسا platform admin.
+- **تنظيف UX:** banners ثنائية اللغة + SAVEPOINT للجداول الاختيارية + إعادة تعيين audit immutable. توليد المستشفى النادر: `node scripts/generate-medical-seed-section.js` (بدون npm alias يومي). راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
+
 ## نقطة الاستئناف
 
-1. قرار مالك: هل تُغلق المرحلة 1 مع بقاء بوابة staff↔desk موثّقة، أم يُنفَّذ نموذج ربط الموظف أولاً؟
-2. عند اعتماد الربط: حساب مستخدم ↔ `staff` record + نطاق كائنات، ثم اختبار desk لدور staff فقط؛ لا توسّع صلاحيات staff قبل ذلك.
-3. اختياري لاحق: نقل أحداث workspace إلى جدول PG append-only (يتطلب migration — خارج المرحلة 1).
-4. لا تبدأ migration/seed/reset لبيانات التشغيل (المرحلة 2) قبل إغلاق بوابة المرحلة 1 أو قرار مالك صريح.
+1. شغّل `npm run test:phase2-data`.
+2. على Sam-PC: `npm run seed:demo:restore` ثم `npm run users:cleanup-demo-owners -- --dry-run` ثم `--apply` عند الرضا؛ حدّث المتصفح.
+3. على Postgres محلي (5433): `npm run migrate` مرتين (011+012).
+4. backup/restore لـ `workspace_ops_*` + `workspace_staff_links` ومقارنة JSON↔PG.
+5. لا تعلن التعليم/الرياضة/الصالون/التأجير جاهزة للإنتاج.

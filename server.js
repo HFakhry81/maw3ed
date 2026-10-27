@@ -16,6 +16,7 @@ const {
   assertUploadReadable
 } = require("./legacyAccess");
 const { evaluateRuntimePosture, logRuntimePosture } = require("./runtimePosture");
+const staffLinks = require("./staffLinks");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 7000);
@@ -504,20 +505,62 @@ async function getUserWorkspace(userId, workspaceId = null) {
 }
 
 async function listUserWorkspaces(userId) {
+  let rows;
   if (!databaseConfigured) {
-    return loadLocalClerkWorkspaces()[userId] || [];
+    rows = loadLocalClerkWorkspaces()[userId] || [];
+  } else {
+    const result = await query(
+      `SELECT w.id, w.name, w.slug, w.activity_type, w.status, w.created_at,
+              ws.role AS member_role, ws.status AS member_status,
+              o.id AS organization_id, o.logo_url, o.name AS organization_name
+       FROM workspaces w
+       JOIN workspace_members ws ON ws.workspace_id = w.id AND ws.user_id = $1
+       LEFT JOIN organizations o ON o.workspace_id = w.id
+       WHERE w.status = 'active'
+         AND ws.status = 'active'
+       ORDER BY w.created_at ASC`,
+      [userId]
+    );
+    rows = result.rows;
   }
-  const result = await query(
-    `SELECT w.id, w.name, w.slug, w.activity_type, w.status, w.created_at,
-            o.id AS organization_id, o.logo_url, o.name AS organization_name
-     FROM workspaces w
-     JOIN workspace_members ws ON ws.workspace_id = w.id AND ws.user_id = $1
-     LEFT JOIN organizations o ON o.workspace_id = w.id
-     WHERE w.status = 'active'
-     ORDER BY w.created_at ASC`,
-    [userId]
-  );
-  return result.rows;
+
+  // Attach active staff links for context selector (multi-workspace login).
+  const links = await staffLinks.listActiveLinksForUser(userId);
+  const linkByWorkspace = new Map(links.map((link) => [link.workspaceId, link]));
+  return rows.map((row) => {
+    const workspaceId = row.id;
+    const link = linkByWorkspace.get(workspaceId) || null;
+    return {
+      ...row,
+      role: row.role || row.member_role || null,
+      staffLink: link
+        ? {
+            id: link.id,
+            staffId: link.staffId,
+            roleInWorkspace: link.roleInWorkspace,
+            status: link.status
+          }
+        : null
+    };
+  });
+}
+
+async function listAccountContexts(userId) {
+  const workspaces = await listUserWorkspaces(userId);
+  return workspaces.map((workspace) => ({
+    workspaceId: workspace.id,
+    name: workspace.name,
+    slug: workspace.slug,
+    activityType: workspace.activity_type || workspace.activityType || null,
+    role: workspace.role || workspace.member_role || null,
+    staffLink: workspace.staffLink || null,
+    deskAllowed: Boolean(
+      workspace.role === "owner" ||
+        workspace.role === "admin" ||
+        workspace.role === "manager" ||
+        (workspace.role === "staff" && workspace.staffLink?.status === "active")
+    )
+  }));
 }
 
 async function getRequestOrganizationId(req, requestUrl) {
@@ -1159,7 +1202,15 @@ const server = http.createServer(async (req, res) => {
           isPlatformAdmin: Boolean(user.is_platform_admin || user.platform_role),
           platformRole: user.platform_role || (user.is_platform_admin ? "super_admin" : null)
         },
-        workspace: await getUserWorkspace(user.id)
+        workspace: await getUserWorkspace(user.id),
+        contexts: await listAccountContexts(user.id)
+      });
+    }
+    if (requested === "/api/account/contexts" && req.method === "GET") {
+      const user = await requireAppUser(req);
+      return sendJson(res, 200, {
+        ok: true,
+        contexts: await listAccountContexts(user.id)
       });
     }
     if (requested === "/api/workspaces" && req.method === "GET") {

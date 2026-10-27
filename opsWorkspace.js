@@ -272,15 +272,40 @@ function isPostgresWorkspace() {
   return Boolean(als.getStore()?.postgresManaged);
 }
 
-async function resolveWorkspaceIdBySlugAsync(slug) {
+/**
+ * Resolve a public booking slug to a workspace id.
+ *
+ * Postgres tenants (demo medical/education, production workspaces) are looked up
+ * in workspace_ops_profiles (and workspaces.slug) first. If no PG row exists —
+ * e.g. after resetOpsData() for local-default / maw3ed-demo — fall back to the
+ * JSON slug-index so sync and async resolvers stay aligned.
+ */
+async function resolveWorkspaceIdBySlugAsync(slug, defaultStoreFactory = null) {
   const clean = String(slug || "").trim().toLowerCase();
   if (!clean) return null;
+
   if (databaseConfigured && pool) {
-    const result = await pool.query(
-      "SELECT workspace_id FROM workspace_ops_profiles WHERE LOWER(slug) = $1 LIMIT 1",
-      [clean]
-    );
-    return result.rows[0]?.workspace_id || null;
+    try {
+      const profile = await pool.query(
+        "SELECT workspace_id FROM workspace_ops_profiles WHERE LOWER(slug) = $1 LIMIT 1",
+        [clean]
+      );
+      if (profile.rows[0]?.workspace_id) return profile.rows[0].workspace_id;
+
+      const workspace = await pool.query(
+        `SELECT id FROM workspaces
+         WHERE LOWER(slug) = $1 AND status = 'active'
+         LIMIT 1`,
+        [clean]
+      );
+      if (workspace.rows[0]?.id) return workspace.rows[0].id;
+    } catch {
+      // PG unavailable mid-request — fall through to local index.
+    }
+  }
+
+  if (typeof defaultStoreFactory === "function") {
+    ensureCache(DEFAULT_WORKSPACE_ID, defaultStoreFactory);
   }
   return resolveWorkspaceIdBySlug(clean);
 }

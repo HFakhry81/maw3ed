@@ -100,11 +100,13 @@ function createSessionBackup(options = {}) {
     path: rel(sessionDir)
   };
   fs.writeFileSync(path.join(sessionDir, "meta.json"), `${JSON.stringify(meta, null, 2)}\n`, "utf8");
-  fs.writeFileSync(
-    latestPointerPath,
-    `${JSON.stringify({ stamp, path: rel(sessionDir), createdAt: meta.createdAt, reason }, null, 2)}\n`,
-    "utf8"
-  );
+  if (options.updateLatest !== false) {
+    fs.writeFileSync(
+      latestPointerPath,
+      `${JSON.stringify({ stamp, path: rel(sessionDir), createdAt: meta.createdAt, reason }, null, 2)}\n`,
+      "utf8"
+    );
+  }
 
   console.log(`[SUCCESS] Session backup ready → ${rel(sessionDir)}`);
   return { ok: true, ...meta, absolutePath: sessionDir };
