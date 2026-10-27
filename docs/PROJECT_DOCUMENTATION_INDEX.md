@@ -7,7 +7,7 @@
 - [تتبع تقدم المراحل آلياً](ROADMAP_PROGRESS.json) — حالة المراحل وchecklist و`resume_pointer` يُحدَّث مع سجل التنفيذ بعد كل حزمة.
 - [سلامة بيانات التشغيل JSON/PG](WORKSPACE_OPS_DATA_INTEGRITY.md) — مصدر الحقيقة، جرد FK المركبة، مقارنة اللقطات، دفتر الترحيل، واستعادة JSON.
 - [ربط حساب الموظف بالـ desk](STAFF_ACCOUNT_LINKS.md) — نموذج junction (مستخدم↔موظف داخل workspace)، اختيار السياق، وإنفاذ نطاق desk.
-- [بذرة العروض الموحدة](MEDICAL_DEMO_SEED.md) — ملف واحد (طبي→gmail، طلائع→yahoo) عبر `seed:demo:restore`.
+- [بذرة العروض الموحدة](MEDICAL_DEMO_SEED.md) — ملف واحد `maw3ed-demo-ops.json` (طبي→gmail/dawybooking، طلائع→yahoo/talaaee) + تنظيف 3 مستخدمين (`fakhry` admin بلا مساحة) عبر `seed:demo:*` و`users:cleanup-demo-owners`.
 - [جرد واجهات الوصول](SECURITY_ROUTE_INVENTORY.md) — مجموعات endpoints، أدوارها، وضوابطها الحالية والمتبقية.
 - [مواصفات المنتج المرجعية](PRODUCT_AND_PLATFORM_SPEC.md) — الجمهور والأدوار والرحلات والكيانات والمتطلبات ومقارنة التنفيذ.
 - [مقارنة المنصات المشابهة](REFERENCE_PLATFORM_BENCHMARK.md) — نماذج Calendly وSimplyBook.me وما يستفاد منها دون ادعاء تقليد أو تكافؤ.

@@ -32,6 +32,7 @@ const {
   PLATFORM_ADMIN_EMAIL,
   SECTION_TARGETS
 } = require("./demo-seed-store");
+const { printBanner, printDemoMap, logInfo, logOk, logWarn, logFail } = require("./demo-cli");
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
@@ -147,8 +148,9 @@ async function reassignSoftUserFks(client, userIds, platformAdminId) {
          WHERE actor_user_id = ANY($2::text[])`,
         [platformAdminId, userIds]
       );
-      console.log(
-        `[cleanup] reassigned ${updated.rowCount} platform_audit_events.actor_user_id → platform admin (${platformAdminId})`
+      logOk(
+        "cleanup",
+        `reassigned ${updated.rowCount} platform_audit_events.actor_user_id → platform admin (${platformAdminId})`
       );
     } finally {
       await client.query(`ALTER TABLE platform_audit_events ENABLE TRIGGER USER`);
@@ -235,7 +237,7 @@ async function deleteWorkspaceFully(client, workspace) {
     error.message = `فشل حذف المساحة ${workspaceId} (${label}): ${formatPgError(error)}`;
     throw error;
   }
-  console.log(`[cleanup] deleted workspace ${workspaceId} (${label})`);
+  logOk("cleanup", `deleted workspace ${workspaceId} (${label})`);
 }
 
 async function fetchFinalAdminReport(adminEmail) {
@@ -295,6 +297,13 @@ async function fetchFinalAdminReport(adminEmail) {
 }
 
 async function main() {
+  printBanner(
+    "تنظيف مستخدمي العرض — ثلاثة فقط",
+    "Demo user cleanup — keep exactly 3 users"
+  );
+  printDemoMap();
+  logInfo("cleanup", dryRun ? "mode=dry-run (no writes)" : "mode=apply");
+
   if (!databaseConfigured || !pool) {
     throw new Error("يتطلب PostgreSQL (MAW3ED_STORAGE=postgres و DATABASE_URL)");
   }
@@ -425,7 +434,7 @@ async function main() {
   if (!platformAdminUser) {
     const message = `مسؤول المنصة المطلوب غير موجود: ${PLATFORM_ADMIN_EMAIL}. أنشئ الحساب أولاً ثم أعد التشغيل.`;
     if (!dryRun) throw new Error(message);
-    console.log(`\n[cleanup] WARNING: ${message}`);
+    logWarn("cleanup", message);
   }
 
   if (adminOwnedKept.length) {
@@ -433,19 +442,20 @@ async function main() {
       .map((row) => row.id)
       .join(", ")}`;
     if (!dryRun) throw new Error(message);
-    console.log(`\n[cleanup] WARNING: ${message}`);
+    logWarn("cleanup", message);
   }
 
   // Owners must exist for a complete local demo cleanup.
   for (const email of KEEP_OWNER_EMAILS) {
     if (!ownerUsers.some((user) => normalizeEmail(user.email) === normalizeEmail(email))) {
-      console.log(`\n[cleanup] WARNING: المالك المطلوب غير موجود بعد: ${email}`);
+      logWarn("cleanup", `المالك المطلوب غير موجود بعد / missing owner: ${email}`);
     }
   }
 
   if (dryRun) {
-    console.log(
-      "\n[cleanup] dry-run فقط — لم يُغيَّر شيء. للتنفيذ: npm run users:cleanup-demo-owners -- --apply"
+    logInfo(
+      "cleanup",
+      "dry-run فقط — لم يُغيَّر شيء. للتنفيذ: npm run users:cleanup-demo-owners -- --apply"
     );
     return report;
   }
@@ -462,7 +472,7 @@ async function main() {
        WHERE id = $1`,
       [platformAdminUser.id]
     );
-    console.log(`[cleanup] platform admin → ${PLATFORM_ADMIN_EMAIL} (${platformAdminUser.id})`);
+    logOk("cleanup", `platform admin → ${PLATFORM_ADMIN_EMAIL} (${platformAdminUser.id})`);
 
     // Always clear platform flags on the two owners (even if currently unset).
     for (const user of ownerUsers) {
@@ -474,7 +484,7 @@ async function main() {
          WHERE id = $1`,
         [user.id]
       );
-      console.log(`[cleanup] owner not platform admin → ${user.email}`);
+      logOk("cleanup", `owner not platform admin → ${user.email}`);
     }
 
     await safeClientQuery(
@@ -489,7 +499,7 @@ async function main() {
       [platformAdminUser.id],
       { relation: "workspace_members" }
     );
-    console.log(`[cleanup] detached ${PLATFORM_ADMIN_EMAIL} from all workspace memberships/staff links`);
+    logOk("cleanup", `detached ${PLATFORM_ADMIN_EMAIL} from all workspace memberships/staff links`);
 
     const removeIds = removeUsers.map((user) => user.id);
     await reassignSoftUserFks(client, removeIds, platformAdminUser.id);
@@ -517,7 +527,7 @@ async function main() {
         error.message = `فشل حذف المستخدم ${user.email}: ${formatPgError(error)}`;
         throw error;
       }
-      console.log(`[cleanup] deleted user ${user.email} (${user.id})`);
+      logOk("cleanup", `deleted user ${user.email} (${user.id})`);
     }
 
     const leftoverMembers = (
@@ -545,11 +555,11 @@ async function main() {
       throw new Error(`fail-closed: بقي مستخدمون غير مسموح بهم: ${unexpected.join(", ")}`);
     }
     if (missingKeep.length) {
-      console.log(`[cleanup] WARNING: مستخدمون مطلوبون غير موجودين: ${missingKeep.join(", ")}`);
+      logWarn("cleanup", `مستخدمون مطلوبون غير موجودين / missing keep users: ${missingKeep.join(", ")}`);
     }
 
     await client.query("COMMIT");
-    console.log("[cleanup] apply complete");
+    logOk("cleanup", "apply complete");
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -558,7 +568,7 @@ async function main() {
   }
 
   const after = await fetchFinalAdminReport(PLATFORM_ADMIN_EMAIL);
-  console.log("\n[cleanup] final state:");
+  logInfo("cleanup", "final state:");
   console.log(JSON.stringify(after, null, 2));
   report.finalState = after;
   return report;
@@ -567,7 +577,7 @@ async function main() {
 if (require.main === module) {
   main()
     .catch((error) => {
-      console.error("[cleanup] FAILED:", formatPgError(error));
+      logFail("cleanup", formatPgError(error));
       process.exitCode = 1;
     })
     .finally(async () => {

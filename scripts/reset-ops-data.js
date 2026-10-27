@@ -81,7 +81,8 @@ async function main() {
 
   console.log("[SUCCESS] Operational data reset completed.");
   console.log("[HINT] Restore last session: npm run ops:restore");
-  console.log("[HINT] استعادة بذرة العروض الموحدة: npm run seed:demo:restore  (ليس npm run seed / migrate)");
+  console.log("[HINT] Demo restore: npm run seed:demo:restore  (medical→gmail/dawybooking, education→yahoo/talaaee)");
+  console.log("[HINT] Cleanup users: npm run users:cleanup-demo-owners -- --dry-run   (not npm run seed/migrate)");
 }
 
 main()

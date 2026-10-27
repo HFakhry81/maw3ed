@@ -71,10 +71,16 @@ MAW3ED-TOOLBOX.bat
 
 ```bash
 npm run seed:demo:restore
+npm run users:cleanup-demo-owners -- --dry-run   # ثم --apply عند الرضا
 ```
 
-medical → `contact.haitham@gmail.com` / dawybooking · education → `contact.haitham@yahoo.com` / talaaee-book · platform admin → `contact.fakhry@gmail.com` (بلا مساحة).  
-التفاصيل: [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
+| | |
+| --- | --- |
+| medical | `contact.haitham@gmail.com` / `dawybooking` |
+| education | `contact.haitham@yahoo.com` / `talaaee-book` |
+| platform admin | `contact.fakhry@gmail.com` (بلا مساحة) |
+
+التفاصيل: [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md) · قائمة Toolbox: `toolbox/MAW3ED-TOOLBOX.bat` (14–16).
 
 تخطّي التثبيت عند التكرار السريع:
 

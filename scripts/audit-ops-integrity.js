@@ -100,7 +100,7 @@ function loadStoreFromArgs(args) {
     const { readDemoSeedBundle, getSectionStore } = require("./demo-seed-store");
     const bundle = readDemoSeedBundle({ migrate: true });
     if (args.seed === "demo") {
-      return { label: "seed:demo/medical", store: getSectionStore(bundle, "medical") };
+      return { label: "seed:maw3ed-demo/medical", store: getSectionStore(bundle, "medical") };
     }
     return { label: `seed:${args.seed}`, store: getSectionStore(bundle, args.seed) };
   }

@@ -51,7 +51,9 @@ function loadJsonStore(filePath) {
 
 function loadSeed(name) {
   const { readDemoSeedBundle, getSectionStore, sectionKeys } = require("./demo-seed-store");
-  const key = name === "talaaee" ? "education" : name;
+  let key = String(name || "").trim().toLowerCase();
+  if (key === "talaaee") key = "education";
+  if (key === "hospital") key = "medical";
   if (!sectionKeys().includes(key)) {
     throw new Error(`Unsupported seed section: ${name}`);
   }

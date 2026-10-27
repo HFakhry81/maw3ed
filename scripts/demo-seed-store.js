@@ -1,13 +1,17 @@
 /**
- * بذرة Maw3ed الموحدة (ملف واحد دائم):
+ * بذرة Maw3ed الموحدة — ملف واحد دائم / Unified Maw3ed demo seed blob:
  *   data/seeds/maw3ed-demo-ops.json
  *
- * أقسام:
+ * أقسام / Sections:
  *   medical   → contact.haitham@gmail.com  / dawybooking
  *   education → contact.haitham@yahoo.com / talaaee-book
  *
- * مسؤول المنصة الوحيد: contact.fakhry@gmail.com (بدون أي مساحة)
- * الاستعادة: npm run seed:demo:restore
+ * مسؤول المنصة الوحيد / Sole platform admin (not a seed target):
+ *   contact.fakhry@gmail.com  (super_admin, no workspace)
+ *
+ * الاستعادة / Restore: npm run seed:demo:restore
+ * الحفظ / Save:       npm run seed:demo:save -- --section=medical|education
+ * التنظيف / Cleanup:  npm run users:cleanup-demo-owners
  */
 "use strict";
 

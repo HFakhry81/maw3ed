@@ -1,18 +1,24 @@
+#!/usr/bin/env node
 /**
- * توليد بذرة المستشفى الطبية (نادراً) ثم حفظها داخل القسم medical من البذرة الموحدة.
+ * نادرة: توليد كتالوج المستشفى داخل قسم medical من البذرة الموحدة.
+ * Rare: regenerate the hospital catalog into the unified seed's medical section.
  *
- * البذرة الموحدة الدائمة:
- *   data/seeds/maw3ed-demo-ops.json  (أقسام medical + education)
+ * يكتب إلى: data/seeds/maw3ed-demo-ops.json  (لا يستبدل قسم education)
+ * Writes into: data/seeds/maw3ed-demo-ops.json (keeps education section)
  *
- * الاستعادة/الحفظ (الأمر الوحيد):
+ * الاستعادة اليومية / Daily restore-save:
  *   npm run seed:demo:restore
  *   npm run seed:demo:save -- --section=medical
  *
- * medical → contact.haitham@gmail.com / dawybooking
- * education → contact.haitham@yahoo.com / talaaee-book
- * platform admin → contact.fakhry@gmail.com (بلا مساحة)
+ * الهدف / Target: contact.haitham@gmail.com / dawybooking
+ * Platform admin: contact.fakhry@gmail.com (no workspace)
  *
- * ملاحظة: npm run migrate و npm run seed لا يحمّلان بذرة العروض.
+ * Usage:
+ *   node scripts/generate-medical-seed-section.js
+ *   node scripts/generate-medical-seed-section.js --workspace=<id>
+ *   node scripts/generate-medical-seed-section.js --owner-email=contact.haitham@gmail.com
+ *
+ * --restore / --save مرفوضان هنا — استعمل seed:demo:* بدلاً منهما.
  */
 const fs = require("fs");
 const path = require("path");
@@ -31,6 +37,7 @@ const {
   setSectionStore
 } = require("./demo-seed-store");
 const DEFAULT_OWNER_EMAIL = SECTION_TARGETS.medical.ownerEmail;
+const { printBanner, printDemoMap, logInfo, logFail } = require("./demo-cli");
 
 function readCanonicalSeed() {
   const bundle = readDemoSeedBundle();
@@ -177,7 +184,7 @@ async function ensureWorkspaceAcceptsMedicalOps(target) {
   }
   if (!databaseConfigured) {
     console.warn(
-      "[seed-medical] PostgreSQL غير مفعّل — لن يُحدَّث activity_type في جدول workspaces؛ ستُضبط حقول النشاط داخل ملف ops فقط."
+      "[gen-medical] PostgreSQL غير مفعّل — لن يُحدَّث activity_type في جدول workspaces؛ ستُضبط حقول النشاط داخل ملف ops فقط."
     );
     target.activityType = "medical";
     target.needsMedicalConversion = false;
@@ -186,7 +193,7 @@ async function ensureWorkspaceAcceptsMedicalOps(target) {
 
   const id = target.id;
   console.log(
-    `[seed-medical] تحويل نشاط المساحة إلى medical (كان: ${target.activityType || "unknown"}) مع الإبقاء على المالك والـ slug=${target.slug || ""}`
+    `[gen-medical] تحويل نشاط المساحة إلى medical (كان: ${target.activityType || "unknown"}) مع الإبقاء على المالك والـ slug=${target.slug || ""}`
   );
   await query(
     `UPDATE workspaces
@@ -511,7 +518,7 @@ async function saveCanonicalFromWorkspace(source = "save") {
       workspaceId,
       ...(workspaceTarget?.ownerEmail ? { ownerEmail: workspaceTarget.ownerEmail } : {})
     });
-    console.log(`[seed-medical] canonical saved → ${path.relative(process.cwd(), result.path)}`);
+    console.log(`[gen-medical] canonical saved → ${path.relative(process.cwd(), result.path)}`);
     console.log(JSON.stringify(result.meta, null, 2));
     return result;
   });
@@ -519,10 +526,10 @@ async function saveCanonicalFromWorkspace(source = "save") {
 
 async function restoreCanonicalToWorkspace() {
   const { meta, store } = readCanonicalSeed();
-  console.log(`[seed-medical] restoring from ${path.relative(process.cwd(), canonicalSeedPath())}`);
-  console.log(`[seed-medical] seed meta:`, meta);
+  console.log(`[gen-medical] restoring from ${path.relative(process.cwd(), canonicalSeedPath())}`);
+  console.log(`[gen-medical] seed meta:`, meta);
   console.log(
-    `[seed-medical] default owner email=${DEFAULT_OWNER_EMAIL}; active target owner=${workspaceTarget?.ownerEmail || "(explicit workspace)"}`
+    `[gen-medical] default owner email=${DEFAULT_OWNER_EMAIL}; active target owner=${workspaceTarget?.ownerEmail || "(explicit workspace)"}`
   );
 
   const activityResult = await ensureWorkspaceAcceptsMedicalOps(workspaceTarget);
@@ -530,7 +537,7 @@ async function restoreCanonicalToWorkspace() {
   const counts = await ops.withWorkspaceAsync(workspaceId, async () => {
     if (!noBackup) {
       const backup = backupOpsFile(workspaceId);
-      if (backup) console.log(`[seed-medical] pre-restore backup → ${backup}`);
+      if (backup) console.log(`[gen-medical] pre-restore backup → ${backup}`);
     }
     const ctx = opsWorkspace.getContext(() => cloneStore(store));
     const next = doReplace ? cloneStore(store) : mergeSeedStore(ctx.data, store);
@@ -544,7 +551,7 @@ async function restoreCanonicalToWorkspace() {
     };
   });
 
-  console.log("[seed-medical] restore done");
+  console.log("[gen-medical] restore done");
   console.log(JSON.stringify(counts, null, 2));
   console.log("حدّث صفحة المتصفح لرؤية البيانات المسترجعة.");
   console.log("تذكير: npm run migrate / npm run seed لا يستعيدان بذرة المستشفى.");
@@ -552,17 +559,17 @@ async function restoreCanonicalToWorkspace() {
 }
 
 async function generateDemo() {
-  console.log(`[seed-medical] generate workspace=${workspaceId} keep=${keep}`);
+  console.log(`[gen-medical] generate workspace=${workspaceId} keep=${keep}`);
 
   const summary = await ops.withWorkspaceAsync(workspaceId, async () => {
     if (!noBackup) {
       const backup = backupOpsFile(workspaceId);
-      if (backup) console.log(`[seed-medical] backup → ${backup}`);
-      else console.log("[seed-medical] no existing ops file to backup");
+      if (backup) console.log(`[gen-medical] backup → ${backup}`);
+      else console.log("[gen-medical] no existing ops file to backup");
     }
     if (!keep) {
       ops.resetOpsData();
-      console.log("[seed-medical] reset to default store");
+      console.log("[gen-medical] reset to default store");
     }
 
     const ctx = opsWorkspace.getContext(() => ({}));
@@ -794,7 +801,7 @@ async function generateDemo() {
     };
   });
 
-  console.log("[seed-medical] generate done");
+  console.log("[gen-medical] generate done");
   console.log(JSON.stringify(summary, null, 2));
   await saveCanonicalFromWorkspace("generate");
   console.log("\nاسترجاع لاحقاً: npm run seed:demo:restore -- --section=medical");
@@ -803,9 +810,11 @@ async function generateDemo() {
 }
 
 async function main() {
+  printBanner("توليد قسم medical (نادر)", "Generate medical section (rare)");
+  printDemoMap();
   if (doRestore || doSave) {
     console.error(
-      "[seed-medical] --restore/--save أُزيلا من هذا السكربت.\n" +
+      "[gen-medical] --restore/--save أُزيلا من هذا السكربت.\n" +
         "استخدم: npm run seed:demo:" + (doRestore ? "restore" : "save") + " -- --section=medical"
     );
     process.exitCode = 2;
@@ -816,7 +825,7 @@ async function main() {
     workspaceTarget = await resolveWorkspaceTarget();
     workspaceId = workspaceTarget.id;
     console.log(
-      `[seed-medical] generate target workspace=${workspaceId}` +
+      `[gen-medical] generate target workspace=${workspaceId}` +
         (workspaceTarget.name ? ` name=${workspaceTarget.name} slug=${workspaceTarget.slug || ""}` : "") +
         (workspaceTarget.ownerEmail ? ` owner=${workspaceTarget.ownerEmail}` : " explicit")
     );
@@ -831,7 +840,7 @@ async function main() {
 
 if (require.main === module) {
   main().catch((error) => {
-    console.error("[seed-medical] FAILED:", error.message || error);
+    console.error("[gen-medical] FAILED:", error.message || error);
     process.exitCode = 1;
   });
 }

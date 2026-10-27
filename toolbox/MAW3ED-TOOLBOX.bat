@@ -28,27 +28,36 @@ echo    8. Run Backend + Vite   (two windows)
 echo.
 echo  [ DATABASE ^& OPS ]
 echo    9. Migrate
-echo   10. Seed
+echo   10. Platform seed        (npm run seed — NOT demo workspaces)
 echo   11. Reset ops data       (auto session backup first)
 echo   12. Backup ops session
 echo   13. Restore latest session
-echo   14. Demo seeds restore  (medical+talaaee via seed:demo:restore)
-echo   15. Demo seed save section (seed:demo:save --section=...)
+echo.
+echo  [ DEMO — unified seed + 3 users ]
+echo   14. Demo restore         (seed:demo:restore — medical+education)
+echo   15. Demo save section    (seed:demo:save --section=medical^|education)
+echo   16. Cleanup demo users   (keep fakhry admin + 2 owners)
 echo.
 echo  [ QA ]
-echo   16. Isolation check
-echo   17. Smoke public booking
-echo   18. Smoke HTTP
-echo   19. QA suite (all tests)
+echo   17. Isolation check
+echo   18. Smoke public booking
+echo   19. Smoke HTTP
+echo   20. QA suite (all tests)
+echo   21. Phase 2 data tests   (ops integrity + staff links)
 echo.
 echo  [ RELEASE ]
-echo   20. Build dist only
-echo   21. Prepare release      (refresh + Git/VPS commands)
+echo   22. Build dist only
+echo   23. Prepare release      (refresh + Git/VPS commands)
 echo.
-echo   22. Exit
+echo   24. Exit
+echo =======================================================================
+echo   medical  -^> contact.haitham@gmail.com / dawybooking
+echo   education-^> contact.haitham@yahoo.com / talaaee-book
+echo   admin    -^> contact.fakhry@gmail.com  (no workspace)
+echo   seed     -^> data\seeds\maw3ed-demo-ops.json
 echo =======================================================================
 set "choice="
-set /p choice="Select [1-22]: "
+set /p choice="Select [1-24]: "
 
 if "%choice%"=="1" goto upd_all
 if "%choice%"=="2" goto upd_backend
@@ -63,15 +72,17 @@ if "%choice%"=="10" goto run_seed
 if "%choice%"=="11" goto run_reset
 if "%choice%"=="12" goto run_backup
 if "%choice%"=="13" goto run_restore
-if "%choice%"=="14" goto run_hospital_restore
-if "%choice%"=="15" goto run_hospital_save
-if "%choice%"=="16" goto run_isolation
-if "%choice%"=="17" goto run_smoke_booking
-if "%choice%"=="18" goto run_smoke_http
-if "%choice%"=="19" goto run_qa
-if "%choice%"=="20" goto run_build
-if "%choice%"=="21" goto run_release
-if "%choice%"=="22" exit /b 0
+if "%choice%"=="14" goto run_demo_restore
+if "%choice%"=="15" goto run_demo_save
+if "%choice%"=="16" goto run_demo_cleanup
+if "%choice%"=="17" goto run_isolation
+if "%choice%"=="18" goto run_smoke_booking
+if "%choice%"=="19" goto run_smoke_http
+if "%choice%"=="20" goto run_qa
+if "%choice%"=="21" goto run_phase2
+if "%choice%"=="22" goto run_build
+if "%choice%"=="23" goto run_release
+if "%choice%"=="24" exit /b 0
 echo Invalid option.
 pause
 goto menu
@@ -141,6 +152,9 @@ pause & goto menu
 
 :run_seed
 cls & color 0E
+echo [PLATFORM SEED] npm run seed — schema/platform only.
+echo This does NOT restore medical/education demo workspaces.
+echo Use menu 14 for: npm run seed:demo:restore
 cd /d "%PROJECT_ROOT%" || exit /b 1
 call node "%PROJECT_ROOT%\scripts\seed.js"
 pause & goto menu
@@ -164,27 +178,65 @@ cd /d "%PROJECT_ROOT%" || exit /b 1
 call node "%PROJECT_ROOT%\scripts\ops-session-backup.js" --restore-latest
 pause & goto menu
 
-:run_hospital_restore
+:run_demo_restore
 cls & color 0E
-echo [DEMO] Restore unified seed (medical -^> gmail/dawybooking, education -^> yahoo/talaaee)
-echo        Source: data\seeds\maw3ed-demo-ops.json
-echo        Command: npm run seed:demo:restore
-echo        Note: npm run migrate / npm run seed do NOT load demo seeds.
+echo =======================================================================
+echo  [DEMO RESTORE] Unified seed — both sections
+echo  File: data\seeds\maw3ed-demo-ops.json
+echo  medical   -^> contact.haitham@gmail.com / dawybooking
+echo  education -^> contact.haitham@yahoo.com / talaaee-book
+echo  Command: npm run seed:demo:restore
+echo  Note: migrate / seed do NOT load this blob.
+echo =======================================================================
 cd /d "%PROJECT_ROOT%" || exit /b 1
 call npm run seed:demo:restore
 echo.
 echo Refresh the browser after this finishes.
 pause & goto menu
 
-:run_hospital_save
+:run_demo_save
 cls & color 0A
-echo [DEMO] Save requires an explicit section
-echo        npm run seed:demo:save -- --section=medical
-echo        npm run seed:demo:save -- --section=education
+echo =======================================================================
+echo  [DEMO SAVE] Write one live workspace back into the unified seed
+echo  npm run seed:demo:save -- --section=medical
+echo  npm run seed:demo:save -- --section=education
+echo =======================================================================
+set "section="
+set /p section="Section [medical/education]: "
+if /i "%section%"=="medical" goto demo_save_go
+if /i "%section%"=="education" goto demo_save_go
+echo Invalid section. Use medical or education.
+pause & goto menu
+:demo_save_go
 cd /d "%PROJECT_ROOT%" || exit /b 1
-call npm run seed:demo:save -- --section=medical
+call npm run seed:demo:save -- --section=%section%
 echo.
 echo Refresh the browser after this finishes.
+pause & goto menu
+
+:run_demo_cleanup
+cls & color 0C
+echo =======================================================================
+echo  [DEMO CLEANUP] Keep exactly 3 users
+echo    1. contact.fakhry@gmail.com  — platform admin, NO workspace
+echo    2. contact.haitham@gmail.com — dawybooking owner
+echo    3. contact.haitham@yahoo.com — talaaee-book owner
+echo  Commands:
+echo    npm run users:cleanup-demo-owners -- --dry-run
+echo    npm run users:cleanup-demo-owners -- --apply
+echo =======================================================================
+cd /d "%PROJECT_ROOT%" || exit /b 1
+echo.
+echo Running dry-run first...
+call npm run users:cleanup-demo-owners -- --dry-run
+echo.
+set "apply="
+set /p apply="Apply cleanup now? [y/N]: "
+if /i not "%apply%"=="y" (
+  echo Skipped apply.
+  pause & goto menu
+)
+call npm run users:cleanup-demo-owners -- --apply
 pause & goto menu
 
 :run_isolation
@@ -209,6 +261,13 @@ pause & goto menu
 cls & color 0D
 call "%~dp0MAW3ED-QA-SUITE.bat"
 goto menu
+
+:run_phase2
+cls & color 0D
+echo [PHASE 2] npm run test:phase2-data
+cd /d "%PROJECT_ROOT%" || exit /b 1
+call npm run test:phase2-data
+pause & goto menu
 
 :run_build
 cls & color 0A

@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
  * استعادة/حفظ البذرة الموحدة (طبي + طلائع) من/إلى مساحات المالكين الصحيحة.
+ * Restore/save the unified demo seed onto the correct owner workspaces.
  *
  *   npm run seed:demo:restore
- *   npm run seed:demo:restore -- --section=medical
- *   npm run seed:demo:restore -- --section=education --replace
- *   npm run seed:demo:save -- --section=medical
- *   npm run seed:demo:save -- --section=education
+ *   npm run seed:demo:restore -- --section=medical|education [--replace]
+ *   npm run seed:demo:save -- --section=medical|education
  *
- * medical   → contact.haitham@gmail.com  (dawybooking)
- * education → contact.haitham@yahoo.com (talaaee-book)
+ * medical   → contact.haitham@gmail.com  / dawybooking
+ * education → contact.haitham@yahoo.com / talaaee-book
+ * platform  → contact.fakhry@gmail.com   (super_admin, no workspace — not a seed target)
  *
- * npm run migrate / npm run seed لا يحمّلان هذه البذرة.
+ * npm run migrate / npm run seed do NOT load this blob.
  */
 "use strict";
 
@@ -24,6 +24,7 @@ const ops = require("../opsStore");
 const opsWorkspace = require("../opsWorkspace");
 const {
   SECTION_TARGETS,
+  PLATFORM_ADMIN_EMAIL,
   sectionKeys,
   getSectionTarget,
   readDemoSeedBundle,
@@ -35,6 +36,7 @@ const {
   summarizeStore,
   canonicalSeedPath
 } = require("./demo-seed-store");
+const { printBanner, printDemoMap, printUsageBlock, logInfo, logOk, logFail } = require("./demo-cli");
 
 const args = process.argv.slice(2);
 const doRestore = args.includes("--restore");
@@ -361,22 +363,34 @@ function resolveSectionsToRun() {
   return [requestedSection];
 }
 
+function printHelpAndExit() {
+  printBanner("بذرة العروض الموحدة — استعادة / حفظ", "Unified demo seed — restore / save");
+  printDemoMap();
+  printUsageBlock([
+    "Usage:",
+    "  npm run seed:demo:restore",
+    "  npm run seed:demo:restore -- --section=medical|education|all [--replace]",
+    "  npm run seed:demo:save -- --section=medical|education",
+    "  Overrides: --owner-email=...  --workspace=...  --keep-activity  --no-backup",
+    "",
+    `Platform admin (not a seed target): ${PLATFORM_ADMIN_EMAIL}`
+  ]);
+  process.exit(1);
+}
+
 async function main() {
   if (doRestore && doSave) {
-    throw new Error("استخدم --restore أو --save فقط");
+    throw new Error("استخدم --restore أو --save فقط / use either --restore or --save");
   }
   if (!doRestore && !doSave) {
-    console.log(`Usage:
-  npm run seed:demo:restore
-  npm run seed:demo:restore -- --section=medical|education|all [--replace]
-  npm run seed:demo:save -- --section=medical|education
-  Overrides: --owner-email=...  --workspace=...  --keep-activity  --no-backup
-
-Canonical file: ${path.relative(process.cwd(), canonicalSeedPath())}
-  medical   → ${SECTION_TARGETS.medical.ownerEmail} / ${SECTION_TARGETS.medical.preferredSlug}
-  education → ${SECTION_TARGETS.education.ownerEmail} / ${SECTION_TARGETS.education.preferredSlug}`);
-    process.exit(1);
+    printHelpAndExit();
   }
+
+  printBanner(
+    doRestore ? "استعادة بذرة العروض" : "حفظ قسم في بذرة العروض",
+    doRestore ? "Demo seed restore" : "Demo seed section save"
+  );
+  printDemoMap();
 
   const sections = resolveSectionsToRun();
   if (doSave && sections.length !== 1) {
@@ -385,13 +399,13 @@ Canonical file: ${path.relative(process.cwd(), canonicalSeedPath())}
 
   if (doRestore) {
     const bundle = readDemoSeedBundle({ migrate: true });
-    console.log(`[seed-demo] restoring from ${path.relative(process.cwd(), canonicalSeedPath())}`);
+    logInfo("seed-demo", `restoring from ${path.relative(process.cwd(), canonicalSeedPath())}`);
     const results = [];
     for (const key of sections) {
       results.push(await restoreSection(key, bundle));
     }
-    console.log("[seed-demo] all requested sections restored");
-    console.log("تذكير: npm run migrate / npm run seed لا يستعيدان هذه البذرة.");
+    logOk("seed-demo", "all requested sections restored");
+    logInfo("seed-demo", "تذكير: migrate/seed لا يستعيدان هذه البذرة — refresh المتصفح بعد الاستعادة.");
     return results;
   }
 
@@ -401,7 +415,7 @@ Canonical file: ${path.relative(process.cwd(), canonicalSeedPath())}
 if (require.main === module) {
   main()
     .catch((error) => {
-      console.error("[seed-demo] FAILED:", error.message || error);
+      logFail("seed-demo", error.message || String(error));
       process.exitCode = 1;
     })
     .finally(async () => {
