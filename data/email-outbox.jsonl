@@ -39,7 +39,3 @@
 {"createdAt":"2026-10-25T22:13:31.727Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
 {"createdAt":"2026-10-25T22:14:13.886Z","to":"http-smoke@test.com","subject":"تأكيد حجزك — كشف عام · موعد — مساحة تجريبية","type":"booking-confirmation","mode":"development"}
 {"createdAt":"2026-10-25T22:14:13.887Z","to":"hello@maw3ed.app","subject":"حجز جديد — اختبار HTTP · موعد — مساحة تجريبية","type":"booking-confirmation-business","mode":"development"}
-{"createdAt":"2026-10-27T12:23:15.633Z","to":"smoke@example.com","subject":"phase6","html":"<p>hi</p>","type":"phase6-smoke","mode":"development","idempotencyKey":"email-smoke-4080","workspaceId":null}
-{"createdAt":"2026-10-27T12:23:15.634Z","to":"smoke@example.com","subject":"phase6","html":"<p>hi</p>","type":"phase6-smoke","mode":"development","idempotencyKey":"email-smoke-4080","workspaceId":null}
-{"createdAt":"2026-10-27T12:23:42.223Z","to":"smoke@example.com","subject":"phase6","html":"<p>hi</p>","type":"phase6-smoke","mode":"development","idempotencyKey":"email-smoke-4114","workspaceId":null}
-{"createdAt":"2026-10-27T12:23:42.223Z","to":"smoke@example.com","subject":"phase6","html":"<p>hi</p>","type":"phase6-smoke","mode":"development","idempotencyKey":"email-smoke-4114","workspaceId":null}
