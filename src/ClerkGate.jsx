@@ -15,6 +15,7 @@ import { api } from "./api";
 import { applyDocumentLocale } from "./i18n";
 import { getAuthCopy, getAuthLocales } from "./authI18n";
 import { KeyboardSpacer } from "./useKeyboardInset.jsx";
+import { clearLocalWorkspaceOptIn } from "./workspaceSelection";
 
 const envPublishableKey =
   import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ||
@@ -51,6 +52,7 @@ export function clearLocalAppSession() {
       /* ignore */
     }
   });
+  clearLocalWorkspaceOptIn();
   api.setWorkspaceId("");
 }
 

@@ -1,4 +1,4 @@
-import React, { Component, Suspense, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import React, { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 import "./ops.css";
@@ -13,9 +13,38 @@ import {
   AuthSessionGate,
   WorkspaceOnboarding,
   useClerkPublishableKey,
-  useAuth
+  useAuth,
+  useUser
 } from "./ClerkGate.jsx";
 import { getClerkLocalization } from "./authI18n";
+import {
+  LOCAL_DEFAULT_WORKSPACE_ID,
+  WORKSPACE_STORAGE_KEY,
+  clearLocalWorkspaceOptIn,
+  isLocalOrEmptyWorkspaceId,
+  readLocalWorkspaceOptIn,
+  resolveWorkspaceIdForSession,
+  writeLocalWorkspaceOptIn
+} from "./workspaceSelection";
+
+function clerkUserEmail(user) {
+  return (
+    user?.primaryEmailAddress?.emailAddress ||
+    user?.emailAddresses?.[0]?.emailAddress ||
+    ""
+  );
+}
+
+function applyResolvedWorkspaceId(resolvedId, { setWorkspaceId, reload } = {}) {
+  const resolved = String(resolvedId || "").trim();
+  if (!resolved) return false;
+  const uiId = isLocalOrEmptyWorkspaceId(resolved) ? "" : resolved;
+  const apiId = isLocalOrEmptyWorkspaceId(resolved) ? LOCAL_DEFAULT_WORKSPACE_ID : resolved;
+  if (typeof setWorkspaceId === "function") setWorkspaceId(uiId);
+  api.setWorkspaceId(apiId);
+  if (typeof reload === "function") reload();
+  return true;
+}
 import { MoneyInput, SearchableMultiSelect, SearchableSelect, digitsPhone, lettersOnly, toMoneyNumber } from "./uiFields.jsx";
 import { jobTitlesForTemplate } from "./jobTitles";
 import { KeyboardSpacer, useKeyboardInset } from "./useKeyboardInset.jsx";
@@ -77,6 +106,7 @@ function snapToQuarter(value, { min = 0, allowZero = false } = {}) {
 
 async function logoutUser() {
   ["maw3ed.role", "maw3ed.workspaceId"].forEach((key) => localStorage.removeItem(key));
+  clearLocalWorkspaceOptIn();
   api.setWorkspaceId("");
   window.location.href = "/";
 }
@@ -1459,7 +1489,10 @@ function App() {
   const { appointments, reload: reloadAppointments } = useAppointments();
   const [profile, setProfile] = useState(null);
   const [workspaces, setWorkspaces] = useState([]);
-  const [workspaceId, setWorkspaceId] = useState(localStorage.getItem("maw3ed.workspaceId") || "");
+  const [workspaceId, setWorkspaceId] = useState(() => {
+    const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY) || api.workspaceId || "";
+    return isLocalOrEmptyWorkspaceId(stored) ? "" : stored;
+  });
 
   useEffect(() => {
     applyDocumentLocale(locale);
@@ -1501,7 +1534,19 @@ function App() {
         ]);
         if (cancelled) return;
         if (profileResult?.profile) setProfile(profileResult.profile);
-        setWorkspaces(workspaceResult.workspaces || []);
+        const list = workspaceResult.workspaces || [];
+        setWorkspaces(list);
+        // Safety net: replace sticky local-default / stale ids when memberships exist.
+        // Explicit session opt-in to المساحة المحلية is preserved via sessionStorage.
+        const stored = workspaceId || localStorage.getItem(WORKSPACE_STORAGE_KEY) || api.workspaceId || "";
+        const resolved = resolveWorkspaceIdForSession(list, stored, {
+          allowLocalOptIn: readLocalWorkspaceOptIn()
+        });
+        const storedNorm = isLocalOrEmptyWorkspaceId(stored) ? LOCAL_DEFAULT_WORKSPACE_ID : stored;
+        const resolvedNorm = isLocalOrEmptyWorkspaceId(resolved) ? LOCAL_DEFAULT_WORKSPACE_ID : resolved;
+        if (resolvedNorm && resolvedNorm !== storedNorm) {
+          applyResolvedWorkspaceId(resolved, { setWorkspaceId, reload });
+        }
       } catch {
         if (!cancelled) setWorkspaces([]);
       }
@@ -1509,7 +1554,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, reload]);
 
   useEffect(() => {
     if (ops && !ops.activity?.locked && !localStorage.getItem("maw3ed.industrySeen")) {
@@ -1554,8 +1599,16 @@ function App() {
   };
 
   const switchWorkspace = (id) => {
-    setWorkspaceId(id);
-    api.setWorkspaceId(id);
+    const next = String(id || "").trim();
+    if (isLocalOrEmptyWorkspaceId(next)) {
+      writeLocalWorkspaceOptIn(true);
+      setWorkspaceId("");
+      api.setWorkspaceId(LOCAL_DEFAULT_WORKSPACE_ID);
+    } else {
+      writeLocalWorkspaceOptIn(false);
+      setWorkspaceId(next);
+      api.setWorkspaceId(next);
+    }
     reload();
   };
 
@@ -1639,7 +1692,10 @@ function App() {
           <span>{ops?.activity?.templateDisplayName || profile?.activityDisplayName || "مساحة عمل"}</span>
           {(workspaces.length > 0 || true) && (
             <div className="workspace-switch">
-              <select value={workspaceId} onChange={(e) => switchWorkspace(e.target.value)}>
+              <select
+                value={isLocalOrEmptyWorkspaceId(workspaceId) ? "" : workspaceId}
+                onChange={(e) => switchWorkspace(e.target.value)}
+              >
                 <option value="">المساحة المحلية</option>
                 {workspaces.map((ws) => <option key={ws.id} value={ws.id}>{ws.name}</option>)}
               </select>
@@ -1721,13 +1777,17 @@ createRoot(document.getElementById("root")).render(<Root />);
 
 function AuthenticatedShell() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
+  const userEmail = clerkUserEmail(user);
   const [workspaces, setWorkspaces] = useState(null);
   const [bootError, setBootError] = useState("");
   const [authBlocked, setAuthBlocked] = useState(false);
+  const didBootSelectRef = useRef(false);
 
   useEffect(() => {
     // Do not call /api/workspaces until Clerk finished loading and the user is signed in.
     if (!isLoaded || !isSignedIn) {
+      didBootSelectRef.current = false;
       if (isLoaded && !isSignedIn) {
         setAuthBlocked(true);
         setBootError("يلزم تسجيل الدخول قبل إنشاء مساحة العمل");
@@ -1762,8 +1822,36 @@ function AuthenticatedShell() {
         setBootError("");
         setAuthBlocked(false);
         setWorkspaces(list);
-        if (list[0]?.id && !localStorage.getItem("maw3ed.workspaceId")) {
-          api.setWorkspaceId(list[0].id);
+
+        const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY) || api.workspaceId || "";
+        const needsBootSelect =
+          !didBootSelectRef.current ||
+          (list.length > 0 && isLocalOrEmptyWorkspaceId(stored));
+
+        if (needsBootSelect) {
+          // Sign-in boot: never strand on sticky local-default / empty / stale id.
+          clearLocalWorkspaceOptIn();
+          const resolved = resolveWorkspaceIdForSession(list, stored, {
+            userEmail,
+            allowLocalOptIn: false
+          });
+          if (resolved) {
+            api.setWorkspaceId(
+              isLocalOrEmptyWorkspaceId(resolved) ? LOCAL_DEFAULT_WORKSPACE_ID : resolved
+            );
+          }
+          didBootSelectRef.current = true;
+        } else if (userEmail && list.length > 0) {
+          // Late Clerk email: if still on an invalid id, re-resolve with demo map.
+          if (isLocalOrEmptyWorkspaceId(stored) || !list.some((ws) => ws.id === stored)) {
+            const resolved = resolveWorkspaceIdForSession(list, stored, {
+              userEmail,
+              allowLocalOptIn: false
+            });
+            if (resolved && !isLocalOrEmptyWorkspaceId(resolved)) {
+              api.setWorkspaceId(resolved);
+            }
+          }
         }
       } catch (err) {
         if (cancelled) return;
@@ -1785,7 +1873,7 @@ function AuthenticatedShell() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, getToken]);
+  }, [isLoaded, isSignedIn, getToken, userEmail]);
 
   if (!isLoaded || (isSignedIn && workspaces === null && !authBlocked)) {
     return (
@@ -1822,7 +1910,10 @@ function AuthenticatedShell() {
       <WorkspaceOnboarding
         onCreated={(workspace) => {
           setWorkspaces([workspace]);
-          if (workspace?.id) api.setWorkspaceId(workspace.id);
+          if (workspace?.id) {
+            clearLocalWorkspaceOptIn();
+            api.setWorkspaceId(workspace.id);
+          }
         }}
       />
     );
