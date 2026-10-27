@@ -15,8 +15,10 @@ data/backups/
 data/email-outbox.jsonl
 data/transactional-outbox.jsonl
 data/webhook-sandbox-ledger.jsonl
+data/provider-sandbox-deliveries.jsonl
 data/outbox-smoke-*.jsonl
 data/webhook-ledger-smoke-*.jsonl
+data/provider-sandbox-smoke-*.jsonl
 data/development-events.jsonl
 data/local-clerk-workspaces.json
 *.log

@@ -44,6 +44,8 @@
     "test:phase4-capacity": "npm run test:capacity-modes && npm run test:capacity-pg && npm run test:capacity-http && npm run test:capacity-isolation",
     "test:phase5-journeys": "node scripts/smoke-phase5-journeys.js",
     "test:phase6-integrations": "node scripts/smoke-phase6-integrations.js",
+    "outbox:worker": "node scripts/outbox-worker.js",
+    "outbox:status": "node scripts/outbox-worker.js --status",
     "test:smoke": "node scripts/smoke-public-booking.js && node scripts/smoke-booking-governance.js && node scripts/smoke-workspace-isolation.js && node scripts/smoke-ops-rbac.js && node scripts/smoke-legacy-rbac.js && node scripts/smoke-bola.js && node scripts/smoke-workspace-events.js && node scripts/smoke-ops-integrity.js && node scripts/smoke-staff-links.js && node scripts/smoke-workspace-selection.js && node scripts/smoke-ops-pg-backup.js && node scripts/smoke-atomic-booking.js && node scripts/smoke-booking-timezone.js && node scripts/smoke-atomic-booking-pg.js && node scripts/smoke-capacity-modes.js && node scripts/smoke-capacity-pg.js && node scripts/smoke-capacity-http.js && node scripts/smoke-capacity-isolation.js && node scripts/smoke-phase5-journeys.js && node scripts/smoke-phase6-integrations.js",
     "test:ops-rbac": "node scripts/smoke-ops-rbac.js",
     "test:legacy-rbac": "node scripts/smoke-legacy-rbac.js",

@@ -17,7 +17,7 @@
 | 3. الحجز الذري والتوفر | مكتملة تقنياً | قفل/قيود تداخل، holds، idempotency (JSON+PG+HTTP)، عقد timezone/DST للمدة+buffer | اختبار تنافس للفترات مع أثر commit ذري على JSON وPG |
 | 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
 | 5. الرحلات والواجهة | مكتملة تقنياً | onboarding+قفل، كتالوج/موارد/إشغال، أدوار، حجز عام+تسجيل جلسة، روابط إدارة موقعة، pagination، a11y أساسية | رحلات المنتج قابلة للتجربة؛ فك قفل القالب لمسؤول المنصة مؤجّل موثّق |
-| 6. الرسائل والفوترة والتكاملات | قيد التنفيذ — حزمة 1 تقنية | outbox + أعلام فوترة + webhook sandbox | sandbox/replay/idempotency؛ checkout/SMS/WhatsApp ما زالت معطّلة |
+| 6. الرسائل والفوترة والتكاملات | مكتملة تقنياً | outbox + worker + محوّلات sandbox + قبول webhook | الميزات غير الجاهزة مغلقة صراحةً؛ لا ادعاء دفع حي |
 | 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
 | 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
 | 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
@@ -171,11 +171,18 @@
 - **Transactional outbox:** [`transactionalOutbox.js`](../transactionalOutbox.js) — JSONL مع `idempotencyKey`، حالات pending/delivered/dead، backoff عند الفشل. جسر [`email.js`](../email.js) عند `MAW3ED_EMAIL_MODE=outbox`؛ تأكيد الحجز يحمل رابط manage موقّع عند التوفر.
 - **Capability flags:** [`billingCapabilities.js`](../billingCapabilities.js) عبر `GET /api/integrations/capabilities` و`integrations` في `/api/config` — `hostedCheckout=false`، SMS/WhatsApp `not_wired`، Whop checkout يبقى 410.
 - **Webhook sandbox:** [`webhookSandbox.js`](../webhookSandbox.js) + `POST /api/webhooks/sandbox/:provider` — HMAC-SHA256 (`x-maw3ed-signature` / `x-signature`)، ledger idempotent، يُدرج صف outbox منقّح بلا أسرار.
-- **التحقق:** `npm run test:phase6-integrations` (وتبقى رحلات م5 خضراء عبر `test:phase5-journeys`).
-- **متبقٍ لإغلاق م6:** عامل تسليم يستنزف الـ outbox لمزود حقيقي؛ محوّلات webhook خاصة بالمزود؛ فتح checkout فقط بعد قبول sandbox. **لا تعلن** دفع أو رسائل متعددة القنوات جاهزة.
+
+### المرحلة 6 — الحزمة 2 (إغلاق): worker + محوّلات + قبول sandbox — 2026-10-27
+
+- **Delivery worker:** [`outboxDeliveryWorker.js`](../outboxDeliveryWorker.js) + `npm run outbox:worker` — معطّل افتراضياً (`MAW3ED_OUTBOX_WORKER=1` أو `--force`)؛ retries/backoff/dead-letter عبر outbox.
+- **Adapters:** [`providerAdapters.js`](../providerAdapters.js) — بريد sandbox (سجل محلي)؛ SMS/WhatsApp stubs ترفض `PROVIDER_DISABLED`.
+- **Provider webhooks:** [`providerWebhookAdapters.js`](../providerWebhookAdapters.js) لـ Whop/Stripe (تطبيع + إلزام amount/currency لأحداث الدفع) دون تفعيل اشتراك.
+- **قبول sandbox:** [`billingSandboxAcceptance.js`](../billingSandboxAcceptance.js) داخل `test:phase6-integrations` — يثبت العقد ويُبقي `hostedCheckout=false` وHTTP 410.
+- **إغلاق المرحلة 6:** `phase_6_closed=true`. **لا تعلن** Stripe live capture أو WhatsApp/SMS QR أو checkout مستضاف.
+- **التحقق:** `npm run test:phase6-integrations`.
 
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase6-integrations` و`npm run test:phase5-journeys`.
-2. الحزمة التالية للمرحلة 6: delivery worker و/أو محوّل مزود بعد قبول sandbox — checkout يبقى مغلقاً.
+1. شغّل `npm run test:phase6-integrations`.
+2. ابدأ المرحلة 7 من فرع المرحلة 6: أسرار / stubs رصد / runbook استعادة مع `ops:pg-backup`.
 3. على Sam-PC عند الحاجة: Postgres `5432` / `maw3ed`.
