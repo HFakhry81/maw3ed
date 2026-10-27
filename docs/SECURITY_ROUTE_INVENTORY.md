@@ -17,7 +17,7 @@
 
 | الطريقة والمسار | مستوى الدور المقصود بعد الحزمة الأولى |
 | --- | --- |
-| `GET /api/ops/bootstrap` | owner/admin/manager؛ رد المدير يحذف إعدادات الإشعارات والمالية ويلخص الإحصاءات دون قيم مالية |
+| `GET /api/ops/bootstrap` | owner/admin/manager؛ رد المدير يحذف إعدادات الإشعارات والمالية ويلخص الإحصاءات دون قيم مالية. **staff مربوط:** مسموح برد مُقشَّط لشاشة الحضور فقط (بدون عملاء/مالية). viewer مرفوض |
 | `GET,POST /api/ops/customers`; `POST /api/ops/customer-categories` | owner/admin/manager |
 | `GET,POST /api/ops/staff`; `PATCH,DELETE /api/ops/staff/:id` | owner/admin/manager |
 | `GET,POST /api/ops/staff/:id/(commission\|payroll\|reviews)` | manager+؛ الميزات تظل مغلقة في المجال |

@@ -60,6 +60,17 @@ import { StaffShiftsBoard } from "./StaffShiftsBoard.jsx";
 import { StaffDirectory } from "./StaffDirectory.jsx";
 import { ServicesDirectory } from "./ServicesDirectory.jsx";
 import { DepartmentDeskView } from "./DepartmentDeskView.jsx";
+import { ResourcesView } from "./ResourcesView.jsx";
+import { occupancyModeLabel, compositionLabel } from "./occupancyLabels.js";
+import {
+  canCreateAppointments,
+  canManageFinance,
+  canWriteCatalog,
+  defaultViewForRole,
+  filterNavItems,
+  membershipRoleLabel,
+  normalizeMembershipRole
+} from "./roleNav.js";
 
 const NAV = [
   { id: "overview", mark: "لوحة" },
@@ -69,6 +80,7 @@ const NAV = [
   { id: "staff", mark: "مو" },
   { id: "schedule", mark: "جد" },
   { id: "services", mark: "خد" },
+  { id: "resources", mark: "مورد" },
   { id: "bookingPage", mark: "حجز" },
   { id: "industry", mark: "قالب" },
   { id: "stats", mark: "إحص" },
@@ -80,6 +92,13 @@ const NAV = [
   { id: "account", mark: "حساب" },
   { id: "integrations", mark: "ربط", growth: true }
 ];
+
+function navLabel(item, locale) {
+  if (item.id === "industry") return "القوالب";
+  if (item.id === "bookingPage") return "المنشأة والحجز";
+  if (item.id === "resources") return "الموارد";
+  return t(locale, item.id);
+}
 
 const MOBILE_NAV = ["overview", "calendar", "customers", "services", "more"];
 
@@ -612,7 +631,7 @@ function StaffView({ ops, reload, locale, appointments, reloadAppointments, open
   );
 }
 
-function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
+function ServicesView({ ops, reload, locale, focusCategoryId = "", canWrite = true }) {
   const emptyForm = {
     name: "",
     categoryId: "",
@@ -629,7 +648,10 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
     autoComplete: true,
     active: true,
     color: "#3B82F6",
-    description: ""
+    description: "",
+    occupancyMode: "exclusive",
+    defaultCapacity: 1,
+    compositionDefault: "single"
   };
   const [categoryId, setCategoryId] = useState(focusCategoryId || "");
   const [open, setOpen] = useState(false);
@@ -660,6 +682,7 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
   const currency = currencyForLocale(locale);
 
   const openCreate = () => {
+    if (!canWrite) return;
     if (!categories.length) {
       window.alert("أضف فئة خدمة أولاً");
       return;
@@ -674,6 +697,7 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
     setOpen(true);
   };
   const openEdit = (service) => {
+    if (!canWrite) return;
     setEditingId(service.id);
     setForm({
       name: service.name || "",
@@ -691,7 +715,10 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
       autoComplete: Boolean(service.autoComplete),
       active: service.active !== false,
       color: service.color || "#3B82F6",
-      description: service.description || ""
+      description: service.description || "",
+      occupancyMode: service.occupancyMode || "exclusive",
+      defaultCapacity: Math.max(1, Number(service.defaultCapacity) || 1),
+      compositionDefault: service.compositionDefault || "single"
     });
     setOpen(true);
   };
@@ -758,12 +785,14 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
   };
   const submit = async (event) => {
     event.preventDefault();
+    if (!canWrite) return;
     const payload = {
       ...form,
       categoryId: form.categoryId || categoryId,
       price: toMoneyNumber(form.price),
       priceMin: toMoneyNumber(form.priceMin),
       priceMax: toMoneyNumber(form.priceMax),
+      defaultCapacity: Math.max(1, Number(form.defaultCapacity) || 1),
       providerIds: Array.isArray(form.providerIds) ? form.providerIds : (form.providerId ? [form.providerId] : [])
     };
     try {
@@ -782,15 +811,18 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
       <div className="ops-header">
         <div>
           <h1>{t(locale, "services")}</h1>
-          <p>فئة الخدمة ← الخدمة ← المقدم ← الإداري · جداول قابلة للترتيب</p>
+          <p>فئة الخدمة ← الخدمة ← المقدم ← الإداري · نمط الإشغال صريح على كل خدمة</p>
         </div>
-        <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
+        {canWrite ? (
+          <button className="primary-button" type="button" onClick={openCreate}>+ إضافة خدمة</button>
+        ) : null}
       </div>
       <div className="panel incomplete-logic-note" role="note">
-        <b>التسعير:</b>
+        <b>التسعير ونمط الإشغال:</b>
         <p>
           ثابت / مجاني فوري. النطاق يحجز بعربون = الحد الأدنى ثم يُثبَّت السعر النهائي من لوحة المواعيد.
           عند الطلب يحجز بلا مبلغ ثم يُرسل عرض سعر من الموظف. أرباح المنصة عبر اشتراك SaaS وليس عمولة على كل حجز.
+          نمط الإشغال (حصري / تأجير / سعة جلسة) يُضبط هنا ولا يُستنتج من قالب النشاط.
         </p>
       </div>
 
@@ -799,15 +831,16 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
         locale={locale}
         categoryId={categoryId}
         onCategoryChange={setCategoryId}
-        onOpenCreate={openCreate}
-        onOpenEdit={openEdit}
-        onToggleActive={toggleServiceActive}
-        onDelete={deleteServiceRow}
-        onOpenCategoryCreate={openCategoryCreate}
-        onOpenCategoryEdit={openCategoryEdit}
-        onToggleCategoryActive={toggleCategoryActive}
-        onDeleteCategory={deleteCategory}
+        onOpenCreate={canWrite ? openCreate : undefined}
+        onOpenEdit={canWrite ? openEdit : undefined}
+        onToggleActive={canWrite ? toggleServiceActive : undefined}
+        onDelete={canWrite ? deleteServiceRow : undefined}
+        onOpenCategoryCreate={canWrite ? openCategoryCreate : undefined}
+        onOpenCategoryEdit={canWrite ? openCategoryEdit : undefined}
+        onToggleCategoryActive={canWrite ? toggleCategoryActive : undefined}
+        onDeleteCategory={canWrite ? deleteCategory : undefined}
         reload={reload}
+        canWrite={canWrite}
       />
 
       <Drawer title={editingCategoryId ? "تعديل فئة" : "فئة جديدة"} open={categoryOpen} onClose={() => setCategoryOpen(false)}>
@@ -921,6 +954,42 @@ function ServicesView({ ops, reload, locale, focusCategoryId = "" }) {
             {" "}
             <b>{(Number(form.durationMinutes) || 0) + (Number(form.bufferMinutes) || 0)} دقيقة</b>
           </div>
+          <label>
+            نمط الإشغال
+            <select
+              value={form.occupancyMode || "exclusive"}
+              onChange={(e) => setForm({ ...form, occupancyMode: e.target.value })}
+              aria-describedby="occupancy-mode-hint"
+            >
+              <option value="exclusive">{occupancyModeLabel("exclusive", locale)}</option>
+              <option value="rental">{occupancyModeLabel("rental", locale)}</option>
+              <option value="session_capacity">{occupancyModeLabel("session_capacity", locale)}</option>
+            </select>
+          </label>
+          <p id="occupancy-mode-hint" className="muted" role="note">
+            لا يعلن اختيار «سعة جلسة» أو «تأجير» جاهزية منتج التعليم/الصالون — هذه سياسة حجز على الخدمة فقط.
+          </p>
+          {form.occupancyMode === "session_capacity" ? (
+            <label>
+              السعة الافتراضية (مقاعد)
+              <input
+                type="number"
+                min={1}
+                value={form.defaultCapacity}
+                onChange={(e) => setForm({ ...form, defaultCapacity: Number(e.target.value) })}
+              />
+            </label>
+          ) : null}
+          <label>
+            تركيب الحجز
+            <select
+              value={form.compositionDefault || "single"}
+              onChange={(e) => setForm({ ...form, compositionDefault: e.target.value })}
+            >
+              <option value="single">{compositionLabel("single", locale)}</option>
+              <option value="bundle">{compositionLabel("bundle", locale)}</option>
+            </select>
+          </label>
           <label>لون الخدمة
             <div className="color-swatches">
               {SERVICE_COLORS.map((color) => (
@@ -1103,30 +1172,54 @@ function IndustryTemplatesView({ ops, reload, locale }) {
       ? "\nهذا قالب فارغ: لن تُضاف فئات أو خدمات جاهزة."
       : `\nسيتم استبدال الفئات والخدمات بكتالوج «${template.displayName}».`;
     const confirmed = window.confirm(
-      `تأكيد اختيار «${template.displayName}»؟${emptyNote}\nبعد التأكيد لن يمكن تغيير نوع النشاط أو الوضع المرن.`
+      `تأكيد اختيار «${template.displayName}»؟${emptyNote}\nبعد التأكيد لن يمكن تغيير نوع النشاط من لوحة المنشأة.`
     );
     if (!confirmed) return;
     await api.put("/api/ops/activity-profile", { templateId: template.id, mode: template.mode, lock: true, locale });
     reload();
   };
+  if (locked) {
+    return (
+      <section className="ops-page" aria-labelledby="industry-locked-title">
+        <div className="ops-header">
+          <div>
+            <h1 id="industry-locked-title">قالب النشاط مقفول</h1>
+            <p>
+              القالب الحالي: <b>{activity.templateDisplayName || activity.templateId || activity.mode}</b>
+              {" "}— لا يظهر تبديل الصناعة داخل لوحة المنشأة بعد القفل.
+            </p>
+          </div>
+          <span className="locked-pill" aria-label="مقفل">مقفل</span>
+        </div>
+        <div className="panel" role="status">
+          <p>
+            فك القفل الاستثنائي لمسؤول المنصة فقط (تأكيد ثنائي + تدقيق + سبب). الخادم يرفض أي تغيير لـ
+            {" "}
+            <code>activityTemplateId</code>
+            {" "}بعد القفل.
+          </p>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className="ops-page">
       <div className="ops-header">
         <div>
           <h1>اختر الصناعة</h1>
-          <p>{locked ? `القالب الحالي مقفول: ${activity.templateDisplayName || activity.mode}` : "اختر قالباً جاهزاً ثم أكّد لقفل نوع النشاط"}</p>
+          <p>للمساحات القديمة غير المقفولة فقط — اختر قالباً ثم أكّد القفل. المساحات الجديدة تُقفل عند الإنشاء.</p>
         </div>
       </div>
       <div className="panel">
-        <input className="search-input" placeholder="بحث" value={query} onChange={(e) => setQuery(e.target.value)} disabled={locked} />
-        <div className="template-list">
+        <input className="search-input" placeholder="بحث" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="بحث القوالب" />
+        <div className="template-list" role="list">
           {filtered.map((template) => (
             <button
               key={template.id}
               type="button"
               className={activity.templateId === template.id ? "template-row on" : "template-row"}
-              disabled={locked}
               onClick={() => choose(template)}
+              role="listitem"
             >
               <b>{template.displayName}{template.empty ? " · فارغ" : ""}</b>
               <small>{template.description}</small>
@@ -1275,13 +1368,13 @@ function PlaceholderView({ title, body, locked = false }) {
   );
 }
 
-function AccountSettingsView({ locale, setLocale, role, setRole }) {
+function AccountSettingsView({ locale, setLocale, membershipRole, staffLink }) {
   return (
     <section className="ops-page">
       <div className="ops-header">
         <div>
           <h1>{t(locale, "account")}</h1>
-          <p>اللغة، الدور، الأمان، وكلمة المرور — بعيداً عن القائمة الجانبية</p>
+          <p>اللغة، دور العضوية في المساحة، الأمان — بعيداً عن القائمة الجانبية</p>
         </div>
       </div>
       <div className="split-panels">
@@ -1289,26 +1382,20 @@ function AccountSettingsView({ locale, setLocale, role, setRole }) {
           <h3>تفضيلات العرض</h3>
           <label className="locale-select">
             <span>اللغة</span>
-            <select value={locale} onChange={(e) => setLocale(e.target.value)}>
+            <select value={locale} onChange={(e) => setLocale(e.target.value)} aria-label="لغة الواجهة">
               {LOCALES.map((item) => (
                 <option key={item.code} value={item.code}>{item.label}</option>
               ))}
             </select>
           </label>
-          <label className="locale-select">
-            <span>الدور التجريبي</span>
-            <select
-              value={role}
-              onChange={(e) => {
-                setRole(e.target.value);
-                localStorage.setItem("maw3ed.role", e.target.value);
-              }}
-            >
-              <option value="owner">مدير عام</option>
-              <option value="reception">استقبال</option>
-              <option value="provider">مقدّم خدمة</option>
-            </select>
-          </label>
+          <div className="locale-select" role="status" aria-live="polite">
+            <span>دور العضوية في المساحة</span>
+            <b>{membershipRoleLabel(membershipRole, locale) || "—"}</b>
+            <small className="muted">
+              يُحدد من الخادم عبر عضوية المساحة (owner/admin/manager/staff/viewer) وليس من اختيار محلي.
+              {staffLink?.staffId ? ` · مربوط بملف موظف: ${staffLink.staffId}` : ""}
+            </small>
+          </div>
         </div>
         <div className="panel account-settings-panel">
           <h3>الحساب والأمان</h3>
@@ -1390,78 +1477,28 @@ function PreferencesView({ ops, reload, locale }) {
 }
 
 
-function ActivityProfileBar({ ops, reload, locale }) {
+function ActivityProfileBar({ ops, locale, membershipRole }) {
   const activity = ops?.activity || { mode: "medical", medicalDepartments: [] };
   const usage = ops?.planUsage;
   const locked = Boolean(activity.locked);
-
-  const setMode = async (mode) => {
-    if (locked) return;
-    if (mode === "flexible" || mode !== activity.mode) {
-      const confirmed = window.confirm(
-        "بعد التأكيد لن يمكن تغيير نوع النشاط (طبي / مرن). هل تريد المتابعة؟"
-      );
-      if (!confirmed) return;
-      await api.put("/api/ops/activity-profile", { mode, lock: true });
-    } else {
-      await api.put("/api/ops/activity-profile", { mode });
-    }
-    reload();
-  };
-
-  const toggleDepartment = async (departmentId) => {
-    if (locked) return;
-    const medicalDepartments = (activity.medicalDepartments || []).map((department) => (
-      department.id === departmentId ? { ...department, enabled: !department.enabled } : department
-    ));
-    await api.put("/api/ops/activity-profile", { mode: activity.mode, medicalDepartments });
-    reload();
-  };
+  const roleLabel = membershipRoleLabel(membershipRole, locale);
 
   return (
-    <section className="activity-panel panel">
+    <section className="activity-panel panel" aria-label="ملخص النشاط والصلاحية">
       <div className="activity-head">
         <div>
           <h2>نوع النشاط</h2>
           <p>
             {locked
               ? `مقفول · ${activity.templateDisplayName || (activity.mode === "medical" ? "طبي" : "مرن")}`
-              : activity.mode === "medical"
-                ? "قالب طبي للمستشفيات والعيادات"
-                : activity.flexibleHint || "وضع مرن قابل للتخصيص"}
+              : "مساحة قديمة غير مقفولة — استخدم شاشة القوالب مرة واحدة ثم أكّد القفل"}
           </p>
+          {roleLabel ? <small className="muted">صلاحيتك: {roleLabel}</small> : null}
         </div>
-        {!locked ? (
-          <div className="mode-switch" role="group" aria-label="activity-mode">
-            <button type="button" className={activity.mode === "medical" ? "active" : ""} onClick={() => setMode("medical")}>طبي</button>
-            <button type="button" className={activity.mode === "flexible" ? "active" : ""} onClick={() => setMode("flexible")}>مرن</button>
-          </div>
-        ) : (
-          <span className="locked-pill">مقفل</span>
-        )}
+        {locked ? <span className="locked-pill">مقفل</span> : <span className="status-soft">بانتظار القفل</span>}
       </div>
-      {activity.mode === "medical" && !locked && (
-        <div className="department-strip" aria-label="medical-departments">
-          <div className="strip-title">الأقسام التي يخدمها النظام ({(activity.medicalDepartments || []).filter((d) => d.enabled !== false).length}/15)</div>
-          <div className="department-chips">
-            {(activity.medicalDepartments || []).map((department) => (
-              <button
-                key={department.id}
-                type="button"
-                className={department.enabled === false ? "dept-chip off" : "dept-chip"}
-                onClick={() => toggleDepartment(department.id)}
-              >
-                {department.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {activity.mode === "flexible" && (
-        <p className="flexible-note">الحقول والخدمات قابلة للتخصيص لأي نشاط: شركات، تدريب، صالونات، استشارات، أو مؤسسات خدمية.</p>
-      )}
       {ops?.planUsage?.limitsEnforced === true && usage?.warnings?.length > 0 && (
-        <div className="plan-warning">
+        <div className="plan-warning" role="status">
           اقتربت من حدود الخطة المجانية:
           {" "}
           {usage.warnings.map((item) => `${item.key} ${item.used}/${item.limit}`).join(" · ")}
@@ -1479,7 +1516,6 @@ function App() {
   const [openStaffSection, setOpenStaffSection] = useState("history");
   const [servicesFocusCategoryId, setServicesFocusCategoryId] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
-  const [role, setRole] = useState(localStorage.getItem("maw3ed.role") || "owner");
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const stored = Number(localStorage.getItem("maw3ed.sidebarWidth"));
     return Number.isFinite(stored) && stored >= 260 && stored <= 420 ? stored : 304;
@@ -1493,6 +1529,24 @@ function App() {
     const stored = localStorage.getItem(WORKSPACE_STORAGE_KEY) || api.workspaceId || "";
     return isLocalOrEmptyWorkspaceId(stored) ? "" : stored;
   });
+  const membershipRole = useMemo(() => {
+    const fromBootstrap = normalizeMembershipRole(ops?.workspaceRole);
+    if (fromBootstrap) return fromBootstrap;
+    const activeId = isLocalOrEmptyWorkspaceId(workspaceId)
+      ? ""
+      : workspaceId || api.workspaceId || "";
+    const match = (workspaces || []).find((ws) => ws.id === activeId);
+    return normalizeMembershipRole(match?.role || match?.member_role) || "";
+  }, [ops?.workspaceRole, workspaces, workspaceId]);
+  const staffLinked = Boolean(ops?.staffLink?.staffId && ops?.staffLink?.status === "active");
+  const activityLocked = Boolean(ops?.activity?.locked);
+  const visibleNav = useMemo(
+    () => filterNavItems(NAV, membershipRole, { activityLocked, staffLinked }),
+    [membershipRole, activityLocked, staffLinked]
+  );
+  const writeCatalog = canWriteCatalog(membershipRole);
+  const writeFinance = canManageFinance(membershipRole);
+  const writeAppointments = canCreateAppointments(membershipRole);
 
   useEffect(() => {
     applyDocumentLocale(locale);
@@ -1557,17 +1611,30 @@ function App() {
   }, [workspaceId, reload]);
 
   useEffect(() => {
+    // Legacy unlocked workspaces only: one-shot nudge to lock. New creates lock at onboarding.
     if (ops && !ops.activity?.locked && !localStorage.getItem("maw3ed.industrySeen")) {
-      setView("industry");
-      localStorage.setItem("maw3ed.industrySeen", "1");
+      if (!membershipRole || membershipRole === "owner" || membershipRole === "admin") {
+        setView("industry");
+        localStorage.setItem("maw3ed.industrySeen", "1");
+      }
     }
-  }, [ops]);
+  }, [ops, membershipRole]);
+
+  useEffect(() => {
+    if (!ops) return;
+    const allowed = new Set(visibleNav.map((item) => item.id));
+    if (!allowed.has(view)) {
+      setView(defaultViewForRole(membershipRole, { staffLinked, activityLocked }));
+    }
+  }, [ops, visibleNav, view, membershipRole, staffLinked, activityLocked]);
 
   const navigate = (id) => {
     if (id === "more") {
       setMoreOpen((value) => !value);
       return;
     }
+    const allowed = visibleNav.some((item) => item.id === id) || id === "account";
+    if (!allowed) return;
     if (id !== "staff") {
       setOpenStaffId("");
       setOpenStaffSection("history");
@@ -1616,11 +1683,16 @@ function App() {
     const name = window.prompt("اسم مساحة العمل الجديدة");
     if (!name) return;
     const activityType = ops?.activity?.templateId || "custom";
+    const lockOk = window.confirm(
+      "سيتم قفل نوع النشاط بعد الإنشاء ولن يمكن تغييره من لوحة المنشأة. هل تريد المتابعة؟"
+    );
+    if (!lockOk) return;
     try {
       const result = await api.post("/api/workspaces", {
         name,
         slug: name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || `ws-${Date.now()}`,
-        activityType
+        activityType,
+        lockActivity: true
       });
       const id = result.workspace?.id;
       if (id) switchWorkspace(id);
@@ -1635,9 +1707,35 @@ function App() {
   const planLocked = ops?.planUsage?.limitsEnforced === true;
   const content = (() => {
     if (!ops && isPending) return <div className="loading-state">{t(locale, "loading")}</div>;
+    if (membershipRole === "viewer") {
+      return (
+        <PlaceholderView
+          title="عرض فقط"
+          body="دور viewer يقتصر على قراءة جدول العمل وإعدادات الحساب. لا يُعرض كتالوج العملاء أو الحجوزات أو المالية."
+          locked={false}
+        />
+      );
+    }
+    if (membershipRole === "staff" && !staffLinked) {
+      return (
+        <PlaceholderView
+          title="ربط الموظف مطلوب"
+          body="حساب staff بلا ربط نشط بملف موظف في هذه المساحة — شاشة الحضور مغلقة حتى يربط المالك الحساب."
+          locked={false}
+        />
+      );
+    }
     switch (view) {
       case "overview": return <OverviewView ops={ops} appointments={appointments} locale={locale} onNavigate={navigate} />;
-      case "calendar": return <CalendarViewProxy appointments={appointments} ops={ops} locale={locale} onCreated={() => { reloadAppointments(); reload(); }} />;
+      case "calendar": return (
+        <CalendarViewProxy
+          appointments={appointments}
+          ops={ops}
+          locale={locale}
+          canCreate={writeAppointments}
+          onCreated={() => { reloadAppointments(); reload(); }}
+        />
+      );
       case "desk": return <DepartmentDeskView ops={ops} locale={locale} reloadAppointments={reloadAppointments} />;
       case "customers": return <CustomersView ops={ops} reload={reload} locale={locale} />;
       case "staff": return (
@@ -1660,19 +1758,42 @@ function App() {
           reload={reload}
           locale={locale}
           focusCategoryId={servicesFocusCategoryId}
+          canWrite={writeCatalog}
+        />
+      );
+      case "resources": return (
+        <ResourcesView
+          ops={ops}
+          reload={reload}
+          locale={locale}
+          canWrite={writeCatalog}
+          Drawer={Drawer}
         />
       );
       case "schedule": return <ScheduleView ops={ops} reload={reload} locale={locale} />;
       case "bookingPage": return <BookingPageView ops={ops} reload={reload} locale={locale} />;
       case "industry": return <IndustryTemplatesView ops={ops} reload={reload} locale={locale} />;
-      case "stats": return role === "reception" ? <PlaceholderView title={t(locale, "stats")} body="التقارير المالية للمدير العام فقط — صلاحيات الاستقبال محدودة" locked={false} /> : <StatsView ops={ops} locale={locale} />;
-      case "expenses": return role === "provider" ? <PlaceholderView title={t(locale, "expenses")} body="المصروفات ظاهرة للمدير فقط في هذه المرحلة" locked={false} /> : <ExpensesView ops={ops} reload={reload} locale={locale} />;
-      case "notifications": return <NotificationsView ops={ops} reload={reload} locale={locale} />;
+      case "stats": return writeFinance
+        ? <StatsView ops={ops} locale={locale} />
+        : <PlaceholderView title={t(locale, "stats")} body="التقارير المالية للمالك والمسؤول فقط." locked={false} />;
+      case "expenses": return writeFinance
+        ? <ExpensesView ops={ops} reload={reload} locale={locale} />
+        : <PlaceholderView title={t(locale, "expenses")} body="المصروفات للمالك والمسؤول فقط." locked={false} />;
+      case "notifications": return writeFinance
+        ? <NotificationsView ops={ops} reload={reload} locale={locale} />
+        : <PlaceholderView title={t(locale, "notifications")} body="إعدادات التنبيهات للمالك والمسؤول فقط." locked={false} />;
       case "preferences": return <PreferencesView ops={ops} reload={reload} locale={locale} />;
-      case "account": return <AccountSettingsView locale={locale} setLocale={setLocale} role={role} setRole={setRole} />;
-      case "payments": return <PlaceholderView title={t(locale, "payments")} body="بوابة الدفع الإلكتروني (Stripe)" locked={planLocked} />;
-      case "marketing": return <PlaceholderView title={t(locale, "marketing")} body="الخصومات والولاء" locked={planLocked} />;
-      case "integrations": return <PlaceholderView title={t(locale, "integrations")} body="Google Calendar و Stripe" locked={planLocked} />;
+      case "account": return (
+        <AccountSettingsView
+          locale={locale}
+          setLocale={setLocale}
+          membershipRole={membershipRole}
+          staffLink={ops?.staffLink}
+        />
+      );
+      case "payments": return <PlaceholderView title={t(locale, "payments")} body="بوابة الدفع الإلكتروني (Stripe) — غير موصولة بعد" locked={planLocked} />;
+      case "marketing": return <PlaceholderView title={t(locale, "marketing")} body="الخصومات والولاء — مرحلة لاحقة" locked={planLocked} />;
+      case "integrations": return <PlaceholderView title={t(locale, "integrations")} body="Google Calendar و Stripe — غير جاهزة" locked={planLocked} />;
       default: return <OverviewView ops={ops} appointments={appointments} locale={locale} onNavigate={navigate} />;
     }
   })();
@@ -1703,11 +1824,11 @@ function App() {
             </div>
           )}
         </div>
-        <nav className="ops-nav">
-          {NAV.map((item) => (
+        <nav className="ops-nav" aria-label="تشغيل المنشأة">
+          {visibleNav.map((item) => (
             <button key={item.id} type="button" className={view === item.id ? "nav-item active" : "nav-item"} onClick={() => navigate(item.id)}>
               <span className="nav-ico" aria-hidden="true">{item.mark}</span>
-              <span>{item.id === "industry" ? "القوالب" : item.id === "bookingPage" ? "المنشأة والحجز" : t(locale, item.id)}</span>
+              <span>{navLabel(item, locale)}</span>
               {item.badge && <i className="new-badge">{item.badge}</i>}
               {item.growth && planLocked && <i className="lock-dot" title="Growth" />}
             </button>
@@ -1730,8 +1851,8 @@ function App() {
         }}
       />
       <main className="ops-main">
-        <ActivityProfileBar ops={ops} reload={reload} locale={locale} />
-        {error && <div className="error-banner">{error}<button type="button" onClick={reload}>إعادة</button></div>}
+        <ActivityProfileBar ops={ops} locale={locale} membershipRole={membershipRole} />
+        {error && <div className="error-banner" role="alert">{error}<button type="button" onClick={reload}>إعادة</button></div>}
         <ModuleBoundary key={view}>
           <Suspense fallback={<div className="loading-state">{t(locale, "loading")}</div>}>{content}</Suspense>
         </ModuleBoundary>
@@ -1741,11 +1862,16 @@ function App() {
         </footer>
         <KeyboardSpacer className="ops-keyboard-spacer" />
       </main>
-      <nav className="mobile-bottom-nav" aria-label="mobile">
-        {MOBILE_NAV.map((id) => (
+      <nav className="mobile-bottom-nav" aria-label="التنقل للجوال">
+        {(membershipRole === "staff"
+          ? ["desk", "account", "more"]
+          : membershipRole === "viewer"
+            ? ["account", "schedule", "more"]
+            : MOBILE_NAV
+        ).map((id) => (
           <button key={id} type="button" className={(id === "more" ? moreOpen : view === id) ? "active" : ""} onClick={() => navigate(id)}>
-            <span>{id === "more" ? "•••" : NAV.find((item) => item.id === id)?.mark}</span>
-            <small>{id === "more" ? "المزيد" : t(locale, id)}</small>
+            <span>{id === "more" ? "•••" : NAV.find((item) => item.id === id)?.mark || "·"}</span>
+            <small>{id === "more" ? "المزيد" : navLabel(NAV.find((item) => item.id === id) || { id }, locale)}</small>
           </button>
         ))}
       </nav>
@@ -1760,9 +1886,9 @@ function App() {
               <small>{ops?.activity?.templateDisplayName || "مساحة عمل"}</small>
             </div>
           </div>
-          {NAV.filter((item) => !MOBILE_NAV.includes(item.id)).map((item) => (
+          {visibleNav.filter((item) => !MOBILE_NAV.includes(item.id)).map((item) => (
             <button key={item.id} type="button" onClick={() => navigate(item.id)}>
-              {item.id === "industry" ? "القوالب" : item.id === "bookingPage" ? "المنشأة والحجز" : t(locale, item.id)}
+              {navLabel(item, locale)}
             </button>
           ))}
           <button type="button" onClick={() => navigate("account")}>{t(locale, "account")}</button>

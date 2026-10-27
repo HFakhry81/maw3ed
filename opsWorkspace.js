@@ -310,7 +310,7 @@ async function resolveWorkspaceIdBySlugAsync(slug, defaultStoreFactory = null) {
   return resolveWorkspaceIdBySlug(clean);
 }
 
-function seedWorkspace(workspaceId, { slug, businessName, activityType, locale } = {}, defaultStoreFactory) {
+function seedWorkspace(workspaceId, { slug, businessName, activityType, locale, lockActivity } = {}, defaultStoreFactory) {
   const id = sanitizeWorkspaceId(workspaceId);
   cache.delete(id);
   const data = defaultStoreFactory();
@@ -323,7 +323,8 @@ function seedWorkspace(workspaceId, { slug, businessName, activityType, locale }
   const resolvedType = activityTemplates.resolveTemplateId(activityType || "medical");
   const lang = activityTemplates.normalizeLocale(locale || "ar");
   activityTemplates.applyTemplateToStoreData(data, resolvedType, lang, { replaceStaff: true });
-  data.activityModeLocked = false;
+  // Phase 5: workspace create locks the chosen template; tooling/demo may pass lockActivity:false.
+  data.activityModeLocked = lockActivity === true;
   if (data.bookingPage) {
     data.bookingPage.locale = lang;
     if (businessName) data.bookingPage.businessName = businessName;

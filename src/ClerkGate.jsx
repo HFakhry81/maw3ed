@@ -379,6 +379,7 @@ export function WorkspaceOnboarding({ onCreated }) {
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [activityType, setActivityType] = useState("medical");
+  const [lockAck, setLockAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [slugConflict, setSlugConflict] = useState(null);
@@ -430,6 +431,10 @@ export function WorkspaceOnboarding({ onCreated }) {
   const submit = async (event, options = {}) => {
     event?.preventDefault?.();
     if (busy) return;
+    if (!lockAck) {
+      setError("يجب تأكيد أن نوع النشاط سيُقفل بعد الإنشاء ولا يمكن تغييره من لوحة المنشأة.");
+      return;
+    }
     setBusy(true);
     setError("");
     if (!options.keepConflict) setSlugConflict(null);
@@ -447,6 +452,7 @@ export function WorkspaceOnboarding({ onCreated }) {
         name: name.trim(),
         slug: nextSlug,
         activityType,
+        lockActivity: true,
         acceptSuggestedSlug: Boolean(options.acceptSuggestedSlug)
       });
       const id = result.workspace?.id;
@@ -554,7 +560,13 @@ export function WorkspaceOnboarding({ onCreated }) {
         )}
         <label>
           نوع النشاط
-          <select id="workspace-activity" name="activityType" value={activityType} onChange={(e) => setActivityType(e.target.value)}>
+          <select
+            id="workspace-activity"
+            name="activityType"
+            value={activityType}
+            onChange={(e) => setActivityType(e.target.value)}
+            aria-describedby="activity-lock-hint"
+          >
             <option value="medical">مركز طبي</option>
             <option value="clinic">عيادة</option>
             <option value="dentist">طبيب أسنان</option>
@@ -575,9 +587,22 @@ export function WorkspaceOnboarding({ onCreated }) {
             <option value="other">نشاط مخصص (فارغ)</option>
           </select>
         </label>
-        {error && <div className="error-banner">{error}</div>}
-        <button className="primary-button auth-cta" type="submit" disabled={busy}>
-          {busy ? "جارٍ الإنشاء…" : "إنشاء مساحة العمل"}
+        <p id="activity-lock-hint" className="slug-hint" role="note">
+          القالب يهيّئ المصطلحات والكتالوج الأولي فقط. سياسة الحجز والسعة تُضبط لاحقاً على كل خدمة عبر نمط الإشغال — ولا يُعلن التعليم أو الصالون أو التأجير جاهزاً للإنتاج لمجرد اختيار القالب.
+        </p>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={lockAck}
+            onChange={(e) => setLockAck(e.target.checked)}
+            required
+            aria-required="true"
+          />
+          أؤكّد أن نوع النشاط سيُقفل بعد الإنشاء ولن يظهر تبديل القالب داخل لوحة المنشأة.
+        </label>
+        {error && <div className="error-banner" role="alert">{error}</div>}
+        <button className="primary-button auth-cta" type="submit" disabled={busy || !lockAck}>
+          {busy ? "جارٍ الإنشاء…" : "إنشاء مساحة العمل وقفل القالب"}
         </button>
         <KeyboardSpacer />
       </form>

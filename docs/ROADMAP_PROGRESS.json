@@ -11,11 +11,12 @@
   ],
   "resume_pointer": {
     "phase": 5,
-    "package": "product-journeys-not-started",
+    "package": "journeys-core-done-remaining-signed-cancel-pagination-session-public",
     "next_steps": [
-      "Start Phase 5 on a follow-up PR (PR #6 already carries Phase 2–4): onboarding/catalog/booking/desk journeys per IMPLEMENTATION_ROADMAP",
-      "Do not claim education/salon/rental UI production-ready — capacity engine is ready; vertical product UI is Phase 5+",
-      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate && npm run test:phase4-capacity"
+      "Remaining Phase 5: client signed cancel/reschedule links; list pagination; public session_capacity enrollment journey; broader a11y pass",
+      "Or start Phase 6 (messaging/billing) if owner defers remaining Phase 5 items",
+      "Do not claim education/salon/rental UI production-ready — capacity engine + occupancy fields only",
+      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate && npm run test:phase5-journeys && npm run test:phase4-capacity"
     ]
   },
   "open_product_gates": [],
@@ -151,9 +152,34 @@
         "Session series management UI/API polish",
         "Vertical template occupancy defaults (still no production-ready claim for education/salon/rental)"
       ],
-      "notes": "Phase 4 acceptance gate met for generic capacity engine. Do not claim education/salon/rental production-ready. Product journeys = Phase 5 on a follow-up PR."
+      "notes": "Phase 4 acceptance gate met for generic capacity engine. Do not claim education/salon/rental production-ready. Product journeys = Phase 5."
     },
-    { "id": 5, "name_ar": "الرحلات والواجهة", "status": "not_started" },
+    {
+      "id": 5,
+      "name_ar": "الرحلات والواجهة",
+      "status": "in_progress",
+      "started_at": "2026-10-27",
+      "packages": [
+        {
+          "id": "journeys-core-onboarding-catalog-roles-public",
+          "status": "complete_technical",
+          "summary": "Template lock at workspace create + hide industry switch when locked; services occupancyMode/capacity/composition UI; thin ResourcesView; membership-role nav (owner/admin/manager/staff/viewer); linked-staff stripped bootstrap for desk; public book.html occupancy hints + RTL; calendar occupancy note. No Stripe/SMS/WhatsApp; no vertical production claim.",
+          "evidence_commands": [
+            "npm run test:phase5-journeys",
+            "npm run test:ops-rbac",
+            "npm run test:staff-links"
+          ]
+        }
+      ],
+      "remaining_to_close": [
+        "Client signed cancel/reschedule links (age/use limited)",
+        "List pagination/filter/limits for customers/appointments",
+        "Public session_capacity enrollment journey (beyond occupancy label)",
+        "Broader WCAG 2.2 AA pass on touched journeys",
+        "Platform-admin exceptional unlock (dual confirm + audit + reason) UI"
+      ],
+      "notes": "phase_5_closed is false. Next is finish remaining Phase 5 items or Phase 6 messaging/billing per owner."
+    },
     { "id": 6, "name_ar": "الرسائل والفوترة والتكاملات", "status": "not_started" },
     { "id": 7, "name_ar": "التشغيل والخصوصية والاستعادة", "status": "not_started" },
     { "id": 8, "name_ar": "قبول ما قبل الإطلاق", "status": "not_started" },
@@ -193,6 +219,9 @@
     "phase_4_started": true,
     "phase_4_capacity_core_package1": true,
     "phase_4_http_autoallocate_isolation": true,
-    "phase_4_closed": true
+    "phase_4_closed": true,
+    "phase_5_started": true,
+    "phase_5_journeys_core": true,
+    "phase_5_closed": false
   }
 }

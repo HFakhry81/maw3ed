@@ -4,6 +4,7 @@ import { t } from "./i18n";
 import { SmartTimePicker } from "./SmartTimePicker.jsx";
 import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 import { toMinutes, isOvernightShift } from "./shiftHours.js";
+import { occupancyModeLabel } from "./occupancyLabels.js";
 
 function startOfWeek(date) {
   const value = new Date(date);
@@ -22,7 +23,7 @@ function addDays(date, count) {
   return value;
 }
 
-export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
+export function CalendarView({ appointments, ops, onCreated, locale, Drawer, canCreate = true }) {
   const [open, setOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const staff = ops?.staff || [];
@@ -139,7 +140,9 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
           <button className="secondary-button" type="button" onClick={() => setWeekStart((current) => addDays(current, -7))}>السابق</button>
           <button className="secondary-button" type="button" onClick={() => setWeekStart(startOfWeek(new Date()))}>اليوم</button>
           <button className="secondary-button" type="button" onClick={() => setWeekStart((current) => addDays(current, 7))}>التالي</button>
-          <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ {t(locale, "createAppointment")}</button>
+          {canCreate ? (
+            <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ {t(locale, "createAppointment")}</button>
+          ) : null}
         </div>
       </div>
       <div className="week-range panel">{formatDate(weekStart)} — {formatDate(addDays(weekStart, 6))} · {weekAppointments.length} مواعيد</div>
@@ -163,6 +166,7 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
                     className="week-cell"
                     key={`${date}-${hour}`}
                     onDoubleClick={() => {
+                      if (!canCreate) return;
                       setForm((current) => ({ ...current, date, time: hour }));
                       setOpen(true);
                     }}
@@ -216,9 +220,21 @@ export function CalendarView({ appointments, ops, onCreated, locale, Drawer }) {
             {services.map((service) => (
               <option key={service.id} value={service.id}>
                 {service.name} · {service.durationMinutes}د · حجز {(Number(service.durationMinutes) || 0) + (Number(service.bufferMinutes) || 0)}د
+                {service.occupancyMode && service.occupancyMode !== "exclusive" ? ` · ${occupancyModeLabel(service.occupancyMode, locale)}` : ""}
               </option>
             ))}
           </select></label>
+          {selectedService?.occupancyMode && selectedService.occupancyMode !== "exclusive" ? (
+            <p className="muted" role="note">
+              نمط الإشغال: {occupancyModeLabel(selectedService.occupancyMode, locale)}
+              {selectedService.occupancyMode === "session_capacity"
+                ? ` · سعة ${selectedService.defaultCapacity || 1}`
+                : ""}
+              {selectedService.occupancyMode === "rental"
+                ? " · يُخصَّص مورد تلقائياً عند الإنشاء إن وُجد متطلب"
+                : ""}
+            </p>
+          ) : null}
           <label>الموظف<select required value={form.staffId} onChange={(e) => setForm({ ...form, staffId: e.target.value })}>
             {!staffForService.length && <option value="">عيّن مقدماً للخدمة أولاً</option>}
             {staffForService.map((person) => <option key={person.id} value={person.id}>{person.name} — {person.title}</option>)}
