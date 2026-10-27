@@ -10,11 +10,11 @@
     "docs/STAFF_ACCOUNT_LINKS.md"
   ],
   "resume_pointer": {
-    "phase": 4,
-    "package": "capacity-core-package1-landed",
+    "phase": 5,
+    "package": "product-journeys-not-started",
     "next_steps": [
-      "Phase 4 remaining (before Phase 5): ops/HTTP routes for resources+enrollments; wire exclusive/rental auto-allocate on appointment create; cross-workspace isolation smokes for resources/enrollments; optional PG concurrent enrollment stress under advisory lock",
-      "Do not claim education/salon/rental UI production-ready — generic capacity core only",
+      "Start Phase 5 on a follow-up PR (PR #6 already carries Phase 2–4): onboarding/catalog/booking/desk journeys per IMPLEMENTATION_ROADMAP",
+      "Do not claim education/salon/rental UI production-ready — capacity engine is ready; vertical product UI is Phase 5+",
       "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate && npm run test:phase4-capacity"
     ]
   },
@@ -120,28 +120,38 @@
     {
       "id": 4,
       "name_ar": "الموارد وامتدادات الخدمات",
-      "status": "in_progress",
+      "status": "complete_technical",
       "started_at": "2026-10-27",
+      "closed_at": "2026-10-27",
       "packages": [
         {
           "id": "capacity-core-resources-sessions",
           "status": "complete_technical",
-          "summary": "Generic occupancy core: resources (room/chair/device/table) + occupancy_mode exclusive|rental|session_capacity + composition single|bundle; service↔resource requirements; session occurrences/enrollments/attendance; resource allocations; physical seat cap enforced (never inferred from activity_mode). Migration 014 + JSON opsStore + workspaceOpsPg load/save + ops-pg-backup table list.",
+          "summary": "Generic occupancy core: resources + occupancy_mode exclusive|rental|session_capacity + composition single|bundle; requirements; occurrences/enrollments/attendance; allocations; physical seat cap enforced. Migration 014 + JSON/PG + backup tables.",
           "evidence_commands": [
             "npm run test:capacity-modes",
-            "npm run test:capacity-pg",
+            "npm run test:capacity-pg"
+          ]
+        },
+        {
+          "id": "capacity-http-autoallocate-isolation",
+          "status": "complete_technical",
+          "summary": "Ops HTTP for resources/requirements/occurrences/enrollments/attendance/bundle; exclusive/rental auto-allocate on appointment create (+ cancel releases); cross-workspace store + HTTP BOLA isolation smokes.",
+          "evidence_commands": [
+            "npm run test:capacity-http",
+            "npm run test:capacity-isolation",
             "npm run test:phase4-capacity"
           ],
           "owner_machine_note": "Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate && npm run test:phase4-capacity"
         }
       ],
-      "remaining_to_close": [
-        "HTTP/ops routes for capacity CRUD + enroll",
-        "Auto-allocate resources on exclusive/rental appointment create",
-        "Cross-workspace isolation acceptance for resources/enrollments",
-        "Optional: PG concurrent enrollment stress; series management; vertical template defaults (still no production-ready claim)"
+      "remaining_to_close": [],
+      "deferred_non_blocking": [
+        "Optional PG concurrent enrollment stress under advisory lock",
+        "Session series management UI/API polish",
+        "Vertical template occupancy defaults (still no production-ready claim for education/salon/rental)"
       ],
-      "notes": "Do not claim education/salon/rental production-ready in UI. Phase 5 product journeys wait until remaining Phase 4 gates close or are explicitly deferred."
+      "notes": "Phase 4 acceptance gate met for generic capacity engine. Do not claim education/salon/rental production-ready. Product journeys = Phase 5 on a follow-up PR."
     },
     { "id": 5, "name_ar": "الرحلات والواجهة", "status": "not_started" },
     { "id": 6, "name_ar": "الرسائل والفوترة والتكاملات", "status": "not_started" },
@@ -182,6 +192,7 @@
     "phase_3_closed": true,
     "phase_4_started": true,
     "phase_4_capacity_core_package1": true,
-    "phase_4_closed": false
+    "phase_4_http_autoallocate_isolation": true,
+    "phase_4_closed": true
   }
 }

@@ -51,7 +51,9 @@ npm run test:atomic-booking-pg      # تماثل PG (يتخطى بلا DATABASE_
 npm run test:phase3-booking         # JSON + timezone + PG
 npm run test:capacity-modes         # المرحلة 4 — exclusive/rental/session_capacity/bundle (JSON)
 npm run test:capacity-pg            # مرحلة 4 — migrate 014 + round-trip (يتخطى بلا DATABASE_URL)
-npm run test:phase4-capacity        # JSON + PG لسعة الموارد
+npm run test:capacity-http          # مرحلة 4 — ops HTTP + auto-allocate exclusive/rental
+npm run test:capacity-isolation     # مرحلة 4 — عزل موارد/تسجيلات عبر المساحات
+npm run test:phase4-capacity        # modes + PG + HTTP + isolation
 ```
 
 ## قائمة Windows التفاعلية

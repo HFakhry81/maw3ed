@@ -1228,6 +1228,15 @@ function listResources(query = {}) {
   return capacityOps.listResources(store, query);
 }
 
+function updateResource(id, payload) {
+  return withCapacityMutation((data) => capacityOps.updateResource(data, id, payload));
+}
+
+function listSessionOccurrences(query = {}) {
+  capacityOps.ensureCapacityCollections(store);
+  return capacityOps.listSessionOccurrences(store, query);
+}
+
 function requireServiceResource(payload) {
   return withCapacityMutation((data) => capacityOps.requireServiceResource(data, payload));
 }
@@ -1789,6 +1798,10 @@ function updateAppointmentStatus(id, status) {
   if ((normalized === "cancelled" || normalized === "no_show") && !appointment.completedAt && normalized === "no_show") {
     appointment.completedAt = appointment.updatedAt;
   }
+  if (normalized === "cancelled") {
+    capacityOps.ensureCapacityCollections(store);
+    capacityOps.releaseAllocationsForBooking(store, appointment.id);
+  }
   persist();
   return appointment;
 }
@@ -1897,6 +1910,23 @@ function createAppointment(payload) {
   });
   if (collision) fail("هذا الموظف محجوز في نفس الوقت", 409);
 
+  // Phase 4: auto-allocate exclusive/rental resources when required or requested.
+  // session_capacity uses enrollments, not exclusive resource allocation on create.
+  capacityOps.ensureCapacityCollections(store);
+  const occupancyIso = capacityOps.appointmentOccupancyIso(interval);
+  let bookingResource = null;
+  if (service) {
+    const occupancy = capacityEngine.normalizeOccupancyMode(service.occupancyMode, "exclusive");
+    if (occupancy === "exclusive" || occupancy === "rental") {
+      bookingResource = capacityOps.resolveBookingResource(store, {
+        service,
+        resourceId: payload.resourceId || null,
+        startsAt: occupancyIso.startsAt,
+        endsAt: occupancyIso.endsAt
+      });
+    }
+  }
+
   let customer = null;
   if (phone) {
     customer = store.customers.find((item) => String(item.phone || "").replace(/\s+/g, "") === phone.replace(/\s+/g, ""));
@@ -1959,13 +1989,31 @@ function createAppointment(payload) {
     createdAt: new Date().toISOString()
   };
   if (idempotencyKey) appointment.idempotencyKey = idempotencyKey;
+  if (bookingResource) appointment.resourceId = bookingResource.id;
   // Re-check idempotency after building customer (another waiter may have committed).
   if (idempotencyKey) {
     const raced = bookingAtomic.findAppointmentByIdempotencyKey(store.appointments, idempotencyKey);
     if (raced) return raced;
   }
   store.appointments.push(appointment);
-  persist();
+  try {
+    if (bookingResource) {
+      capacityOps.allocateResourceForBooking(store, {
+        resourceId: bookingResource.id,
+        serviceId: service?.id || null,
+        bookingId: appointment.id,
+        startsAt: occupancyIso.startsAt,
+        endsAt: occupancyIso.endsAt,
+        occupancyMode: service?.occupancyMode
+      });
+    }
+    persist();
+  } catch (error) {
+    store.appointments = store.appointments.filter((item) => item.id !== appointment.id);
+    capacityOps.releaseAllocationsForBooking(store, appointment.id);
+    persist();
+    throw error;
+  }
   return appointment;
 }
 
@@ -2521,6 +2569,8 @@ module.exports = {
   appointmentBlockMinutes,
   createResource,
   listResources,
+  updateResource,
+  listSessionOccurrences,
   requireServiceResource,
   createSessionOccurrence,
   enrollInOccurrence,

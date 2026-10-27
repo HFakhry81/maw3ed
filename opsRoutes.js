@@ -51,7 +51,13 @@ const OPS_KNOWN_REQUESTS = new Set([
   "GET /api/ops/events",
   "GET /api/ops/contexts",
   "GET /api/ops/staff-link",
-  "GET /api/ops/staff-links"
+  "GET /api/ops/staff-links",
+  "GET /api/ops/resources",
+  "POST /api/ops/resources",
+  "POST /api/ops/service-resource-requirements",
+  "GET /api/ops/session-occurrences",
+  "POST /api/ops/session-occurrences",
+  "POST /api/ops/resource-allocations/bundle"
 ]);
 
 function recordOpsEvent(workspaceId, event) {
@@ -73,7 +79,12 @@ function isKnownOpsRequest(requested, method) {
     /^\/api\/ops\/desk\/appointments\/[^/]+\/addons$/.test(requested) && method === "POST" ||
     /^\/api\/ops\/desk\/appointments\/[^/]+\/lines\/[^/]+\/pricing$/.test(requested) && method === "PATCH" ||
     /^\/api\/ops\/desk\/appointments\/[^/]+\/complete$/.test(requested) && method === "POST" ||
-    /^\/api\/ops\/appointments\/[^/]+\/(?:status|pricing)$/.test(requested) && method === "PATCH";
+    /^\/api\/ops\/appointments\/[^/]+\/(?:status|pricing)$/.test(requested) && method === "PATCH" ||
+    /^\/api\/ops\/resources\/[^/]+$/.test(requested) && method === "PATCH" ||
+    /^\/api\/ops\/session-occurrences\/[^/]+\/availability$/.test(requested) && method === "GET" ||
+    /^\/api\/ops\/session-occurrences\/[^/]+\/enrollments$/.test(requested) && method === "POST" ||
+    /^\/api\/ops\/enrollments\/[^/]+\/cancel$/.test(requested) && method === "POST" ||
+    /^\/api\/ops\/enrollments\/[^/]+\/attendance$/.test(requested) && method === "POST";
 }
 
 function isOpsRoleAllowed(requested, method, role, options = {}) {
@@ -383,6 +394,8 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
           staff: ops.listStaff(),
           serviceCategories: ops.listServiceCategories(),
           services: ops.listServices(),
+          resources: ops.listResources(),
+          sessionOccurrences: ops.listSessionOccurrences(),
           schedule: ops.getWorkingSchedule(),
           bookingPage: ops.getBookingPage(),
           calendarPreferences: ops.getCalendarPreferences(),
@@ -765,6 +778,106 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       }
       if (requested === "/api/ops/expenses" && req.method === "POST") {
         sendJson(res, 201, { ok: true, expense: ops.createExpense(await parseJsonBody(req)) });
+        return true;
+      }
+
+      if (requested === "/api/ops/resources" && req.method === "GET") {
+        sendJson(res, 200, {
+          ok: true,
+          resources: ops.listResources({
+            status: requestUrl.searchParams.get("status") || ""
+          })
+        });
+        return true;
+      }
+      if (requested === "/api/ops/resources" && req.method === "POST") {
+        sendJson(res, 201, { ok: true, resource: ops.createResource(await parseJsonBody(req)) });
+        return true;
+      }
+      const resourceMatch = requested.match(/^\/api\/ops\/resources\/([^/]+)$/);
+      if (resourceMatch && req.method === "PATCH") {
+        sendJson(res, 200, {
+          ok: true,
+          resource: ops.updateResource(resourceMatch[1], await parseJsonBody(req))
+        });
+        return true;
+      }
+
+      if (requested === "/api/ops/service-resource-requirements" && req.method === "POST") {
+        sendJson(res, 201, {
+          ok: true,
+          requirement: ops.requireServiceResource(await parseJsonBody(req))
+        });
+        return true;
+      }
+
+      if (requested === "/api/ops/session-occurrences" && req.method === "GET") {
+        sendJson(res, 200, {
+          ok: true,
+          occurrences: ops.listSessionOccurrences({
+            serviceId: requestUrl.searchParams.get("serviceId") || "",
+            status: requestUrl.searchParams.get("status") || ""
+          })
+        });
+        return true;
+      }
+      if (requested === "/api/ops/session-occurrences" && req.method === "POST") {
+        sendJson(res, 201, {
+          ok: true,
+          occurrence: await ops.createSessionOccurrence(await parseJsonBody(req))
+        });
+        return true;
+      }
+      const occurrenceAvailabilityMatch = requested.match(
+        /^\/api\/ops\/session-occurrences\/([^/]+)\/availability$/
+      );
+      if (occurrenceAvailabilityMatch && req.method === "GET") {
+        sendJson(res, 200, {
+          ok: true,
+          availability: ops.getOccurrenceAvailability(occurrenceAvailabilityMatch[1])
+        });
+        return true;
+      }
+      const occurrenceEnrollMatch = requested.match(
+        /^\/api\/ops\/session-occurrences\/([^/]+)\/enrollments$/
+      );
+      if (occurrenceEnrollMatch && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        const idempotencyKey = bookingAtomic.resolveIdempotencyKeyFromRequest(req, body);
+        if (idempotencyKey) body.idempotencyKey = idempotencyKey;
+        body.occurrenceId = occurrenceEnrollMatch[1];
+        sendJson(res, 201, {
+          ok: true,
+          enrollment: await ops.enrollInOccurrence(body)
+        });
+        return true;
+      }
+
+      const enrollmentCancelMatch = requested.match(/^\/api\/ops\/enrollments\/([^/]+)\/cancel$/);
+      if (enrollmentCancelMatch && req.method === "POST") {
+        sendJson(res, 200, {
+          ok: true,
+          ...(await ops.cancelEnrollment(enrollmentCancelMatch[1]))
+        });
+        return true;
+      }
+      const enrollmentAttendanceMatch = requested.match(
+        /^\/api\/ops\/enrollments\/([^/]+)\/attendance$/
+      );
+      if (enrollmentAttendanceMatch && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        body.enrollmentId = enrollmentAttendanceMatch[1];
+        sendJson(res, 200, { ok: true, attendance: ops.recordAttendance(body) });
+        return true;
+      }
+
+      if (requested === "/api/ops/resource-allocations/bundle" && req.method === "POST") {
+        const body = await parseJsonBody(req);
+        const items = Array.isArray(body.items) ? body.items : Array.isArray(body) ? body : [];
+        sendJson(res, 201, {
+          ok: true,
+          ...(await ops.createBundleAllocations(items))
+        });
         return true;
       }
 
