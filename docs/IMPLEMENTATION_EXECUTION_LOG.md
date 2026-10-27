@@ -16,8 +16,8 @@
 | 2. سلامة البيانات والترحيل | مكتملة تقنياً | تدقيق FK مركبة، مصدر الحقيقة، JSON/PG migration، backup/restore لـ `workspace_ops_*` + staff links | ترحيل idempotent بلا سجلات يتيمة، مقارنة موثقة واستعادة ناجحة |
 | 3. الحجز الذري والتوفر | مكتملة تقنياً | قفل/قيود تداخل، holds، idempotency (JSON+PG+HTTP)، عقد timezone/DST للمدة+buffer | اختبار تنافس للفترات مع أثر commit ذري على JSON وPG |
 | 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
-| 5. الرحلات والواجهة | قيد التنفيذ (حزمة رحلات أساسية) | onboarding بقفل قالب، كتالوج+occupancy+موارد، دور عضوية، حجز عام RTL | رحلة كاملة وصلاحيات/RTL/accessibility مقبولة؛ متبقٍ: روابط إلغاء موقعة، pagination، تسجيل جلسة عام كامل |
-| 6. الرسائل والفوترة والتكاملات | لم تبدأ | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
+| 5. الرحلات والواجهة | مكتملة تقنياً | onboarding+قفل، كتالوج/موارد/إشغال، أدوار، حجز عام+تسجيل جلسة، روابط إدارة موقعة، pagination، a11y أساسية | رحلات المنتج قابلة للتجربة؛ فك قفل القالب لمسؤول المنصة مؤجّل موثّق |
+| 6. الرسائل والفوترة والتكاملات | لم تبدأ / تُفتتح بعد إغلاق م5 | outbox ومزودون وwebhooks وتكاملات | sandbox/replay/idempotency/فشل مع تعطيل الميزة عند عدم الجاهزية |
 | 7. التشغيل والخصوصية والاستعادة | لم تبدأ | الأسرار والرصد والاحتفاظ والاستعادة والحوادث | restore drill وrunbook وملكية تنبيه/استجابة موثقة |
 | 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
 | 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
@@ -152,19 +152,22 @@
 - **حزمة 2 (إغلاق المرحلة 4):** مسارات ops HTTP للموارد/المتطلبات/الجلسات/التسجيل/الحضور/bundle؛ تخصيص تلقائي لـ exclusive/rental عند `createAppointment` مع تحرير عند الإلغاء؛ `npm run test:capacity-http` و`test:capacity-isolation` (عزل store + BOLA عبر الهيدر).
 - **إغلاق المرحلة 4:** `phase_4_closed=true`. مؤجّل غير حاجز: ضغط تسجيل متزامن على PG، إدارة series في الواجهة، افتراضات قوالب المجالات. **لا تعلن** التعليم/الصالون/التأجير جاهزة للإنتاج.
 
-### المرحلة 5 — حزمة الرحلات الأساسية (onboarding / كتالوج / أدوار / حجز عام) — 2026-10-27
+### المرحلة 5 — حزمة الرحلات الأساسية + المتبقيات — 2026-10-27
 
-- **قفل القالب عند الإنشاء:** `seedWorkspace(..., { lockActivity: true })` من `POST /api/workspaces`؛ onboarding في `ClerkGate` يطلب تأكيد القفل؛ شاشة القوالب داخل المنشأة تُخفى بعد القفل؛ شريط النشاط عرض فقط (لا تبديل طبي/مرن).
-- **الكتالوج والموارد:** نموذج الخدمة يعرض `occupancyMode` / `defaultCapacity` / `compositionDefault`؛ دليل الخدمات يعرض شارة إشغال؛ شاشة موارد رقيقة (`ResourcesView`) عبر bootstrap `resources` دون ادعاء جاهزية التعليم/الصالون/التأجير.
-- **أدوار الواجهة:** دور العضوية من bootstrap/`/api/workspaces` (وليس localStorage التجريبي)؛ تصفية التنقل لـ viewer/staff/manager؛ staff مربوط يحصل على bootstrap مُقشَّط لمكتب الحضور فقط.
-- **حجز عام + تقويم:** `book.html` يعرض تلميح سعة/تأجير من حقول الخدمة؛ التقويم يمرّر تلميح الإشغال عند الإنشاء؛ RTL عربي قائم.
-- **التحقق:** `npm run test:phase5-journeys` (+ تحديث `test:staff-links` لـ bootstrap staff).
-- **لا تُغلق المرحلة 5 بالكامل:** متبقٍ روابط إلغاء/إعادة جدولة موقعة للعميل، pagination للقوائم، رحلة تسجيل جلسة عامة كاملة، ومراجعة a11y أوسع. **لا تعلن** Stripe/SMS/WhatsApp أو مجالات رأسية جاهزة.
-- **التالي:** إكمال متبقيات المرحلة 5 أو الانتقال للمرحلة 6 (رسائل/فوترة) بعد قرار المالك.
+- **قفل القالب عند الإنشاء:** `seedWorkspace(..., { lockActivity: true })` من `POST /api/workspaces`؛ onboarding يطلب تأكيد القفل؛ شاشة القوالب تُخفى بعد القفل.
+- **الكتالوج والموارد:** `occupancyMode` / سعة / تركيب على الخدمات؛ `ResourcesView` رقيقة — بلا ادعاء جاهزية مجالات رأسية.
+- **أدوار الواجهة:** عضوية خادمية؛ staff مربوط → bootstrap مُقشَّط للـ desk.
+- **روابط إدارة موقعة:** `bookingActionToken` (HMAC + TTL + استخدام مرة لكل فعل)؛ `manage.html` + `GET/POST /api/public/booking/:slug/manage/...` لإلغاء/إعادة جدولة الموعد وإلغاء تسجيل الجلسة — منفصل عن `checkInToken`.
+- **pagination:** `limit`/`offset`/`paging` على `GET /api/ops/customers` و`appointments`؛ ترقيم في شاشة العملاء.
+- **تسجيل جلسة عام:** `GET .../sessions` + `POST .../sessions/:id/enroll` لخدمات `session_capacity` فقط؛ مسار في `book.html`.
+- **a11y أساسية:** skip links، `aria-*`، focus-visible، تسميات على الرحلات الملموسة (حجز/إدارة/onboarding/عملاء).
+- **مؤجّل موثّق:** فك قفل القالب لمسؤول المنصة (لا سطح `admin` حالي لـ `activity_mode_locked`؛ مطلوب confirmation+audit+سبب لاحقاً).
+- **إغلاق المرحلة 5:** `phase_5_closed=true`. **لا تعلن** Stripe/SMS/WhatsApp أو التعليم/الصالون/التأجير جاهزة.
+- **التحقق:** `npm run test:phase5-journeys` (+ `test:ops-rbac` / `test:staff-links`).
+- **التالي:** المرحلة 6 — outbox رسائل + خطاطيف فوترة + sandbox webhooks على PR جديد.
 
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase5-journeys` و`npm run test:phase4-capacity`.
-2. على Sam-PC:  
-   `MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate` ثم اختبارات المرحلة 4/5.
-3. متبقيات المرحلة 5: إلغاء/إعادة جدولة موقّعة، pagination، تسجيل جلسة في الحجز العام — أو ابدأ المرحلة 6 إن قرر المالك تأجيلها.
+1. شغّل `npm run test:phase5-journeys`.
+2. ابدأ المرحلة 6 من فرع المرحلة 5: outbox transactional / billing hooks / webhook sandbox.
+3. على Sam-PC عند الحاجة: Postgres `5432` / `maw3ed`.

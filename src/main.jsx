@@ -230,9 +230,11 @@ function CalendarViewProxy(props) {
 function CustomersView({ ops, reload, locale }) {
   const [search, setSearch] = useState("");
   const [categoryId, setCategoryId] = useState("all");
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ firstName: "", lastName: "", phone: "", email: "", categoryId: "cat-new" });
-  const customers = useMemo(() => {
+  const filtered = useMemo(() => {
     const list = ops?.customers || [];
     const q = search.trim().toLowerCase();
     return list.filter((customer) => {
@@ -240,6 +242,14 @@ function CustomersView({ ops, reload, locale }) {
       return (!q || hay.includes(q)) && (categoryId === "all" || customer.categoryId === categoryId);
     });
   }, [ops, search, categoryId]);
+  const total = filtered.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const customers = filtered.slice(safePage * pageSize, safePage * pageSize + pageSize);
+
+  useEffect(() => {
+    setPage(0);
+  }, [search, categoryId, pageSize]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -261,18 +271,34 @@ function CustomersView({ ops, reload, locale }) {
         <button className="primary-button" type="button" onClick={() => setOpen(true)}>+ {t(locale, "add")}</button>
       </div>
       <div className="toolbar">
-        <input placeholder={t(locale, "search")} value={search} onChange={(e) => setSearch(e.target.value)} />
-        <div className="chips">
+        <input
+          placeholder={t(locale, "search")}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label={t(locale, "search")}
+        />
+        <div className="chips" role="group" aria-label="فئات العملاء">
           <button type="button" className={categoryId === "all" ? "chip active" : "chip"} onClick={() => setCategoryId("all")}>الكل</button>
           {(ops?.customerCategories || []).map((category) => (
             <button key={category.id} type="button" className={categoryId === category.id ? "chip active" : "chip"} onClick={() => setCategoryId(category.id)}>{category.name}</button>
           ))}
         </div>
       </div>
-      <div className="data-table panel">
+      <div className="toolbar" role="navigation" aria-label="ترقيم العملاء">
+        <label className="muted">
+          حجم الصفحة
+          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} aria-label="حجم صفحة العملاء">
+            {[10, 25, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
+          </select>
+        </label>
+        <span className="muted">{total ? `${safePage * pageSize + 1}–${Math.min(total, (safePage + 1) * pageSize)} من ${total}` : "0"}</span>
+        <button type="button" className="ghost-button" disabled={safePage <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))} aria-label="الصفحة السابقة">السابق</button>
+        <button type="button" className="ghost-button" disabled={safePage >= pageCount - 1} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} aria-label="الصفحة التالية">التالي</button>
+      </div>
+      <div className="data-table panel" role="table" aria-label="قائمة العملاء">
         {customers.map((customer) => (
-          <div className="table-row" key={customer.id}>
-            <div className="avatar">{customer.firstName.charAt(0)}</div>
+          <div className="table-row" role="row" key={customer.id}>
+            <div className="avatar" aria-hidden="true">{customer.firstName.charAt(0)}</div>
             <div><b>{customer.firstName} {customer.lastName}</b><small>{(ops?.customerCategories || []).find((c) => c.id === customer.categoryId)?.name}</small></div>
             <span>{customer.phone || "—"}</span>
             <span>{customer.email || "—"}</span>

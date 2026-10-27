@@ -45,6 +45,8 @@
 | `GET /api/ops/stats` | owner/admin؛ أرقام إجمالية قد تكشف بيانات مالية |
 | `GET /api/ops/events` | owner/admin؛ سجل أحداث تشغيل المساحة (JSONL لكل workspace)؛ منفصل عن development-events |
 | `GET /api/public/booking/:slug`; `GET /api/public/booking/:slug/slots`; `GET /api/public/booking/:slug/pass/:token` | عام محدود؛ لا يُستخدم للوصول إلى endpoint داخلي |
+| `GET/POST /api/public/booking/:slug/manage/:token` (+ `/cancel`, `/reschedule`) | عام موقّع HMAC+TTL؛ إلغاء/إعادة جدولة مرة لكل فعل؛ منفصل عن checkInToken |
+| `GET /api/public/booking/:slug/sessions`; `POST .../sessions/:id/enroll` | عام لخدمات `session_capacity` فقط؛ سعة مقاعد؛ بلا ادعاء عمودي |
 | `POST /api/public/booking/:slug/hold`; `POST /api/public/booking/:slug/appointments` | عام بمعدل/hold؛ يلزم استكمال idempotency والحجز الذري حسب الخطة |
 
 كل مسار `/api/ops/*` غير معروف يفشل في policy helper بدلاً من وراثة صلاحية المدير تلقائياً. هذه السياسة تغطي هذا router فقط؛ لا تثبت RBAC على المسارات القديمة.

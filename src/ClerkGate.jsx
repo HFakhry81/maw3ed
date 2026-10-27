@@ -488,11 +488,11 @@ export function WorkspaceOnboarding({ onCreated }) {
         <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
         <h1>أنشئ مساحة عملك</h1>
         <p>تم التحقق من حسابك. الخطوة التالية: بناء مساحة عمل للمنشأة.</p>
-        <label>
+        <label htmlFor="workspace-name">
           اسم المساحة
-          <input id="workspace-name" name="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="عيادة النور" />
+          <input id="workspace-name" name="name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="عيادة النور" autoComplete="organization" />
         </label>
-        <label>
+        <label htmlFor="workspace-slug">
           الرابط (slug)
           <div className="slug-field-row">
             <input
@@ -558,7 +558,7 @@ export function WorkspaceOnboarding({ onCreated }) {
             </div>
           </div>
         )}
-        <label>
+        <label htmlFor="workspace-activity">
           نوع النشاط
           <select
             id="workspace-activity"
