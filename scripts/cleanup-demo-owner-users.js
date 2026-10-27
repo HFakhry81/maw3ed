@@ -13,8 +13,9 @@
  *   - يصفّر أعلام المنصة عن المالكين دائماً
  *   - يفصل fakhry عن memberships / staff links
  *   - يمسح صفوف workspace_ops_* / staff_links / members ثم يحذف المساحات غير المحفوظة
- *   - يصفّر soft FKs ثم يحذف المستخدمين الزائدين
- *   - الاستعلامات الاختيارية داخل المعاملة تستخدم SAVEPOINT حتى لا تُجهض المعاملة
+ *   - يعيد تعيين platform_audit_events.actor_user_id للمستخدمين المحذوفين → platform admin
+ *     (DISABLE TRIGGER USER مؤقتاً لأن الجدول immutable؛ لا تُحذف صفوف التدقيق)
+ *   - الاستعلامات الاختيارية: فحص to_regclass + SAVEPOINT حتى لا تُجهض المعاملة إن غاب الجدول
  *
  * Usage:
  *   npm run users:cleanup-demo-owners -- --dry-run
@@ -59,8 +60,28 @@ function formatPgError(error) {
   return parts.join(" | ");
 }
 
-/** Optional query inside an open TX — missing relation/column must not abort the TX. */
-async function optionalClientQuery(client, sql, params = []) {
+async function relationExists(client, relationName) {
+  // Accept "workspace_staff_links" or "public.workspace_staff_links"
+  const qualified = String(relationName).includes(".")
+    ? String(relationName)
+    : `public.${relationName}`;
+  const result = await client.query(`SELECT to_regclass($1) AS reg`, [qualified]);
+  return Boolean(result.rows[0]?.reg);
+}
+
+/**
+ * Optional query inside an open TX.
+ * Missing relation/column must not abort the surrounding transaction:
+ * check to_regclass when possible + SAVEPOINT for every optional statement.
+ */
+async function safeClientQuery(client, sql, params = [], { relation } = {}) {
+  if (relation) {
+    const exists = await relationExists(client, relation);
+    if (!exists) {
+      return { rows: [], skipped: true, reason: "missing_relation", relation };
+    }
+  }
+
   const sp = `sp_${crypto.randomBytes(6).toString("hex")}`;
   await client.query(`SAVEPOINT ${sp}`);
   try {
@@ -75,6 +96,8 @@ async function optionalClientQuery(client, sql, params = []) {
     throw error;
   }
 }
+
+const optionalClientQuery = safeClientQuery;
 
 async function safePoolQuery(sql, params = []) {
   try {
@@ -105,17 +128,38 @@ async function loadStaffLinks() {
   ).rows;
 }
 
-async function nullSoftUserFks(client, userIds) {
+/**
+ * Soft FKs before deleting users:
+ * - platform_audit_events are immutable (BEFORE UPDATE/DELETE triggers). For cleanup only:
+ *   DISABLE TRIGGER USER → reassign actors of deleted users to platform admin → ENABLE TRIGGER USER.
+ *   Do not delete audit rows; do not null actors.
+ * - platform_settlements.created_by may be nulled (no immutability trigger).
+ */
+async function reassignSoftUserFks(client, userIds, platformAdminId) {
   if (!userIds.length) return;
-  await optionalClientQuery(
-    client,
-    `UPDATE platform_audit_events SET actor_user_id = NULL WHERE actor_user_id = ANY($1::text[])`,
-    [userIds]
-  );
-  await optionalClientQuery(
+
+  if (platformAdminId && (await relationExists(client, "platform_audit_events"))) {
+    await client.query(`ALTER TABLE platform_audit_events DISABLE TRIGGER USER`);
+    try {
+      const updated = await client.query(
+        `UPDATE platform_audit_events
+         SET actor_user_id = $1
+         WHERE actor_user_id = ANY($2::text[])`,
+        [platformAdminId, userIds]
+      );
+      console.log(
+        `[cleanup] reassigned ${updated.rowCount} platform_audit_events.actor_user_id → platform admin (${platformAdminId})`
+      );
+    } finally {
+      await client.query(`ALTER TABLE platform_audit_events ENABLE TRIGGER USER`);
+    }
+  }
+
+  await safeClientQuery(
     client,
     `UPDATE platform_settlements SET created_by = NULL WHERE created_by = ANY($1::text[])`,
-    [userIds]
+    [userIds],
+    { relation: "platform_settlements" }
   );
 }
 
@@ -128,37 +172,62 @@ async function deleteWorkspaceFully(client, workspace) {
   const label = workspace.slug || workspace.name || workspaceId;
 
   // Staff links reference workspace_ops_staff; remove before ops profile wipe.
-  await optionalClientQuery(client, `DELETE FROM workspace_staff_links WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
+  // Table may be missing when migration 012 is not applied — must not abort the TX.
+  await safeClientQuery(
+    client,
+    `DELETE FROM workspace_staff_links WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "workspace_staff_links" }
+  );
 
   // Normalized ops graph hangs off workspace_ops_profiles (ON DELETE CASCADE to children).
-  await optionalClientQuery(client, `DELETE FROM workspace_ops_profiles WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
+  await safeClientQuery(
+    client,
+    `DELETE FROM workspace_ops_profiles WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "workspace_ops_profiles" }
+  );
 
   // Platform governance / billing children (also CASCADE from workspaces, but explicit).
-  await optionalClientQuery(client, `DELETE FROM billing_transactions WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
-  await optionalClientQuery(client, `DELETE FROM subscription_invoices WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
-  await optionalClientQuery(client, `DELETE FROM usage_counters WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
-  await optionalClientQuery(client, `DELETE FROM workspace_subscriptions WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
+  await safeClientQuery(
+    client,
+    `DELETE FROM billing_transactions WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "billing_transactions" }
+  );
+  await safeClientQuery(
+    client,
+    `DELETE FROM subscription_invoices WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "subscription_invoices" }
+  );
+  await safeClientQuery(
+    client,
+    `DELETE FROM usage_counters WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "usage_counters" }
+  );
+  await safeClientQuery(
+    client,
+    `DELETE FROM workspace_subscriptions WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "workspace_subscriptions" }
+  );
 
   // organizations.workspace_id is ON DELETE SET NULL — clear explicitly for clarity.
-  await optionalClientQuery(client, `UPDATE organizations SET workspace_id = NULL WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
+  await safeClientQuery(
+    client,
+    `UPDATE organizations SET workspace_id = NULL WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "organizations" }
+  );
 
-  await optionalClientQuery(client, `DELETE FROM workspace_members WHERE workspace_id = $1`, [
-    workspaceId
-  ]);
+  await safeClientQuery(
+    client,
+    `DELETE FROM workspace_members WHERE workspace_id = $1`,
+    [workspaceId],
+    { relation: "workspace_members" }
+  );
 
   try {
     await client.query(`DELETE FROM workspaces WHERE id = $1`, [workspaceId]);
@@ -408,16 +477,22 @@ async function main() {
       console.log(`[cleanup] owner not platform admin → ${user.email}`);
     }
 
-    await optionalClientQuery(client, `DELETE FROM workspace_staff_links WHERE user_id = $1`, [
-      platformAdminUser.id
-    ]);
-    await optionalClientQuery(client, `DELETE FROM workspace_members WHERE user_id = $1`, [
-      platformAdminUser.id
-    ]);
+    await safeClientQuery(
+      client,
+      `DELETE FROM workspace_staff_links WHERE user_id = $1`,
+      [platformAdminUser.id],
+      { relation: "workspace_staff_links" }
+    );
+    await safeClientQuery(
+      client,
+      `DELETE FROM workspace_members WHERE user_id = $1`,
+      [platformAdminUser.id],
+      { relation: "workspace_members" }
+    );
     console.log(`[cleanup] detached ${PLATFORM_ADMIN_EMAIL} from all workspace memberships/staff links`);
 
     const removeIds = removeUsers.map((user) => user.id);
-    await nullSoftUserFks(client, removeIds);
+    await reassignSoftUserFks(client, removeIds, platformAdminUser.id);
 
     // Delete orphan/non-demo workspaces first (includes fakhry-owned haitham-fakhry).
     // workspaces.owner_user_id has NO ON DELETE CASCADE toward app_users — wipe deps then delete.
@@ -446,9 +521,12 @@ async function main() {
     }
 
     const leftoverMembers = (
-      await optionalClientQuery(client, `SELECT workspace_id FROM workspace_members WHERE user_id = $1`, [
-        platformAdminUser.id
-      ])
+      await safeClientQuery(
+        client,
+        `SELECT workspace_id FROM workspace_members WHERE user_id = $1`,
+        [platformAdminUser.id],
+        { relation: "workspace_members" }
+      )
     ).rows;
     const leftoverOwned = (
       await client.query(`SELECT id FROM workspaces WHERE owner_user_id = $1`, [platformAdminUser.id])

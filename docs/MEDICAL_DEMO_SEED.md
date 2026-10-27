@@ -55,3 +55,5 @@ npm run seed:demo:save -- --section=education
 npm run users:cleanup-demo-owners -- --dry-run
 npm run users:cleanup-demo-owners -- --apply
 ```
+
+ملاحظات `--apply`: جداول اختيارية (مثل `workspace_staff_links` إن لم تُطبَّق migration 012) تُتخطى عبر `to_regclass` + `SAVEPOINT`. صفوف `platform_audit_events` لا تُحذف — يُعاد تعيين `actor_user_id` إلى مسؤول المنصة مؤقتاً مع `DISABLE TRIGGER USER`.
