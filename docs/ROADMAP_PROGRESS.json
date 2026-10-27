@@ -11,11 +11,11 @@
   ],
   "resume_pointer": {
     "phase": 6,
-    "package": "messaging-outbox-billing-webhooks-not-started",
+    "package": "messaging-outbox-billing-webhooks-package1",
     "next_steps": [
-      "Start Phase 6 on a NEW PR branched from cursor/phase5-product-journeys-84f0: transactional outbox + billing hooks + webhook sandbox",
-      "Keep checkout/SMS/WhatsApp disabled until provider sandbox passes",
-      "Deferred non-blocking from Phase 5: platform-admin exceptional activity unlock (dual confirm + audit + reason) — ticket: phase5-deferred-platform-activity-unlock",
+      "Phase 6 package 1 landed (outbox + capability flags + webhook sandbox). Next: delivery worker retries, provider-specific webhook adapters, or hosted checkout only after sandbox acceptance",
+      "Keep checkout/SMS/WhatsApp disabled until a real provider sandbox passes",
+      "Deferred non-blocking from Phase 5: platform-admin exceptional activity unlock — ticket: phase5-deferred-platform-activity-unlock",
       "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed"
     ]
   },
@@ -110,7 +110,22 @@
     {
       "id": 6,
       "name_ar": "الرسائل والفوترة والتكاملات",
-      "status": "not_started"
+      "status": "in_progress",
+      "started_at": "2026-10-27",
+      "packages": [
+        {
+          "id": "messaging-outbox-billing-webhooks-package1",
+          "status": "complete_technical",
+          "summary": "Transactional outbox (idempotent enqueue + pending/delivered/dead); email bridge under MAW3ED_EMAIL_MODE=outbox; billing/messaging capability flags with hostedCheckout=false; HMAC webhook sandbox + replay ledger. No live Stripe/SMS/WhatsApp claim.",
+          "evidence_commands": ["npm run test:phase6-integrations"]
+        }
+      ],
+      "remaining_to_close": [
+        "Delivery worker that drains outbox with bounded retries against a real provider",
+        "Provider-specific webhook adapters (Stripe/Whop) beyond generic sandbox",
+        "Hosted checkout remains disabled until provider sandbox accepted"
+      ],
+      "notes": "phase_6_started=true; package 1 only. Do not claim payments or multi-channel messaging production-ready."
     },
     { "id": 7, "name_ar": "التشغيل والخصوصية والاستعادة", "status": "not_started" },
     { "id": 8, "name_ar": "قبول ما قبل الإطلاق", "status": "not_started" },
@@ -155,6 +170,7 @@
     "phase_5_journeys_core": true,
     "phase_5_manage_pagination_session_a11y": true,
     "phase_5_closed": true,
-    "phase_6_started": false
+    "phase_6_started": true,
+    "phase_6_outbox_billing_webhooks_package1": true
   }
 }

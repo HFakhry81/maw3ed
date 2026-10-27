@@ -1179,6 +1179,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (requested === "/api/config" && req.method === "GET") {
+      const { getIntegrationCapabilities } = require("./billingCapabilities");
       return sendJson(res, 200, {
         ok: true,
         clerkPublishableKey:
@@ -1187,8 +1188,42 @@ const server = http.createServer(async (req, res) => {
           || process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
           || null,
         product: "Maw3ed",
-        company: "UpNexa-eg.com"
+        company: "UpNexa-eg.com",
+        integrations: getIntegrationCapabilities(process.env)
       });
+    }
+    if (requested === "/api/integrations/capabilities" && req.method === "GET") {
+      const { getIntegrationCapabilities } = require("./billingCapabilities");
+      return sendJson(res, 200, { ok: true, ...getIntegrationCapabilities(process.env) });
+    }
+    const webhookSandboxMatch = requested.match(/^\/api\/webhooks\/sandbox\/([^/]+)$/);
+    if (webhookSandboxMatch && req.method === "POST") {
+      const provider = decodeURIComponent(webhookSandboxMatch[1]);
+      const rawBody = await readRequestBody(req);
+      let payload = {};
+      try {
+        payload = JSON.parse(rawBody || "{}");
+      } catch {
+        return sendJson(res, 400, { ok: false, error: "Invalid JSON body" });
+      }
+      const { handleSandboxWebhook } = require("./webhookSandbox");
+      try {
+        const result = handleSandboxWebhook({
+          provider,
+          rawBody,
+          signatureHeader: req.headers["x-maw3ed-signature"] || req.headers["x-signature"] || "",
+          eventId: payload.eventId || payload.id,
+          eventType: payload.eventType || payload.type,
+          payload
+        });
+        return sendJson(res, result.replayed ? 200 : 202, result);
+      } catch (error) {
+        return sendJson(res, error.statusCode || 400, {
+          ok: false,
+          error: error.message,
+          code: error.code || null
+        });
+      }
     }
     if (requested === "/api/plans" && req.method === "GET") {
       return sendJson(res, 200, { ok: true, plans: await listPlans() });

@@ -55,9 +55,12 @@
 
 | الطريقة والمسار | المطلوب |
 | --- | --- |
-| `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health`, `/api/health/live`, `/api/health/ready` | عام مع تقليل مخرجات config وحماية readiness من كشف أسرار |
+| `GET /api/config`, `/api/plans`, `/api/activity-templates`, `/api/health`, `/api/health/live`, `/api/health/ready` | عام مع تقليل مخرجات config وحماية readiness من كشف أسرار؛ `config.integrations` يعلن أعلام messaging/billing/webhooks دون أسرار |
+| `GET /api/integrations/capabilities` | عام؛ نفس أعلام التكامل (checkout/SMS/WhatsApp معطّلة صراحةً حتى قبول sandbox) |
+| `POST /api/webhooks/sandbox/:provider` | sandbox فقط؛ يتطلب توقيع HMAC؛ ledger idempotent؛ لا يفعّل اشتراكاً حياً |
 | `GET /api/account`, `/api/account/contexts`, `/api/workspaces`, `/api/entitlements`, `/api/billing/status`; `POST /api/workspaces`, `/api/billing/request` | جلسة؛ قائمة السياقات تشمل عضوية المساحات + `staffLink` النشط لاختيار السياق؛ `x-workspace-id` يختار السياق فقط ولا يمنح صلاحية |
 | `POST /api/whop/checkout`, `/api/whop/verify-checkout` | معطلان حالياً (`410`) |
+
 | `GET /api/workspace-profile`, `/api/dashboard`, `/api/departments`, `/api/doctors`, `/api/patients`, `/api/appointments` | عند auth: membership + دور manager+ عبر `legacyAccess.js`؛ `x-workspace-id` سياق فقط |
 | `PATCH /api/workspace-profile` | عند auth: owner/admin فقط |
 | `POST /api/appointments` | عند auth: membership + دور manager+ |
@@ -90,4 +93,5 @@
 - workspace events: [`scripts/smoke-workspace-events.js`](../scripts/smoke-workspace-events.js) (`npm run test:workspace-events`).
 - حزمة مجمّعة: `npm run test:phase1-security` (تشمل `test:staff-links`).
 - ربط staff↔desk: نموذج junction معتمد (`workspace_staff_links` / JSON)؛ بدون ربط نشط يبقى desk لدور staff مرفوضًا. نطاق الزيارات للمربوط فقط؛ تسعير desk يبقى owner/admin.
+- المرحلة 6 حزمة 1: [`scripts/smoke-phase6-integrations.js`](../scripts/smoke-phase6-integrations.js) (`npm run test:phase6-integrations`) — outbox idempotency + توقيع/إعادة webhook sandbox + أعلام الفوترة.
 - ترتبط كل تحديثات الحالة بـ [`IMPLEMENTATION_EXECUTION_LOG.md`](IMPLEMENTATION_EXECUTION_LOG.md) و[`ROADMAP_PROGRESS.json`](ROADMAP_PROGRESS.json)؛ نتائج التنفيذ تُسجل بعد تشغيل الأمر لا بمجرد كتابته هنا.

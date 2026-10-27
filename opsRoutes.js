@@ -693,7 +693,9 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
             businessTo: String(page.email || "").trim(),
             appointment,
             page,
-            manageUrl: manage?.manageUrl || null
+            manageUrl: manage?.manageUrl
+              ? `${process.env.MAW3ED_PUBLIC_BASE_URL || ""}${manage.manageUrl}`
+              : manage?.manageUrl || null
           };
         }
         sendJson(res, 201, {
