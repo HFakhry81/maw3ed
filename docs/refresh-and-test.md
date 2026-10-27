@@ -40,12 +40,15 @@ npm run ops:pg-restore
 npm run ops:pg-backups
 ```
 
-Postgres ops drill (يتطلب `MAW3ED_STORAGE=postgres` و`DATABASE_URL`):
+Postgres ops drill (يتطلب `MAW3ED_STORAGE=postgres` و`DATABASE_URL` على **5432**/`maw3ed`):
 
 ```bash
 npm run test:ops-pg-backup          # يتخطى بوضوح إن لم يتوفر DB
 npm run test:ops-pg-backup:full     # migrate مرتين + backup/restore/compare
 npm run test:atomic-booking         # المرحلة 3 — حجز ذري JSON
+npm run test:booking-timezone       # عقد timezone/DST + Idempotency-Key helper
+npm run test:atomic-booking-pg      # تماثل PG (يتخطى بلا DATABASE_URL)
+npm run test:phase3-booking         # JSON + timezone + PG
 ```
 
 ## قائمة Windows التفاعلية

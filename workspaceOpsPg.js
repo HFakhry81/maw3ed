@@ -340,37 +340,41 @@ async function loadStore(client, workspaceId, defaultStoreFactory) {
     if (visit) visit[row.meta_key] = decodeMeta(row);
     visits.set(row.appointment_id, appointmentVisits);
   }
-  data.appointments = list(results.workspace_ops_appointments).map((row) => ({
-    id: row.id,
-    date: dateOnly(row.appointment_date),
-    time: row.appointment_time,
-    customerId: row.customer_id,
-    customerName: row.customer_name,
-    staffId: row.staff_id,
-    staffName: row.staff_name,
-    serviceId: row.service_id,
-    serviceName: row.service_name,
-    categoryId: row.category_id,
-    durationMinutes: Number(row.duration_minutes),
-    paymentMethod: row.payment_method,
-    paymentStatus: row.payment_status,
-    pricingType: row.pricing_type,
-    priceMin: numberOr(row.price_min),
-    priceMax: numberOr(row.price_max),
-    depositAmount: numberOr(row.deposit_amount),
-    amount: numberOr(row.amount),
-    pricingStatus: row.pricing_status,
-    notes: row.notes,
-    status: row.status,
-    checkInToken: row.check_in_token,
-    checkedInAt: isoOrNull(row.checked_in_at),
-    checkedInByStaffId: row.checked_in_by_staff_id,
-    completedAt: isoOrNull(row.completed_at),
-    lineItems: lineItems.get(row.id) || [],
-    visitLog: visits.get(row.id) || [],
-    createdAt: isoOrNull(row.created_at),
-    updatedAt: isoOrNull(row.updated_at)
-  }));
+  data.appointments = list(results.workspace_ops_appointments).map((row) => {
+    const appointment = {
+      id: row.id,
+      date: dateOnly(row.appointment_date),
+      time: row.appointment_time,
+      customerId: row.customer_id,
+      customerName: row.customer_name,
+      staffId: row.staff_id,
+      staffName: row.staff_name,
+      serviceId: row.service_id,
+      serviceName: row.service_name,
+      categoryId: row.category_id,
+      durationMinutes: Number(row.duration_minutes),
+      paymentMethod: row.payment_method,
+      paymentStatus: row.payment_status,
+      pricingType: row.pricing_type,
+      priceMin: numberOr(row.price_min),
+      priceMax: numberOr(row.price_max),
+      depositAmount: numberOr(row.deposit_amount),
+      amount: numberOr(row.amount),
+      pricingStatus: row.pricing_status,
+      notes: row.notes,
+      status: row.status,
+      checkInToken: row.check_in_token,
+      checkedInAt: isoOrNull(row.checked_in_at),
+      checkedInByStaffId: row.checked_in_by_staff_id,
+      completedAt: isoOrNull(row.completed_at),
+      lineItems: lineItems.get(row.id) || [],
+      visitLog: visits.get(row.id) || [],
+      createdAt: isoOrNull(row.created_at),
+      updatedAt: isoOrNull(row.updated_at)
+    };
+    if (row.idempotency_key) appointment.idempotencyKey = row.idempotency_key;
+    return appointment;
+  });
 
   data.medicalDepartments = list(results.workspace_ops_medical_departments).map((row) => ({
     id: row.id,
@@ -602,23 +606,43 @@ async function saveStore(client, workspaceId, input) {
     ]));
 
   const appointments = clean(data.appointments);
+  // idempotency_key column arrives in migration 013; older DBs without it still save.
+  const idempotencyCol = await client.query(
+    `SELECT 1
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = 'workspace_ops_appointments'
+       AND column_name = 'idempotency_key'
+     LIMIT 1`
+  );
+  const supportsIdempotencyKey = idempotencyCol.rows.length > 0;
+
+  const appointmentColumns = [
+    "workspace_id", "id", "appointment_date", "appointment_time", "customer_id", "customer_name",
+    "staff_id", "staff_name", "service_id", "service_name", "category_id", "duration_minutes",
+    "payment_method", "payment_status", "pricing_type", "price_min", "price_max", "deposit_amount",
+    "amount", "pricing_status", "notes", "status", "check_in_token", "checked_in_at",
+    "checked_in_by_staff_id", "completed_at", "created_at", "updated_at"
+  ];
+  if (supportsIdempotencyKey) appointmentColumns.push("idempotency_key");
+
   await insertRows(client, "workspace_ops_appointments",
-    ["workspace_id", "id", "appointment_date", "appointment_time", "customer_id", "customer_name",
-      "staff_id", "staff_name", "service_id", "service_name", "category_id", "duration_minutes",
-      "payment_method", "payment_status", "pricing_type", "price_min", "price_max", "deposit_amount",
-      "amount", "pricing_status", "notes", "status", "check_in_token", "checked_in_at",
-      "checked_in_by_staff_id", "completed_at", "created_at", "updated_at"],
-    appointments.map((row) => [
-      workspaceId, String(row.id), dateOnly(row.date), String(row.time || "00:00"),
-      row.customerId || null, String(row.customerName || ""), row.staffId || null,
-      String(row.staffName || ""), row.serviceId || null, String(row.serviceName || ""),
-      String(row.categoryId || ""), numberOr(row.durationMinutes, 30), row.paymentMethod || "cash",
-      row.paymentStatus || "unpaid", row.pricingType || "fixed", numberOr(row.priceMin),
-      numberOr(row.priceMax), numberOr(row.depositAmount), numberOr(row.amount),
-      row.pricingStatus || "fixed", String(row.notes || ""), row.status || "pending",
-      String(row.checkInToken || ""), row.checkedInAt || null, row.checkedInByStaffId || null,
-      row.completedAt || null, row.createdAt || new Date().toISOString(), row.updatedAt || null
-    ]));
+    appointmentColumns,
+    appointments.map((row) => {
+      const values = [
+        workspaceId, String(row.id), dateOnly(row.date), String(row.time || "00:00"),
+        row.customerId || null, String(row.customerName || ""), row.staffId || null,
+        String(row.staffName || ""), row.serviceId || null, String(row.serviceName || ""),
+        String(row.categoryId || ""), numberOr(row.durationMinutes, 30), row.paymentMethod || "cash",
+        row.paymentStatus || "unpaid", row.pricingType || "fixed", numberOr(row.priceMin),
+        numberOr(row.priceMax), numberOr(row.depositAmount), numberOr(row.amount),
+        row.pricingStatus || "fixed", String(row.notes || ""), row.status || "pending",
+        String(row.checkInToken || ""), row.checkedInAt || null, row.checkedInByStaffId || null,
+        row.completedAt || null, row.createdAt || new Date().toISOString(), row.updatedAt || null
+      ];
+      if (supportsIdempotencyKey) values.push(String(row.idempotencyKey || ""));
+      return values;
+    }));
 
   const lineItemRows = [];
   const visitRows = [];

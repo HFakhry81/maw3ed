@@ -212,14 +212,39 @@ async function persistPublicAppointment({
       );
     }
 
-    const collision = await client.query(
-      `SELECT id FROM appointments
-       WHERE organization_id = $1 AND appointment_date = $2 AND appointment_time = $3
-         AND status <> 'cancelled' AND doctor_id = $4
-       FOR UPDATE`,
-      [orgId, appointment.date, appointment.time, doctorId]
+    // Lock same-day staff rows, then reject any overlapping [start, end+buffer)
+    // range — equal-start-only is not enough (Phase 3 parity with opsStore).
+    const dayRows = await client.query(
+      `SELECT a.id,
+              TO_CHAR(a.appointment_time, 'HH24:MI') AS time,
+              COALESCE(s.duration_minutes, $4) AS duration_minutes,
+              COALESCE(s.buffer_minutes, 0) AS buffer_minutes
+       FROM appointments a
+       LEFT JOIN services s ON s.id = a.service_id
+       WHERE a.organization_id = $1
+         AND a.appointment_date = $2
+         AND a.doctor_id = $3
+         AND a.status <> 'cancelled'
+       FOR UPDATE OF a`,
+      [
+        orgId,
+        appointment.date,
+        doctorId,
+        Number(appointment.durationMinutes || service?.durationMinutes || 30)
+      ]
     );
-    if (collision.rows[0]) {
+    const start = toMinutes(appointment.time);
+    const end =
+      start +
+      Number(appointment.durationMinutes || service?.durationMinutes || 30) +
+      Number(service?.bufferMinutes || 0);
+    const overlaps = dayRows.rows.some((row) => {
+      const otherStart = toMinutes(row.time);
+      const otherEnd =
+        otherStart + Number(row.duration_minutes || 30) + Number(row.buffer_minutes || 0);
+      return start < otherEnd && otherStart < end;
+    });
+    if (overlaps) {
       const error = new Error("هذا الموظف محجوز في نفس الوقت");
       error.statusCode = 409;
       throw error;

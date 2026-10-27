@@ -157,9 +157,50 @@ function purgeExpiredHoldsOnce(holdsMap, now = Date.now(), persistFn) {
   return { removed };
 }
 
+/**
+ * Civil calendar date (YYYY-MM-DD) for an instant in a given IANA timezone.
+ * Used so "today" / availability day matches bookingPage.timezone, not UTC.
+ */
+function civilDateInTimeZone(instant = new Date(), timeZone = "Africa/Cairo") {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timeZone || "Africa/Cairo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(instant instanceof Date ? instant : new Date(instant));
+  } catch {
+    return new Date(instant).toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * Occupancy interval for a booking attempt, shared by slot listing and final create.
+ * Contract: wall-clock minutes on the civil `date` string; end = start + duration + buffer.
+ * DST note: Maw3ed stores local wall date/time (not UTC instants). Block length is
+ * wall-clock minutes, identical for availability and booking on that civil day.
+ */
+function occupancyInterval({ date, time, durationMinutes, bufferMinutes = 0 }) {
+  const start = toMinutes(time);
+  const block = Math.max(0, Number(durationMinutes) || 0) + Math.max(0, Number(bufferMinutes) || 0);
+  return {
+    date: String(date || ""),
+    startMinutes: start,
+    endMinutes: start + block,
+    blockMinutes: block
+  };
+}
+
+function resolveIdempotencyKeyFromRequest(req, body = {}) {
+  const header =
+    (req && (req.headers?.["idempotency-key"] || req.headers?.["Idempotency-Key"])) || "";
+  return normalizeIdempotencyKey(body?.idempotencyKey || header);
+}
+
 module.exports = {
   OCCUPYING_STATUSES,
   normalizeIdempotencyKey,
+  resolveIdempotencyKeyFromRequest,
   rangesOverlap,
   toMinutes,
   fromMinutes,
@@ -170,5 +211,7 @@ module.exports = {
   withBookingLock,
   holdKey,
   releaseHoldOnce,
-  purgeExpiredHoldsOnce
+  purgeExpiredHoldsOnce,
+  civilDateInTimeZone,
+  occupancyInterval
 };

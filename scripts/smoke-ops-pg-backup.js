@@ -322,7 +322,7 @@ async function main() {
         "No live Postgres (set MAW3ED_STORAGE=postgres and DATABASE_URL). Table inventory + restore-safety checks still passed.",
       checks,
       ownerHint:
-        "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5433/maw3ed npm run test:ops-pg-backup"
+        "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run test:ops-pg-backup"
     };
     console.log(JSON.stringify(result));
     return;

@@ -1788,8 +1788,12 @@ function createAppointment(payload) {
   const phone = String(payload.phone || "").trim();
   const email = String(payload.email || "").trim();
   const blockMinutes = serviceBookingBlockMinutes(service);
-  const start = toMinutes(time);
-  const end = start + blockMinutes;
+  const interval = bookingAtomic.occupancyInterval({
+    date,
+    time,
+    durationMinutes: service?.durationMinutes || 30,
+    bufferMinutes: service?.bufferMinutes || 0
+  });
   const availableTimes = listStaffSlotsForDay({
     staffId,
     date,
@@ -1798,13 +1802,14 @@ function createAppointment(payload) {
   });
   if (!availableTimes.includes(time)) fail("الموظف غير متاح في هذا الوقت أو خارج ساعات العمل", 409);
   // Stronger than equal-start-only: any overlapping [start, end+buffer) collides.
+  // Uses the same occupancyInterval helper as availability.
   const collision = bookingAtomic.findStaffOverlap({
     appointments: store.appointments,
     services: store.services,
     staffId,
     date,
-    startMinutes: start,
-    endMinutes: end
+    startMinutes: interval.startMinutes,
+    endMinutes: interval.endMinutes
   });
   if (collision) fail("هذا الموظف محجوز في نفس الوقت", 409);
 

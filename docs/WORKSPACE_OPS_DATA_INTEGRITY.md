@@ -2,7 +2,7 @@
 
 **تاريخ:** 2026-10-27  
 **المرحلة:** 2 — سلامة البيانات (جرد FK + مقارنة + دفتر ترحيل + استعادة JSON + PG ops backup)  
-**الحالة:** مكتملة تقنياً — أدوات `ops:pg-backup`/`ops:pg-restore` + smoke `test:ops-pg-backup` (+ `--migrate-twice`) تثبت round-trip وidempotent migrate بما في ذلك 011+012. أعد التشغيل على Postgres Sam-PC (5433) قبل اعتماد بيانات حية.
+**الحالة:** مكتملة تقنياً — أدوات `ops:pg-backup`/`ops:pg-restore` + smoke `test:ops-pg-backup` (+ `--migrate-twice`) تثبت round-trip وidempotent migrate بما في ذلك 011+012. أعد التشغيل على Postgres Sam-PC (5432) قبل اعتماد بيانات حية.
 
 ## ربط الموظف (ذو صلة بالمرحلة 2)
 
@@ -66,12 +66,12 @@ npm run test:ops-pg-backup
 node scripts/audit-ops-integrity.js --migrations-only --json
 ```
 
-### على Sam-PC (Postgres عادةً منفذ 5433)
+### على Sam-PC (Postgres عادةً منفذ 5432)
 
 ```bash
 export MAW3ED_ENV=local
 export MAW3ED_STORAGE=postgres
-export DATABASE_URL=postgresql://USER:PASS@127.0.0.1:5433/maw3ed
+export DATABASE_URL=postgresql://USER:PASS@127.0.0.1:5432/maw3ed
 
 npm run migrate          # مرة 1 — يطبّق المعلّق بما فيه 011+012 إن لزم
 npm run migrate          # مرة 2 — يجب: No pending migrations / applied=0

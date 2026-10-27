@@ -4,6 +4,7 @@ const { query, databaseConfigured } = require("./db");
 const workspaceEvents = require("./workspaceEvents");
 const { evaluateRuntimePosture } = require("./runtimePosture");
 const staffLinks = require("./staffLinks");
+const bookingAtomic = require("./bookingAtomic");
 
 const platformAdmin = createPlatformAdmin({ query, databaseConfigured, sendJson: () => {} });
 
@@ -273,7 +274,10 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       await platformAdmin.assertWorkspaceNotSuspended(workspaceId);
     }
 
-    return await ops.withWorkspaceAsync(workspaceId, async () => {
+    // Phase 3: run booking mutations inside the workspace transaction/lock, then
+    // send confirmation email only after commit (no notify-before-commit).
+    let pendingBookingConfirmation = null;
+    const handled = await ops.withWorkspaceAsync(workspaceId, async () => {
       if (requested === "/api/ops/contexts" && req.method === "GET") {
         // Selectable desk/ops contexts for the authenticated user.
         // Client may suggest x-workspace-id; server still proves membership + link.
@@ -598,22 +602,18 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
       if (publicBookMatch && req.method === "POST") {
         assertPublicRateLimit(req, "book", 20);
         const body = await parseJsonBody(req);
+        const idempotencyKey = bookingAtomic.resolveIdempotencyKeyFromRequest(req, body);
+        if (idempotencyKey) body.idempotencyKey = idempotencyKey;
         const appointment = await ops.createPublicAppointment(publicBookMatch[1], body);
         const notifications = ops.getNotificationSettings();
         const page = ops.getBookingPage();
         if (notifications?.email?.confirmation !== false) {
-          try {
-            const { sendBookingConfirmationEmail } = require("./email");
-            await sendBookingConfirmationEmail({
-              to: String(body.email || "").trim(),
-              businessTo: String(page.email || "").trim(),
-              appointment,
-              page,
-              locale: "ar"
-            });
-          } catch (error) {
-            console.warn("[ops] booking confirmation email failed:", error.message);
-          }
+          pendingBookingConfirmation = {
+            to: String(body.email || "").trim(),
+            businessTo: String(page.email || "").trim(),
+            appointment,
+            page
+          };
         }
         sendJson(res, 201, {
           ok: true,
@@ -779,7 +779,13 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
         return true;
       }
       if (requested === "/api/ops/appointments" && req.method === "POST") {
-        sendJson(res, 201, { ok: true, appointment: ops.createAppointment(await parseJsonBody(req)) });
+        const body = await parseJsonBody(req);
+        const idempotencyKey = bookingAtomic.resolveIdempotencyKeyFromRequest(req, body);
+        if (idempotencyKey) body.idempotencyKey = idempotencyKey;
+        sendJson(res, 201, {
+          ok: true,
+          appointment: await ops.createAppointmentAsync(body)
+        });
         return true;
       }
 
@@ -830,6 +836,20 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
 
       return false;
     });
+
+    if (pendingBookingConfirmation) {
+      try {
+        const { sendBookingConfirmationEmail } = require("./email");
+        await sendBookingConfirmationEmail({
+          ...pendingBookingConfirmation,
+          locale: "ar"
+        });
+      } catch (error) {
+        console.warn("[ops] booking confirmation email failed:", error.message);
+      }
+    }
+
+    return handled;
   } catch (error) {
     handleOpsError(res, sendJson, error);
     return true;

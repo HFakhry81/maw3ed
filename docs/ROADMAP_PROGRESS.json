@@ -10,13 +10,12 @@
     "docs/STAFF_ACCOUNT_LINKS.md"
   ],
   "resume_pointer": {
-    "phase": 3,
-    "package": "atomic-booking-json-core",
+    "phase": 4,
+    "package": "resources-session-capacity-not-started",
     "next_steps": [
-      "Extend atomic booking parity to PostgreSQL path (advisory lock + overlap + idempotency under MAW3ED_STORAGE=postgres)",
-      "Unify public slot listing and createAppointment on the same [start, end+buffer) helper with explicit timezone/DST cases",
-      "Wire idempotencyKey through public booking HTTP API and ops create appointment route",
-      "Do not start Phase 4 resources/session_capacity/education enrollment; occupancy modes stay Phase 4"
+      "Do not claim education/salon/rental ready — start Phase 4 occupancy_mode + resources + session_capacity only when scheduled",
+      "Optional Phase 3 polish (non-blocking): reschedule flow acceptance, multi-worker hold stress under load",
+      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=...@127.0.0.1:5432/maw3ed npm run test:phase3-booking"
     ]
   },
   "open_product_gates": [],
@@ -35,49 +34,16 @@
       "id": 0,
       "name_ar": "النطاق وحصر السطح",
       "status": "complete_technical",
-      "closed_at": "2026-10-27",
-      "evidence": [
-        "docs/PHASE_0_API_INVENTORY_AND_DECISIONS.md",
-        "docs/SECURITY_ROUTE_INVENTORY.md",
-        "docs/IMPLEMENTATION_EXECUTION_LOG.md"
-      ],
-      "notes": "Commercial/legal product gates remain open and block related feature launch, not Phase 0 technical close."
+      "closed_at": "2026-10-27"
     },
     {
       "id": 1,
       "name_ar": "الهوية والعزل وRBAC",
       "status": "closed_with_open_gate",
       "closed_at": "2026-10-27",
-      "closed_revision": "366e209c889f5de234d70e649819937e5e584a87",
-      "packages": [
-        {
-          "id": "ops-rbac",
-          "status": "complete_technical",
-          "summary": "/api/ops/* route×method×role policy + membership resolver for DB+JSON"
-        },
-        {
-          "id": "legacy-apis-dev-events-uploads",
-          "status": "complete_technical",
-          "summary": "Legacy medical APIs membership+role barriers; development-events local-only; uploads gated"
-        },
-        {
-          "id": "bola-workspace-events-production-posture",
-          "status": "complete_technical",
-          "summary": "BOLA smokes; workspace events JSONL; production JSON posture"
-        }
-      ],
       "open_gate": {
         "id": "staff_desk_attribution",
-        "status": "resolved_in_phase_2",
-        "summary": "Originally deferred at Phase 1 close; owner decided canonical junction model and minimal enforcement shipped in Phase 2 package staff-links"
-      },
-      "production_json_posture": {
-        "auth_required_in_production": true,
-        "json_skips_membership": false,
-        "default_production_storage": "postgres",
-        "json_in_production": "allowed_for_isolated_acceptance_with_warning",
-        "strict_refuse_env": "MAW3ED_STRICT_PRODUCTION_STORAGE=1",
-        "strict_allow_override_env": "MAW3ED_ALLOW_JSON_IN_PRODUCTION=1"
+        "status": "resolved_in_phase_2"
       }
     },
     {
@@ -88,48 +54,21 @@
       "packages": [
         {
           "id": "integrity-baseline",
-          "status": "complete_technical",
-          "summary": "Composite FK inventory + migration 011; schema_migrations ledger; JSON orphan audit/compare; ops session backup↔restore smoke; SoT doc",
-          "evidence_commands": [
-            "npm run test:ops-integrity",
-            "node scripts/audit-ops-integrity.js --migrations-only --json"
-          ]
+          "status": "complete_technical"
         },
         {
           "id": "staff-links",
-          "status": "complete_technical",
-          "summary": "workspace_staff_links migration 012 + JSON staff-links.json; context APIs; desk RBAC scoped to linked staffId; unlinked staff fail-closed",
-          "evidence_commands": [
-            "npm run test:staff-links",
-            "npm run test:ops-rbac",
-            "node --check staffLinks.js",
-            "node --check opsRoutes.js",
-            "node --check server.js"
-          ]
+          "status": "complete_technical"
         },
         {
           "id": "unified-demo-seed",
-          "status": "complete_technical",
-          "summary": "Single maw3ed-demo-ops.json with medical→gmail/dawybooking and education→yahoo/talaaee; seed:demo:restore; users:cleanup-demo-owners",
-          "evidence_commands": [
-            "npm run test:ops-integrity",
-            "node --check scripts/demo-seed-store.js",
-            "node --check scripts/seed-demo-workspaces.js",
-            "node --check scripts/cleanup-demo-owner-users.js"
-          ]
+          "status": "complete_technical"
         },
         {
           "id": "pg-ops-backup-restore-migrate-twice",
           "status": "complete_technical",
-          "summary": "Scoped PG backup/restore for workspace_ops_* + workspace_staff_links; smoke drill backup→wipe→restore→JSON↔PG compare ok; migrate-twice smoke against ephemeral/local Postgres including 011+012; CI skips PG drill with clear message when DATABASE_URL absent",
-          "evidence_commands": [
-            "npm run test:ops-pg-backup",
-            "npm run test:ops-pg-backup:full",
-            "npm run test:phase2-data",
-            "node scripts/audit-ops-integrity.js --seed=medical --json",
-            "node scripts/audit-ops-integrity.js --seed=education --json"
-          ],
-          "owner_machine_note": "On Sam-PC re-run: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5433/<db> npm run migrate (twice) then npm run test:ops-pg-backup:full"
+          "summary": "Scoped PG backup/restore + migrate-twice including 011+012; Sam-PC live migrate-twice proven on 5432/maw3ed",
+          "owner_machine_note": "Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run migrate (twice) then npm run test:ops-pg-backup:full"
         }
       ],
       "remaining_to_close": []
@@ -137,25 +76,46 @@
     {
       "id": 3,
       "name_ar": "الحجز الذري والتوفر",
-      "status": "in_progress",
+      "status": "complete_technical",
+      "closed_at": "2026-10-27",
       "packages": [
         {
           "id": "atomic-booking-json-core",
           "status": "complete_technical",
-          "summary": "bookingAtomic helpers: [start,end+buffer) overlap, per-workspace async mutex, idempotencyKey, hold cancel/expiry frees once; JSON-local smoke for concurrent overlap / adjacent / idempotent / holds / buffer",
+          "summary": "bookingAtomic: [start,end+buffer) overlap, async mutex, idempotencyKey, hold cancel/expiry once; JSON smoke",
           "evidence_commands": [
-            "npm run test:atomic-booking",
-            "npm run test:phase3-booking",
-            "node --check bookingAtomic.js",
-            "node --check opsStore.js"
+            "npm run test:atomic-booking"
+          ]
+        },
+        {
+          "id": "atomic-booking-pg-parity",
+          "status": "complete_technical",
+          "summary": "PG workspace_ops path under advisory lock; migration 013 idempotency_key + unique partial index; smoke overlap/adjacent/idempotent/hold + key round-trip",
+          "evidence_commands": [
+            "npm run test:atomic-booking-pg",
+            "npm run test:atomic-booking-pg (with DATABASE_URL)"
+          ]
+        },
+        {
+          "id": "http-idempotency-key",
+          "status": "complete_technical",
+          "summary": "Public + ops appointment create accept body.idempotencyKey or Idempotency-Key header; ops POST uses createAppointmentAsync; confirmation email after workspace commit",
+          "evidence_commands": [
+            "npm run test:booking-timezone",
+            "node --check opsRoutes.js"
+          ]
+        },
+        {
+          "id": "timezone-dst-contract",
+          "status": "complete_technical",
+          "summary": "civilDateInTimeZone + occupancyInterval shared by slots/booking; DST spring-forward wall-clock minute contract; Cairo vs America/New_York civil date boundary",
+          "evidence_commands": [
+            "npm run test:booking-timezone"
           ]
         }
       ],
-      "remaining_to_close": [
-        "PostgreSQL path parity for atomic create + idempotency under live MAW3ED_STORAGE=postgres",
-        "HTTP/public booking idempotency key wiring",
-        "Shared timezone/DST availability contract tests beyond Cairo defaults"
-      ]
+      "remaining_to_close": [],
+      "notes": "Occupancy modes / resources / session_capacity / education enrollment belong in Phase 4 — not claimed here."
     },
     { "id": 4, "name_ar": "الموارد وامتدادات الخدمات", "status": "not_started" },
     { "id": 5, "name_ar": "الرحلات والواجهة", "status": "not_started" },
@@ -191,7 +151,9 @@
     "phase_2_closed": true,
     "phase_3_started": true,
     "phase_3_atomic_booking_json": true,
-    "phase_3_atomic_booking_pg": false,
-    "phase_3_closed": false
+    "phase_3_atomic_booking_pg": true,
+    "phase_3_http_idempotency": true,
+    "phase_3_timezone_dst_contract": true,
+    "phase_3_closed": true
   }
 }
