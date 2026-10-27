@@ -10,13 +10,13 @@
     "docs/STAFF_ACCOUNT_LINKS.md"
   ],
   "resume_pointer": {
-    "phase": 7,
-    "package": "ops-secrets-metrics-backup-runbook-package1",
+    "phase": 8,
+    "package": "prelaunch-acceptance-not-started",
     "next_steps": [
-      "Phase 7 package 1 landed (secrets posture + metrics/alert stubs + OPS_BACKUP_RESTORE_RUNBOOK). Next: retention policy numbers with owner, real alert sinks, TLS/header hardening review, privacy request runbooks",
+      "Start Phase 8 on a NEW PR from cursor/phase7-ops-privacy-restore-84f0: aggregate phase1–7 smokes + production-like posture + owner manual checklist",
+      "Owner gates still open from Phase 7: signed Sam-PC restore drill, RPO/RTO approval, external alert sink, host TLS review",
       "Hosted checkout / SMS / WhatsApp / Stripe live capture remain disabled",
-      "Deferred non-blocking from Phase 5: phase5-deferred-platform-activity-unlock",
-      "On Sam-PC: re-run npm run test:ops-pg-backup:full against 5432/maw3ed"
+      "On Sam-PC: MAW3ED_STORAGE=postgres DATABASE_URL=postgresql://...@127.0.0.1:5432/maw3ed npm run test:ops-pg-backup:full"
     ]
   },
   "open_product_gates": [],
@@ -138,23 +138,39 @@
     {
       "id": 7,
       "name_ar": "التشغيل والخصوصية والاستعادة",
-      "status": "in_progress",
+      "status": "closed_with_open_gate",
       "started_at": "2026-10-27",
+      "closed_at": "2026-10-27",
       "packages": [
         {
           "id": "ops-secrets-metrics-backup-runbook-package1",
           "status": "complete_technical",
           "summary": "secretsPosture (prod fail-closed, redaction); metricsAlerts stubs (outbox dead/backlog); OPS_BACKUP_RESTORE_RUNBOOK aligned with ops:pg-backup/restore; health/ready exposes redacted secrets inventory + alert findings.",
-          "evidence_commands": ["npm run test:phase7-ops", "npm run test:ops-pg-backup", "npm run test:phase6-integrations"]
+          "evidence_commands": ["npm run test:phase7-ops", "npm run test:ops-pg-backup"]
+        },
+        {
+          "id": "ops-retention-privacy-ownership-close",
+          "status": "complete_technical",
+          "summary": "dataRetention + retention:purge with redaction; alert ownership catalog; PRIVACY_REQUESTS_RUNBOOK template; runbook marks RPO/RTO pending owner; smoke covers retention + pg restore safety coherence + app security headers.",
+          "evidence_commands": ["npm run test:phase7-ops", "npm run test:ops-pg-backup"]
         }
       ],
-      "remaining_to_close": [
-        "Owner-approved RPO/RTO and retention numbers",
-        "External alert sink (Slack/email/PagerDuty) — stubs only today",
-        "TLS/Nginx/header hardening review on real deploy host",
-        "Privacy request / deletion export runbook with legal owner"
+      "remaining_to_close": [],
+      "open_gate": {
+        "id": "phase7_owner_ops_gates",
+        "status": "open_owner_manual",
+        "items": [
+          "Signed Sam-PC restore drill (test:ops-pg-backup:full on 5432/maw3ed)",
+          "Owner-approved RPO/RTO numbers (kept null in code/docs)",
+          "External alert sink wiring",
+          "Host Nginx/TLS review beyond app-level headers"
+        ]
+      },
+      "deferred_non_blocking": [
+        "phase7_owner_ops_gates",
+        "Legal review of privacy runbook per market"
       ],
-      "notes": "phase_7_started=true; package 1 only. Do not claim production ops complete."
+      "notes": "phase_7_closed=true with open owner gates. Do not claim production ops/SLA complete."
     },
     { "id": 8, "name_ar": "قبول ما قبل الإطلاق", "status": "not_started" },
     { "id": 9, "name_ar": "تجربة محدودة والتوسع", "status": "not_started" }
@@ -203,6 +219,11 @@
     "phase_6_worker_adapters_sandbox_acceptance": true,
     "phase_6_closed": true,
     "phase_7_started": true,
-    "phase_7_secrets_metrics_backup_runbook_package1": true
+    "phase_7_secrets_metrics_backup_runbook_package1": true,
+    "phase_7_retention_privacy_ownership_close": true,
+    "phase_7_closed": true,
+    "phase_7_closed_with_open_gate": true,
+    "phase_8_started": false,
+    "phase_9_started": false
   }
 }
