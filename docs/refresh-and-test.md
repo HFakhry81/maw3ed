@@ -73,7 +73,7 @@ MAW3ED-TOOLBOX.bat
 npm run seed:demo:restore
 ```
 
-medical → `contact.haitham@gmail.com` / dawybooking · education → `contact.haitham@yahoo.com` / talaaee-book.  
+medical → `contact.haitham@gmail.com` / dawybooking · education → `contact.haitham@yahoo.com` / talaaee-book · platform admin → `contact.fakhry@gmail.com` (بلا مساحة).  
 التفاصيل: [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
 
 تخطّي التثبيت عند التكرار السريع:

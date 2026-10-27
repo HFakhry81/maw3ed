@@ -54,7 +54,7 @@
 ```bash
 npm run seed:demo:restore
 # المستشفى فقط:
-npm run seed:medical:restore
+npm run seed:demo:restore -- --section=medical
 ```
 
 `npm run migrate` / `npm run seed` لا يستعيدان بذرة العروض. راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).

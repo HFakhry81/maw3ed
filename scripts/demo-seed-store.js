@@ -6,6 +6,7 @@
  *   medical   → contact.haitham@gmail.com  / dawybooking
  *   education → contact.haitham@yahoo.com / talaaee-book
  *
+ * مسؤول المنصة الوحيد: contact.fakhry@gmail.com (بدون أي مساحة)
  * الاستعادة: npm run seed:demo:restore
  */
 "use strict";
@@ -16,7 +17,6 @@ const path = require("path");
 const rootDir = path.join(__dirname, "..");
 const SEEDS_DIR = path.join(rootDir, "data", "seeds");
 const CANONICAL_SEED = path.join(SEEDS_DIR, "maw3ed-demo-ops.json");
-const LEGACY_MEDICAL_SEED = path.join(SEEDS_DIR, "medical-demo-ops.json");
 const SUMMARY_PATH = path.join(SEEDS_DIR, "maw3ed-demo-summary.json");
 const SEED_NAME = "maw3ed-demo-seeds";
 const FORMAT = "multi-section-v1";
@@ -40,10 +40,15 @@ const SECTION_TARGETS = {
   }
 };
 
+/** Sole platform admin — must not own/join any workspace. */
+const PLATFORM_ADMIN_EMAIL = "contact.fakhry@gmail.com";
+
 const KEEP_OWNER_EMAILS = [
   SECTION_TARGETS.medical.ownerEmail,
   SECTION_TARGETS.education.ownerEmail
 ];
+
+const KEEP_USER_EMAILS = [...KEEP_OWNER_EMAILS, PLATFORM_ADMIN_EMAIL];
 
 function ensureSeedsDir() {
   fs.mkdirSync(SEEDS_DIR, { recursive: true });
@@ -290,33 +295,14 @@ function normalizeBundle(raw) {
   return emptyBundle();
 }
 
-function readLegacyMedicalIfPresent() {
-  if (!fs.existsSync(LEGACY_MEDICAL_SEED)) return null;
-  try {
-    const raw = JSON.parse(fs.readFileSync(LEGACY_MEDICAL_SEED, "utf8"));
-    // Ignore redirect stubs
-    if (raw && raw.redirect) return null;
-    if (raw && (raw.store || raw.sections || Array.isArray(raw.staff))) return raw;
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function readDemoSeedBundle({ migrate = true } = {}) {
+function readDemoSeedBundle(_opts = {}) {
   ensureSeedsDir();
   if (fs.existsSync(CANONICAL_SEED)) {
     const raw = JSON.parse(fs.readFileSync(CANONICAL_SEED, "utf8"));
     return normalizeBundle(raw);
   }
-  const legacy = readLegacyMedicalIfPresent();
-  if (legacy) {
-    const bundle = normalizeBundle(legacy);
-    if (migrate) writeDemoSeedBundle(bundle, { source: "migrate-legacy-medical" });
-    return bundle;
-  }
   const error = new Error(
-    `لا توجد بذرة موحدة في ${path.relative(rootDir, CANONICAL_SEED)}\nأنشئها عبر npm run seed:demo:save أو انقل medical-demo-ops.json القديمً.`
+    `لا توجد بذرة موحدة في ${path.relative(rootDir, CANONICAL_SEED)}\nأنشئها عبر npm run seed:demo:save -- --section=medical|education`
   );
   error.code = "SEED_MISSING";
   throw error;
@@ -366,20 +352,6 @@ function writeDemoSeedBundle(bundleInput, extraMeta = {}) {
 
   fs.writeFileSync(CANONICAL_SEED, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   fs.writeFileSync(SUMMARY_PATH, `${JSON.stringify(payload.meta, null, 2)}\n`, "utf8");
-
-  // Legacy path becomes a pointer so old docs don't look like a second seed.
-  fs.writeFileSync(
-    LEGACY_MEDICAL_SEED,
-    `${JSON.stringify(
-      {
-        redirect: "maw3ed-demo-ops.json",
-        note: "البذرة الموحدة (طبي + طلائع) في maw3ed-demo-ops.json — استخدم npm run seed:demo:restore"
-      },
-      null,
-      2
-    )}\n`,
-    "utf8"
-  );
 
   return { path: CANONICAL_SEED, meta: payload.meta, summaryPath: SUMMARY_PATH, bundle: payload };
 }
@@ -432,10 +404,11 @@ module.exports = {
   FORMAT,
   SEEDS_DIR,
   CANONICAL_SEED,
-  LEGACY_MEDICAL_SEED,
   SUMMARY_PATH,
   SECTION_TARGETS,
+  PLATFORM_ADMIN_EMAIL,
   KEEP_OWNER_EMAILS,
+  KEEP_USER_EMAILS,
   ensureSeedsDir,
   canonicalSeedPath,
   summarizeStore,

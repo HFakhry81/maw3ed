@@ -115,9 +115,10 @@
 ### المرحلة 2 — بذرة موحدة (طبي + طلائع) وتنظيف المستخدمين — 2026-10-27
 
 - **التصحيح النهائي للتعيين:** medical/hospital → `contact.haitham@gmail.com` / dawybooking؛ education/طلائع → `contact.haitham@yahoo.com` / talaaee-book.
-- **ملف واحد:** `data/seeds/maw3ed-demo-ops.json` بقسمين؛ `medical-demo-ops.json` مؤشر فقط.
-- **أمر واحد:** `npm run seed:demo:restore` (أو `--section=medical|education`).
-- **تنظيف مستخدمين:** `npm run users:cleanup-demo-owners` (dry-run ثم `--apply`) يبقي المالكين الاثنين + platform admin (gmail متوقع super_admin). راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
+- **ملف واحد:** `data/seeds/maw3ed-demo-ops.json` بقسمين (medical + education) — لا ملف بذرة ثانٍ.
+- **أمر واحد:** `npm run seed:demo:restore` / `seed:demo:save` (أو `--section=medical|education`).
+- **مسؤول المنصة:** `contact.fakhry@gmail.com` فقط (`super_admin`) وبدون أي مساحة؛ المالكان ليسا platform admin.
+- **تنظيف مستخدمين:** `npm run users:cleanup-demo-owners` (dry-run ثم `--apply`) يبقي fakhry + المالكين الاثنين فقط وينقل أعلام المنصة إلى fakhry. راجع [`MEDICAL_DEMO_SEED.md`](MEDICAL_DEMO_SEED.md).
 
 ## نقطة الاستئناف
 

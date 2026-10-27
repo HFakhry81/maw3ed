@@ -24,14 +24,16 @@ const {
   createSessionBackup,
   restoreSessionBackup
 } = require("./ops-session-backup");
-const { DEFAULT_OWNER_EMAIL } = require("./medical-seed-snapshot");
 const {
   SECTION_TARGETS,
+  PLATFORM_ADMIN_EMAIL,
+  KEEP_USER_EMAILS,
   pickOwnedWorkspaceForSection,
   applyActivityFields,
   readDemoSeedBundle,
   CANONICAL_SEED
 } = require("./demo-seed-store");
+const DEFAULT_OWNER_EMAIL = SECTION_TARGETS.medical.ownerEmail;
 
 const root = path.join(__dirname, "..");
 
@@ -163,6 +165,12 @@ function main() {
       SECTION_TARGETS.medical.ownerEmail === "contact.haitham@gmail.com" &&
       SECTION_TARGETS.education.ownerEmail === "contact.haitham@yahoo.com",
     "medical→gmail and education→yahoo owner mapping"
+  );
+  assert(
+    PLATFORM_ADMIN_EMAIL === "contact.fakhry@gmail.com" &&
+      KEEP_USER_EMAILS.includes(PLATFORM_ADMIN_EMAIL) &&
+      !KEEP_USER_EMAILS.every((email) => email === PLATFORM_ADMIN_EMAIL),
+    "sole platform admin is contact.fakhry@gmail.com alongside two owners"
   );
   assert(
     SECTION_TARGETS.medical.preferredSlug === "dawybooking" &&

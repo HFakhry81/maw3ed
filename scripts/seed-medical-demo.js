@@ -1,15 +1,16 @@
 /**
- * توليد بذرة المستشفى الطبية (نادراً) ثم حفظها داخل البذرة الموحدة.
+ * توليد بذرة المستشفى الطبية (نادراً) ثم حفظها داخل القسم medical من البذرة الموحدة.
  *
  * البذرة الموحدة الدائمة:
  *   data/seeds/maw3ed-demo-ops.json  (أقسام medical + education)
  *
- * المسار السعيد للاستعادة:
+ * الاستعادة/الحفظ (الأمر الوحيد):
  *   npm run seed:demo:restore
- *   npm run seed:medical:restore          (= قسم medical فقط → gmail / dawybooking)
+ *   npm run seed:demo:save -- --section=medical
  *
- * الهدف الافتراضي للقسم الطبي: contact.haitham@gmail.com
- * طلائع/education: عبر npm run seed:demo:restore -- --section=education
+ * medical → contact.haitham@gmail.com / dawybooking
+ * education → contact.haitham@yahoo.com / talaaee-book
+ * platform admin → contact.fakhry@gmail.com (بلا مساحة)
  *
  * ملاحظة: npm run migrate و npm run seed لا يحمّلان بذرة العروض.
  */
@@ -21,12 +22,45 @@ const { query, pool, databaseConfigured } = require("../db");
 const ops = require("../opsStore");
 const opsWorkspace = require("../opsWorkspace");
 const {
-  canonicalSeedPath,
-  readCanonicalSeed,
-  writeCanonicalSeed,
+  SECTION_TARGETS,
   summarizeStore,
-  DEFAULT_OWNER_EMAIL
-} = require("./medical-seed-snapshot");
+  canonicalSeedPath,
+  readDemoSeedBundle,
+  writeDemoSeedBundle,
+  getSectionStore,
+  setSectionStore
+} = require("./demo-seed-store");
+const DEFAULT_OWNER_EMAIL = SECTION_TARGETS.medical.ownerEmail;
+
+function readCanonicalSeed() {
+  const bundle = readDemoSeedBundle();
+  return {
+    meta: {
+      name: "medical-demo",
+      ...(bundle.meta?.sections?.medical || {}),
+      unified: true,
+      canonical: "maw3ed-demo-ops.json"
+    },
+    store: getSectionStore(bundle, "medical")
+  };
+}
+
+function writeCanonicalSeed(store, extraMeta = {}) {
+  let bundle;
+  try {
+    bundle = readDemoSeedBundle();
+  } catch (error) {
+    if (error.code !== "SEED_MISSING") throw error;
+    bundle = { sections: {} };
+  }
+  bundle = setSectionStore(bundle, "medical", store, { source: extraMeta.source || "medical-generate" });
+  const written = writeDemoSeedBundle(bundle, extraMeta);
+  return {
+    path: written.path,
+    meta: { name: "medical-demo", ...written.meta.sections.medical, ...extraMeta },
+    summaryPath: written.summaryPath
+  };
+}
 
 const args = process.argv.slice(2);
 const keep = args.includes("--keep");
@@ -763,24 +797,18 @@ async function generateDemo() {
   console.log("[seed-medical] generate done");
   console.log(JSON.stringify(summary, null, 2));
   await saveCanonicalFromWorkspace("generate");
-  console.log("\nاسترجاع لاحقاً: npm run seed:medical:restore");
+  console.log("\nاسترجاع لاحقاً: npm run seed:demo:restore -- --section=medical");
   console.log("تحذير: refresh / ops:reset يمسحان workspace — البذرة في data/seeds/ تبقى.");
   return summary;
 }
 
 async function main() {
-  // الاستعادة/الحفظ تتم عبر البذرة الموحدة (قسم medical فقط هنا).
   if (doRestore || doSave) {
-    const { spawnSync } = require("child_process");
-    const forwarded = process.argv.slice(2).filter((item) => item !== "--restore" && item !== "--save");
-    const childArgs = [
-      path.join(__dirname, "seed-demo-workspaces.js"),
-      doRestore ? "--restore" : "--save",
-      "--section=medical",
-      ...forwarded
-    ];
-    const result = spawnSync(process.execPath, childArgs, { stdio: "inherit", env: process.env });
-    process.exitCode = result.status == null ? 1 : result.status;
+    console.error(
+      "[seed-medical] --restore/--save أُزيلا من هذا السكربت.\n" +
+        "استخدم: npm run seed:demo:" + (doRestore ? "restore" : "save") + " -- --section=medical"
+    );
+    process.exitCode = 2;
     return;
   }
 
