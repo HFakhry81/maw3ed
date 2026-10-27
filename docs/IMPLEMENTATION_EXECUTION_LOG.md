@@ -18,7 +18,7 @@
 | 4. الموارد وامتدادات الخدمات | مكتملة تقنياً | `occupancy_mode` + `composition`، موارد، جلسات، تسجيلات، حضور، HTTP، عزل | قبول مستقل لـ exclusive وrental وsession_capacity وbundle + عزل |
 | 5. الرحلات والواجهة | مكتملة تقنياً | onboarding+قفل، كتالوج/موارد/إشغال، أدوار، حجز عام+تسجيل جلسة، روابط إدارة موقعة، pagination، a11y أساسية | رحلات المنتج قابلة للتجربة؛ فك قفل القالب لمسؤول المنصة مؤجّل موثّق |
 | 6. الرسائل والفوترة والتكاملات | مكتملة تقنياً | outbox + worker + محوّلات sandbox + قبول webhook | الميزات غير الجاهزة مغلقة صراحةً؛ لا ادعاء دفع حي |
-| 7. التشغيل والخصوصية والاستعادة | قيد التنفيذ — حزمة 1 | أسرار + stubs رصد + runbook استعادة | RPO/RTO معتمد، sink تنبيه حقيقي، hardening مضيف |
+| 7. التشغيل والخصوصية والاستعادة | مغلقة (بوابات مالك مفتوحة) | أسرار + احتفاظ/تنقيح + stubs رصد + runbooks | drill موقّع على Sam-PC؛ RPO/RTO؛ sink خارجي؛ TLS مضيف |
 | 8. قبول ما قبل الإطلاق | لم تبدأ | CI وproduction-like وقبول يدوي | كل البوابات ناجحة على revision محدد وبيانات اصطناعية |
 | 9. تجربة محدودة والتوسع | لم تبدأ | pilot محدود وقرار التوسع والرجوع | Go/No-Go من المالكين، لا إطلاق ذاتي أثناء هذا التنفيذ |
 
@@ -187,11 +187,17 @@
 - **Metrics/alerts stubs:** [`metricsAlerts.js`](../metricsAlerts.js) — عدّادات/مقاييس in-process وتنبيهات outbox dead/backlog بلا بائع خارجي.
 - **Runbook:** [`docs/OPS_BACKUP_RESTORE_RUNBOOK.md`](OPS_BACKUP_RESTORE_RUNBOOK.md) محاذٍ لـ `ops:pg-backup` / `ops:pg-restore` / `test:ops-pg-backup`.
 - **Health:** `/api/health/ready` يعرض inventory أسرار منقّح + findings stubs.
-- **التحقق:** `npm run test:phase7-ops` (+ الإبقاء على `test:phase6-integrations` و`test:ops-pg-backup`).
-- **متبقٍ لإغلاق م7:** RPO/RTO بموافقة المالك، sink تنبيه حقيقي، مراجعة TLS/headers على المضيف، runbook طلبات خصوصية.
+
+### المرحلة 7 — إغلاق تقني مع بوابات مالك — 2026-10-27
+
+- **احتفاظ/تنقيح:** [`dataRetention.js`](../dataRetention.js) + `npm run retention:purge` — افتراضات تقنية؛ RPO/RTO تبقى `null` / `proposed_pending_owner_approval`.
+- **ملكية تنبيهات:** كتالوج أدوار في `metricsAlerts.ALERT_OWNERSHIP` (`stub_only`).
+- **خصوصية:** [`docs/PRIVACY_REQUESTS_RUNBOOK.md`](PRIVACY_REQUESTS_RUNBOOK.md) قالب عربي — بلا ادعاء قانوني.
+- **إغلاق:** `phase_7_closed=true` مع `closed_with_open_gate` لـ drill Sam-PC الموقّع، اعتماد RPO/RTO، sink خارجي، مراجعة TLS على المضيف.
+- **التحقق:** `npm run test:phase7-ops` و`npm run test:ops-pg-backup`.
 
 ## نقطة الاستئناف
 
-1. شغّل `npm run test:phase7-ops` و`npm run test:phase6-integrations`.
-2. الحزمة التالية للمرحلة 7: سياسات احتفاظ/RPO أو hardening مضيف — بلا اختراع SLA.
-3. على Sam-PC: `npm run test:ops-pg-backup:full` على `5432` / `maw3ed`.
+1. شغّل `npm run test:phase7-ops`.
+2. ابدأ المرحلة 8 من فرع المرحلة 7: تجميع smokes + قبول production-like + قائمة يدوية للمالك.
+3. على Sam-PC: `npm run test:ops-pg-backup:full` على `5432` / `maw3ed` (بوابة مالك مفتوحة).
