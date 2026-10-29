@@ -215,3 +215,13 @@
 2. المالك يُكمل القبول اليدوي ثم يوقّع Go/No-Go على revision محدد.
 3. على Sam-PC: `npm run test:ops-pg-backup:full` على `5432` / `maw3ed`.
 4. لا تدمج PRs ولا تفعّل Stripe/WhatsApp/checkout دون قرار صريح.
+
+
+---
+
+## Sam-Harness Level-3 handoff (2026-10-29T00:23:46.897Z)
+
+- Synced architecture pack to `docs/sam-harness/`
+- Backlog: `docs/sam-harness/IMPLEMENTATION_BACKLOG.md`
+- Next sprint note: `docs/sam-harness/NEXT_SPRINT.md`
+- Status: ready for engineering implementation against open gaps in INCOMPLETE_LOGIC.md

@@ -71,8 +71,12 @@ function updateResource(store, resourceId, payload = {}) {
     resource.unit = String(payload.unit) === "unit" ? "unit" : "seat";
   }
   if (payload.status != null) {
-    resource.status =
-      payload.status === "inactive" || payload.status === "maintenance" ? payload.status : "active";
+    const statusMachines = require("./opsStatusMachines");
+    const normalized = statusMachines.normalizeResourceStatus(payload.status);
+    if (!statusMachines.RESOURCE_STATUSES.includes(normalized)) {
+      fail("Invalid resource status", 400);
+    }
+    resource.status = normalized;
   }
   if (payload.location != null) resource.location = String(payload.location || "");
   if (payload.metadata != null && typeof payload.metadata === "object") {
@@ -136,10 +140,11 @@ function resolveBookingResource(store, { service, resourceId = null, startsAt, e
       return resource;
     }
     if (req.resourceType) {
+      const statusMachines = require("./opsStatusMachines");
       const candidates = store.resources.filter(
         (item) =>
           item.resourceType === req.resourceType &&
-          item.status === "active" &&
+          statusMachines.isBookableResourceStatus(item.status) &&
           !capacityEngine.findResourceAllocationConflict({
             allocations: store.resourceAllocations,
             resourceId: item.id,

@@ -10,6 +10,8 @@
 - [بذرة العروض الموحدة](MEDICAL_DEMO_SEED.md) — ملف واحد `maw3ed-demo-ops.json` (طبي→gmail/dawybooking، طلائع→yahoo/talaaee) + تنظيف 3 مستخدمين (`fakhry` admin بلا مساحة) عبر `seed:demo:*` و`users:cleanup-demo-owners`.
 - [جرد واجهات الوصول](SECURITY_ROUTE_INVENTORY.md) — مجموعات endpoints، أدوارها، وضوابطها الحالية والمتبقية.
 - [مواصفات المنتج المرجعية](PRODUCT_AND_PLATFORM_SPEC.md) — الجمهور والأدوار والرحلات والكيانات والمتطلبات ومقارنة التنفيذ.
+- [تدفقات التشغيل وآلات الحالات](OPERATIONAL_FLOWS_AND_STATUS_MACHINES.md) — BookingType الثلاثة وحالات الطب/التعليم/الصالون/التأجير وربط الموظف بالفرع (موعد متعددة الأغراض).
+- [خطة الإعداد للإنتاج](PRODUCTION_COMPLETION_PLAN.md) — محاور استكمال النواقص للإنتاج كمُدخل لتقارير Sam-Harness (بدون ادعاء تنفيذ مكتمل).
 - [مقارنة المنصات المشابهة](REFERENCE_PLATFORM_BENCHMARK.md) — نماذج Calendly وSimplyBook.me وما يستفاد منها دون ادعاء تقليد أو تكافؤ.
 - [العمارة وخط أساس الأمان والتشغيل](ARCHITECTURE_AND_SECURITY_BASELINE.md) — الحالة الحالية، تصميم مستهدف، tenant isolation، حجز متزامن، وبوابات القبول.
 - [خارطة تنفيذ المشروع الموحدة](IMPLEMENTATION_ROADMAP.md) — قرارات النطاق، المراحل والبوابات، سعة المجالات، معايير القبول ومراجعة الفجوات حتى الإطلاق التدريجي.

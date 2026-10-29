@@ -12,7 +12,9 @@ The best starting points for reliable changes are:
 - [opsStore.js](opsStore.js) and [opsWorkspace.js](opsWorkspace.js) — workspace state logic
 - [workspaceOpsPg.js](workspaceOpsPg.js) — normalized PostgreSQL persistence for workspace operations
 - [src/main.jsx](src/main.jsx) and [src/](src/) — React/Vite operations UI and components
-- [activityTemplatesCatalog.js](activityTemplatesCatalog.js) — activity templates and starter catalogs
+- [activityTemplatesCatalog.js](activityTemplatesCatalog.js) — activity templates and starter catalogs (multi-purpose; not clinic-only)
+- [opsStatusMachines.js](opsStatusMachines.js) — BookingType + status transitions (APPOINTMENT / RESOURCE_RENTAL / BATCH_SCHEDULE)
+- [docs/OPERATIONAL_FLOWS_AND_STATUS_MACHINES.md](docs/OPERATIONAL_FLOWS_AND_STATUS_MACHINES.md) — operational flows and status vocabulary
 - [platformAdminRoutes.js](platformAdminRoutes.js) — platform admin features
 - [docs/PROJECT_DOCUMENTATION_INDEX.md](docs/PROJECT_DOCUMENTATION_INDEX.md) — documentation map
 - [docs/IMPLEMENTATION_EXECUTION_LOG.md](docs/IMPLEMENTATION_EXECUTION_LOG.md) — roadmap stage status and resume pointer

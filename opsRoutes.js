@@ -13,6 +13,7 @@ const OPS_ADMIN_ROLES = new Set(["owner", "admin"]);
 const OPS_MANAGER_ROLES = new Set(["owner", "admin", "manager"]);
 const OPS_VIEWER_READS = new Set([
   "GET /api/ops/activity-templates",
+  "GET /api/ops/status-catalog",
   "GET /api/ops/working-schedule"
 ]);
 const OPS_KNOWN_REQUESTS = new Set([
@@ -29,6 +30,7 @@ const OPS_KNOWN_REQUESTS = new Set([
   "POST /api/ops/uploads/logo",
   "POST /api/ops/uploads/image",
   "GET /api/ops/activity-templates",
+  "GET /api/ops/status-catalog",
   "GET /api/ops/working-schedule",
   "PUT /api/ops/working-hours",
   "POST /api/ops/closed-days",
@@ -628,6 +630,10 @@ async function tryHandleOpsApi({ requested, req, res, requestUrl, sendJson, pars
 
       if (requested === "/api/ops/activity-templates" && req.method === "GET") {
         sendJson(res, 200, { ok: true, templates: ops.listActivityTemplates() });
+        return true;
+      }
+      if (requested === "/api/ops/status-catalog" && req.method === "GET") {
+        sendJson(res, 200, { ok: true, catalog: ops.getStatusCatalog() });
         return true;
       }
 

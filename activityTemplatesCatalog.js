@@ -2,7 +2,12 @@
  * Ready-made activity templates for Maw3ed workspaces.
  * Each template defines bilingual labels, categories, and starter services.
  * custom / other stay empty so operators build their own catalog.
+ *
+ * Maw3ed is multi-purpose — not clinic-only. Templates map to BookingType:
+ * APPOINTMENT | RESOURCE_RENTAL | BATCH_SCHEDULE (see opsStatusMachines.js).
  */
+
+const statusMachines = require("./opsStatusMachines");
 
 function L(ar, en) {
   return { ar, en };
@@ -22,7 +27,10 @@ function service(id, name, durationMinutes, price, extras = {}) {
     publicBooking: extras.publicBooking !== false,
     autoAccept: extras.autoAccept !== false,
     autoComplete: Boolean(extras.autoComplete),
-    description: extras.description || L("", "")
+    description: extras.description || L("", ""),
+    occupancyMode: extras.occupancyMode || null,
+    compositionDefault: extras.compositionDefault || null,
+    defaultCapacity: extras.defaultCapacity || null
   };
 }
 
@@ -319,6 +327,43 @@ const TEMPLATES = [
     ]
   },
   {
+    id: "sauna",
+    mode: "flexible",
+    displayName: L("ساونا وحمام بخار", "Sauna & steam"),
+    description: L("جلسات ساونا وبخار مع مقدم خدمة أو غرفة", "Sauna and steam sessions with provider or room"),
+    labels: {
+      ar: { customer: "العملاء", staff: "المعالجين", department: "الغرف", service: "الجلسات", appointment: "الحجوزات" },
+      en: { customer: "Guests", staff: "Therapists", department: "Rooms", service: "Sessions", appointment: "Bookings" }
+    },
+    defaults: {
+      ar: { customer_singular: "عميل", staff_singular: "معالج", department_singular: "غرفة" },
+      en: { customer_singular: "Guest", staff_singular: "Therapist", department_singular: "Room" }
+    },
+    categories: [
+      category("sauna-steam", L("ساونا وبخار", "Sauna & steam"), [
+        service("sauna-session-30", L("جلسة ساونا 30 دقيقة", "Sauna 30 min"), 30, 120, {
+          bufferMinutes: 10,
+          occupancyMode: "exclusive"
+        }),
+        service("sauna-session-60", L("جلسة ساونا 60 دقيقة", "Sauna 60 min"), 60, 200, {
+          bufferMinutes: 10,
+          occupancyMode: "exclusive"
+        }),
+        service("steam-session-45", L("حمام بخار 45 دقيقة", "Steam 45 min"), 45, 160, {
+          bufferMinutes: 10,
+          occupancyMode: "exclusive"
+        })
+      ]),
+      category("sauna-packages", L("باقات العافية", "Wellness packages"), [
+        service("sauna-massage-combo", L("ساونا + مساج", "Sauna + massage"), 90, 450, {
+          bufferMinutes: 15,
+          occupancyMode: "exclusive",
+          compositionDefault: "bundle"
+        })
+      ])
+    ]
+  },
+  {
     id: "consultant",
     mode: "flexible",
     displayName: L("استشاري", "Consultant"),
@@ -361,21 +406,50 @@ const TEMPLATES = [
     },
     categories: [
       category("edu-languages", L("اللغات", "Languages"), [
-        service("edu-en-private", L("حصة إنجليزية فردية", "Private English lesson"), 60, 250),
-        service("edu-en-group", L("حصة إنجليزية جماعية", "Group English class"), 90, 150, { bufferMinutes: 10 }),
-        service("edu-placement", L("اختبار تحديد مستوى", "Placement test"), 45, 100, { autoComplete: true })
+        service("edu-en-private", L("حصة إنجليزية فردية", "Private English lesson"), 60, 250, {
+          occupancyMode: "exclusive"
+        }),
+        service("edu-en-group", L("حصة إنجليزية جماعية", "Group English class"), 90, 150, {
+          bufferMinutes: 10,
+          occupancyMode: "session_capacity",
+          defaultCapacity: 20
+        }),
+        service("edu-placement", L("اختبار تحديد مستوى", "Placement test"), 45, 100, {
+          autoComplete: true,
+          occupancyMode: "exclusive"
+        })
       ]),
       category("edu-academic", L("الدعم الأكاديمي", "Academic tutoring"), [
-        service("edu-math", L("تقوية رياضيات", "Math tutoring"), 60, 200),
-        service("edu-science", L("تقوية علوم", "Science tutoring"), 60, 200)
+        service("edu-math", L("تقوية رياضيات", "Math tutoring"), 60, 200, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 30
+        }),
+        service("edu-science", L("تقوية علوم", "Science tutoring"), 60, 200, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 30
+        })
       ]),
       category("edu-exams", L("التحضير للاختبارات", "Test prep"), [
-        service("edu-ielts", L("تحضير IELTS", "IELTS prep"), 90, 350, { bufferMinutes: 10 }),
-        service("edu-sat", L("تحضير اختبارات دولية", "International exam prep"), 90, 400)
+        service("edu-ielts", L("تحضير IELTS", "IELTS prep"), 90, 350, {
+          bufferMinutes: 10,
+          occupancyMode: "session_capacity",
+          defaultCapacity: 15
+        }),
+        service("edu-sat", L("تحضير اختبارات دولية", "International exam prep"), 90, 400, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 15
+        })
       ]),
       category("edu-skills", L("مهارات وتطوير", "Skills & soft skills"), [
-        service("edu-workshop", L("ورشة عمل", "Workshop"), 120, 300, { bufferMinutes: 15 }),
-        service("edu-soft", L("مهارات تواصل", "Communication skills"), 60, 220)
+        service("edu-workshop", L("ورشة عمل", "Workshop"), 120, 300, {
+          bufferMinutes: 15,
+          occupancyMode: "session_capacity",
+          defaultCapacity: 40
+        }),
+        service("edu-soft", L("مهارات تواصل", "Communication skills"), 60, 220, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 20
+        })
       ])
     ]
   },
@@ -394,17 +468,38 @@ const TEMPLATES = [
     },
     categories: [
       category("school-core", L("المواد الأساسية", "Core subjects"), [
-        service("school-math", L("حصة رياضيات", "Math class"), 45, 120),
-        service("school-arabic", L("حصة لغة عربية", "Arabic class"), 45, 120),
-        service("school-english", L("حصة لغة إنجليزية", "English class"), 45, 120)
+        service("school-math", L("حصة رياضيات", "Math class"), 45, 120, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 40
+        }),
+        service("school-arabic", L("حصة لغة عربية", "Arabic class"), 45, 120, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 40
+        }),
+        service("school-english", L("حصة لغة إنجليزية", "English class"), 45, 120, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 40
+        })
       ]),
       category("school-science", L("العلوم", "Sciences"), [
-        service("school-physics", L("حصة فيزياء", "Physics class"), 45, 140),
-        service("school-chem", L("حصة كيمياء", "Chemistry class"), 45, 140)
+        service("school-physics", L("حصة فيزياء", "Physics class"), 45, 140, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 35
+        }),
+        service("school-chem", L("حصة كيمياء", "Chemistry class"), 45, 140, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 35
+        })
       ]),
       category("school-support", L("الدعم والإرشاد", "Support"), [
-        service("school-parent", L("لقاء أولياء الأمور", "Parent meeting"), 30, 0, { pricingType: "free" }),
-        service("school-remedial", L("حصة تقوية", "Remedial session"), 45, 100)
+        service("school-parent", L("لقاء أولياء الأمور", "Parent meeting"), 30, 0, {
+          pricingType: "free",
+          occupancyMode: "exclusive"
+        }),
+        service("school-remedial", L("حصة تقوية", "Remedial session"), 45, 100, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 20
+        })
       ])
     ]
   },
@@ -423,18 +518,38 @@ const TEMPLATES = [
     },
     categories: [
       category("fit-pt", L("تدريب شخصي", "Personal training"), [
-        service("fit-pt-session", L("جلسة تدريب شخصي", "PT session"), 60, 400, { bufferMinutes: 10 }),
-        service("fit-assessment", L("تقييم لياقة", "Fitness assessment"), 45, 200)
+        service("fit-pt-session", L("جلسة تدريب شخصي", "PT session"), 60, 400, {
+          bufferMinutes: 10,
+          occupancyMode: "exclusive"
+        }),
+        service("fit-assessment", L("تقييم لياقة", "Fitness assessment"), 45, 200, {
+          occupancyMode: "exclusive"
+        })
       ]),
       category("fit-group", L("حصص جماعية", "Group classes"), [
-        service("fit-yoga", L("يوغا", "Yoga"), 60, 150, { bufferMinutes: 10 }),
-        service("fit-hiit", L("HIIT", "HIIT"), 45, 160, { bufferMinutes: 10 }),
-        service("fit-spin", L("سبيننج", "Spinning"), 45, 140)
+        service("fit-yoga", L("يوغا", "Yoga"), 60, 150, {
+          bufferMinutes: 10,
+          occupancyMode: "session_capacity",
+          defaultCapacity: 20
+        }),
+        service("fit-hiit", L("HIIT", "HIIT"), 45, 160, {
+          bufferMinutes: 10,
+          occupancyMode: "session_capacity",
+          defaultCapacity: 16
+        }),
+        service("fit-spin", L("سبيننج", "Spinning"), 45, 140, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 20
+        })
       ]),
       category("fit-plans", L("الباقات", "Membership plans"), [
-        service("fit-intro", L("جلسة تعريفية", "Intro session"), 30, 0, { pricingType: "free" }),
+        service("fit-intro", L("جلسة تعريفية", "Intro session"), 30, 0, {
+          pricingType: "free",
+          occupancyMode: "exclusive"
+        }),
         service("fit-custom-plan", L("خطة تدريب مخصصة", "Custom training plan"), 60, 0, {
-          pricingType: "on_request"
+          pricingType: "on_request",
+          occupancyMode: "exclusive"
         })
       ])
     ]
@@ -535,7 +650,7 @@ const TEMPLATES = [
     id: "billiards",
     mode: "flexible",
     displayName: L("صالة بلياردو", "Billiards hall"),
-    description: L("طاولات وألعاب بالساعة", "Tables and hourly play"),
+    description: L("طاولات وألعاب بالساعة — فتح جلسة حية أو حجز مدة", "Tables and hourly play — live session or timed rental"),
     labels: {
       ar: { customer: "العملاء", staff: "المشرفين", department: "القاعات والطاولات", service: "الباقات", appointment: "الحجوزات" },
       en: { customer: "Players", staff: "Supervisors", department: "Rooms & tables", service: "Packages", appointment: "Bookings" }
@@ -546,14 +661,107 @@ const TEMPLATES = [
     },
     categories: [
       category("bill-tables", L("الطاولات", "Tables"), [
-        service("bill-hour", L("طاولة بالساعة", "Table per hour"), 60, 100, { autoComplete: true }),
-        service("bill-half", L("طاولة نصف ساعة", "Table 30 min"), 30, 60, { autoComplete: true })
+        service("bill-hour", L("طاولة بالساعة", "Table per hour"), 60, 100, {
+          autoComplete: true,
+          occupancyMode: "rental",
+          defaultCapacity: 1
+        }),
+        service("bill-half", L("طاولة نصف ساعة", "Table 30 min"), 30, 60, {
+          autoComplete: true,
+          occupancyMode: "rental",
+          defaultCapacity: 1
+        }),
+        service("bill-open-tab", L("فتح طاولة (عداد حي)", "Open table (live tab)"), 60, 0, {
+          pricingType: "on_request",
+          occupancyMode: "rental",
+          defaultCapacity: 1,
+          publicBooking: false
+        })
       ]),
       category("bill-coaching", L("تدريب", "Coaching"), [
-        service("bill-lesson", L("حصة تدريب", "Coaching session"), 60, 200)
+        service("bill-lesson", L("حصة تدريب", "Coaching session"), 60, 200, {
+          occupancyMode: "exclusive"
+        })
       ]),
       category("bill-events", L("بطولات وفعاليات", "Tournaments"), [
-        service("bill-tournament", L("حجز بطولة", "Tournament booking"), 180, 0, { pricingType: "on_request" })
+        service("bill-tournament", L("حجز بطولة", "Tournament booking"), 180, 0, {
+          pricingType: "on_request",
+          occupancyMode: "rental"
+        })
+      ])
+    ]
+  },
+  {
+    id: "sports",
+    mode: "flexible",
+    displayName: L("ملاعب وأنشطة رياضية", "Sports courts"),
+    description: L("تنس وبادل وملاعب تُحجز بالمدة أو تُفتح جلسة حية", "Tennis, padel, and courts rented by time or live session"),
+    labels: {
+      ar: { customer: "اللاعبين", staff: "المشرفين", department: "الملاعب", service: "الحجوزات", appointment: "الحجوزات" },
+      en: { customer: "Players", staff: "Supervisors", department: "Courts", service: "Bookings", appointment: "Bookings" }
+    },
+    defaults: {
+      ar: { customer_singular: "لاعب", staff_singular: "مشرف", department_singular: "ملعب" },
+      en: { customer_singular: "Player", staff_singular: "Supervisor", department_singular: "Court" }
+    },
+    categories: [
+      category("sports-courts", L("الملاعب", "Courts"), [
+        service("sports-court-60", L("ملعب ساعة", "Court 60 min"), 60, 250, {
+          occupancyMode: "rental",
+          defaultCapacity: 1
+        }),
+        service("sports-court-90", L("ملعب 90 دقيقة", "Court 90 min"), 90, 350, {
+          occupancyMode: "rental",
+          defaultCapacity: 1
+        })
+      ]),
+      category("sports-coaching", L("تدريب", "Coaching"), [
+        service("sports-lesson", L("حصة تدريب فردي", "Private coaching"), 60, 400, {
+          occupancyMode: "exclusive"
+        }),
+        service("sports-group", L("حصة جماعية", "Group class"), 60, 150, {
+          occupancyMode: "session_capacity",
+          defaultCapacity: 8
+        })
+      ])
+    ]
+  },
+  {
+    id: "gaming",
+    mode: "flexible",
+    displayName: L("صالة ألعاب", "Gaming center"),
+    description: L("أجهزة وطاولات ألعاب بالوقت الحقيقي", "Consoles and game stations with live usage sessions"),
+    labels: {
+      ar: { customer: "اللاعبين", staff: "المشرفين", department: "المحطات", service: "الباقات", appointment: "الجلسات" },
+      en: { customer: "Players", staff: "Supervisors", department: "Stations", service: "Packages", appointment: "Sessions" }
+    },
+    defaults: {
+      ar: { customer_singular: "لاعب", staff_singular: "مشرف", department_singular: "محطة" },
+      en: { customer_singular: "Player", staff_singular: "Supervisor", department_singular: "Station" }
+    },
+    categories: [
+      category("gaming-stations", L("المحطات", "Stations"), [
+        service("game-pc-hour", L("جهاز PC بالساعة", "PC per hour"), 60, 40, {
+          occupancyMode: "rental",
+          defaultCapacity: 1,
+          autoComplete: true
+        }),
+        service("game-console-hour", L("كونسول بالساعة", "Console per hour"), 60, 50, {
+          occupancyMode: "rental",
+          defaultCapacity: 1,
+          autoComplete: true
+        }),
+        service("game-open-tab", L("فتح جلسة حية", "Open live session"), 60, 0, {
+          pricingType: "on_request",
+          occupancyMode: "rental",
+          publicBooking: false
+        })
+      ]),
+      category("gaming-events", L("بطولات", "Tournaments"), [
+        service("game-tournament", L("حجز بطولة", "Tournament booking"), 180, 0, {
+          pricingType: "on_request",
+          occupancyMode: "rental"
+        })
       ])
     ]
   },
@@ -618,25 +826,33 @@ function getTemplate(activityType) {
 
 function listTemplates(locale = "ar") {
   const lang = normalizeLocale(locale);
-  return TEMPLATES.filter((item) => item.id !== "other").map((item) => ({
-    id: item.id,
-    mode: item.mode,
-    displayName: localizeText(item.displayName, lang),
-    displayNameI18n: item.displayName,
-    description: localizeText(item.description, lang),
-    descriptionI18n: item.description,
-    empty: !item.categories?.length,
-    categoryCount: item.categories?.length || 0,
-    serviceCount: (item.categories || []).reduce((sum, cat) => sum + (cat.services?.length || 0), 0)
-  }));
+  return TEMPLATES.filter((item) => item.id !== "other").map((item) => {
+    const bookingType = statusMachines.bookingTypeForTemplate(item.id);
+    return {
+      id: item.id,
+      mode: item.mode,
+      bookingType,
+      occupancyModeDefault: statusMachines.occupancyForBookingType(bookingType),
+      displayName: localizeText(item.displayName, lang),
+      displayNameI18n: item.displayName,
+      description: localizeText(item.description, lang),
+      descriptionI18n: item.description,
+      empty: !item.categories?.length,
+      categoryCount: item.categories?.length || 0,
+      serviceCount: (item.categories || []).reduce((sum, cat) => sum + (cat.services?.length || 0), 0)
+    };
+  });
 }
 
 function templateMeta(activityType, locale = "ar") {
   const template = getTemplate(activityType);
   const lang = normalizeLocale(locale);
+  const bookingType = statusMachines.bookingTypeForTemplate(template.id);
   return {
     id: template.id,
     mode: template.mode,
+    bookingType,
+    occupancyModeDefault: statusMachines.occupancyForBookingType(bookingType),
     displayName: localizeText(template.displayName, lang),
     description: localizeText(template.description, lang),
     labels: template.labels?.[lang] || template.labels?.ar || {},
@@ -653,6 +869,8 @@ function buildSeedFromTemplate(activityType, locale = "ar", options = {}) {
   const keepDemoStaff = options.keepDemoStaff === true;
   const categories = [];
   const services = [];
+  const templateBookingType = statusMachines.bookingTypeForTemplate(template.id);
+  const templateOccupancy = statusMachines.occupancyForBookingType(templateBookingType);
 
   (template.categories || []).forEach((cat, sort) => {
     categories.push({
@@ -662,8 +880,10 @@ function buildSeedFromTemplate(activityType, locale = "ar", options = {}) {
       sort,
       enabled: true
     });
+
     (cat.services || []).forEach((svc) => {
       const pricingType = svc.pricingType || "fixed";
+      const occupancyMode = svc.occupancyMode || templateOccupancy;
       services.push({
         id: svc.id,
         categoryId: cat.id,
@@ -680,7 +900,12 @@ function buildSeedFromTemplate(activityType, locale = "ar", options = {}) {
         publicBooking: svc.publicBooking !== false,
         autoAccept: svc.autoAccept !== false,
         autoComplete: Boolean(svc.autoComplete),
-        description: localizeText(svc.description, lang)
+        description: localizeText(svc.description, lang),
+        occupancyMode,
+        compositionDefault: svc.compositionDefault || "single",
+        defaultCapacity: Math.max(1, Number(svc.defaultCapacity || 1)),
+        status: "active",
+        enabled: true
       });
     });
   });
@@ -695,9 +920,13 @@ function buildSeedFromTemplate(activityType, locale = "ar", options = {}) {
         }))
       : [];
 
+  const bookingType = statusMachines.bookingTypeForTemplate(template.id);
+
   return {
     templateId: template.id,
     activityMode: template.mode,
+    bookingType,
+    occupancyModeDefault: statusMachines.occupancyForBookingType(bookingType),
     labels: template.labels?.[lang] || template.labels?.ar || {},
     labelsI18n: template.labels,
     serviceCategories: categories,
@@ -716,6 +945,8 @@ function applyTemplateToStoreData(data, activityType, locale = "ar", options = {
   const seed = buildSeedFromTemplate(activityType, locale, options);
   data.activityTemplateId = seed.templateId;
   data.activityMode = seed.activityMode;
+  data.bookingType = seed.bookingType;
+  data.occupancyModeDefault = seed.occupancyModeDefault;
   data.serviceCategories = seed.serviceCategories;
   data.services = seed.services;
   data.medicalDepartments = seed.medicalDepartments;

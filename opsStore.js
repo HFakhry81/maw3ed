@@ -10,6 +10,7 @@ const bookingAtomic = require("./bookingAtomic");
 const capacityOps = require("./capacityOps");
 const capacityEngine = require("./capacityEngine");
 const bookingActionToken = require("./bookingActionToken");
+const statusMachines = require("./opsStatusMachines");
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomBytes(4).toString("hex")}`;
@@ -786,6 +787,10 @@ function assertPlanCapacity(kind) {
   if (kind === "appointments" && Number.isFinite(limits.appointmentsPerMonth) && usage.appointmentsThisMonth.used >= limits.appointmentsPerMonth) {
     fail(`تم بلوغ سقف الحجوزات الشهرية (${limits.appointmentsPerMonth}).`, 402);
   }
+}
+
+function getStatusCatalog(locale = "ar") {
+  return statusMachines.catalogForApi(locale);
 }
 
 function listActivityTemplates(locale = "ar") {
@@ -1775,32 +1780,17 @@ async function createPublicAppointment(slug, payload = {}) {
 }
 
 function updateAppointmentStatus(id, status) {
-  const nextStatus = String(status || "").trim();
-  const aliasMap = {
-    check_in: "checked_in",
-    cancel: "cancelled",
-    canceled: "cancelled",
-    no_show: "no_show",
-    "no-show": "no_show",
-    noShow: "no_show"
-  };
-  const normalized = aliasMap[nextStatus] || nextStatus;
-  const allowed = new Set(["pending", "confirmed", "checked_in", "completed", "cancelled", "no_show"]);
-  if (!allowed.has(normalized)) fail("حالة الموعد غير صالحة");
   const appointment = store.appointments.find((item) => item.id === id);
   if (!appointment) fail("الموعد غير موجود", 404);
 
-  const validTransitions = {
-    pending: ["confirmed", "cancelled", "no_show"],
-    confirmed: ["checked_in", "completed", "cancelled", "no_show"],
-    checked_in: ["completed", "cancelled", "no_show"],
-    completed: [],
-    cancelled: [],
-    no_show: []
-  };
-  const current = appointment.status || "pending";
-  if (!validTransitions[current]?.includes(normalized) && current !== normalized) {
-    fail(`لا يمكن تحويل حالة الموعد من ${current} إلى ${normalized}`, 400);
+  let normalized;
+  try {
+    normalized = statusMachines.assertAppointmentTransition(
+      appointment.status || "pending",
+      status
+    );
+  } catch (error) {
+    fail(error.message || "حالة الموعد غير صالحة", error.statusCode || 400);
   }
 
   appointment.status = normalized;
@@ -2049,9 +2039,15 @@ function listDeskToday({ categoryId = "", date = "" } = {}) {
     .filter((item) => !categoryId || item.categoryId === categoryId)
     .sort((a, b) => String(a.time).localeCompare(String(b.time)));
 
-  const waiting = rows.filter((item) => item.status === "pending" || item.status === "confirmed");
-  const active = rows.filter((item) => item.status === "checked_in");
-  const done = rows.filter((item) => item.status === "completed" || item.status === "no_show");
+  const waiting = rows.filter((item) =>
+    ["pending", "confirmed", "waitlisted", "rescheduled"].includes(item.status)
+  );
+  const active = rows.filter((item) =>
+    ["checked_in", "in_progress", "paused"].includes(item.status)
+  );
+  const done = rows.filter((item) =>
+    ["completed", "no_show", "cancelled"].includes(item.status)
+  );
 
   return {
     date: day,
@@ -2872,6 +2868,7 @@ module.exports = {
   seedWorkspaceStore,
   getCurrentWorkspaceId,
   listActivityTemplates,
+  getStatusCatalog,
   getActivityProfile,
   updateActivityProfile,
   applyActivityTemplate,

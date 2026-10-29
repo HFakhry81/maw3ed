@@ -1,0 +1,7 @@
+الأوامر الأساسية:
+
+
+npm run seed:demo:restore
+npm run seed:demo:save -- --section=medical|education
+npm run users:cleanup-demo-owners -- --dry-run
+npm run users:cleanup-demo-owners -- --apply

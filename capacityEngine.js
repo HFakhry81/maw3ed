@@ -214,7 +214,8 @@ function planResourceAllocation({
     error.code = "RESOURCE_REQUIRED";
     throw error;
   }
-  if (resource.status !== "active") {
+  const statusMachines = require("./opsStatusMachines");
+  if (!statusMachines.isBookableResourceStatus(resource.status)) {
     const error = new Error("Resource is not available");
     error.statusCode = 409;
     error.code = "RESOURCE_INACTIVE";
