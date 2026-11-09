@@ -28,6 +28,9 @@
 - [النشر على VPS](DEPLOY_VPS.md)
 - [البيئات](ENVIRONMENTS.md)
 - [التطوير والاختبار](refresh-and-test.md)
+- [مسار Git — إنجليزي مختصر](GIT_WORKFLOW.md) — feature → staging → main
+- [دليل Git العملي عربي](GIT-WORKFLOW-AR.md) — حفظ/stage/commit/push/PR/merge والحماية
+- [المساهمة](../CONTRIBUTING.md) — hooks والمساعدات وCI
 
 ## كيفية تفسير الوثائق
 
