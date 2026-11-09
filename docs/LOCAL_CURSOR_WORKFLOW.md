@@ -56,10 +56,13 @@ npm run update:all
 بعد أن ينجح التحديث المحلي والتحقق اليدوي السريع:
 
 1. `npm run release:prepare` — يشغّل التحديث الكامل ويعرض أوامر الرفع والنشر
-2. `git add` / `git commit` / `git push` إلى الفرع الحالي (غالباً `replit-agent`)
-3. على الـ VPS: اتبع [`DEPLOY_VPS.md`](DEPLOY_VPS.md)
+2. اعمل على **فرع ميزة** من أحدث `staging` (مثل `feat/...`)، ثم افتح PR إلى **`staging`** — ليس push مباشر إلى `main`/`staging`
+3. بعد دمج الميزة في `staging` ونجاح CI، الإصدار عبر PR **`staging` → `main`**
+4. على الـ VPS: انشر من `main` وفق [`DEPLOY_VPS.md`](DEPLOY_VPS.md)
 
-لا تدفع تغييرات لم تُختبر محلياً.
+التفاصيل العملية (حفظ / stage / commit / push / PR / merge، والـ hooks): [`GIT-WORKFLOW-AR.md`](GIT-WORKFLOW-AR.md) و[`GIT_WORKFLOW.md`](GIT_WORKFLOW.md) و[`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
+لا تدفع تغييرات لم تُختبر محلياً. لا تستخدم `--no-verify` أو force push على الفروع المحمية.
 
 ## 5) تشغيل سريع جنب بعض
 
