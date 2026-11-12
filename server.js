@@ -1,4 +1,10 @@
-const http = require("http");
+result = await query(
+  `INSERT INTO app_users (id, clerk_user_id, email, display_name, is_platform_admin, platform_role)
+   VALUES ($1, $2, $3, $4, FALSE, NULL)
+   ON CONFLICT (clerk_user_id) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = NOW()
+   RETURNING *`,
+  [createId("user"), identity.clerkUserId, identity.email, identity.displayName]
+);const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -26,6 +32,38 @@ const emailOutboxFile = path.join(root, "data", "email-outbox.jsonl");
 const localDataFile = path.join(root, "data", "maw3ed-data.json");
 const localData = JSON.parse(fs.readFileSync(localDataFile, "utf8"));
 const localVerificationCodes = new Map();
+
+// Rate limiting configuration
+const rateLimitConfig = {
+  windowMs: 60 * 1000, // 1 minute
+  maxRequests: 100, // max requests per window
+  maxBurst: 200, // allow burst for legitimate traffic
+};
+const rateLimitStore = new Map();
+
+function applyRateLimit(clientIp) {
+  const now = Date.now();
+  const entry = rateLimitStore.get(clientIp) || { count: 0, resetAt: now + rateLimitConfig.windowMs };
+
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + rateLimitConfig.windowMs;
+
+  }
+
+  entry.count++;
+  rateLimitStore.set(clientIp, entry);
+
+  return {
+    allowed: entry.count <= rateLimitConfig.maxRequests,
+    remaining: Math.max(0, rateLimitConfig.maxRequests - entry.count),
+    resetAt: entry.resetAt
+  };
+}
+
+function getClientIp(req) {
+  return String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
+}
 const types = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -109,9 +147,12 @@ function securityHeaders(extra = {}) {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(), microphone=(), camera=()",
-    "X-XSS-Protection": "0",
-    "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
-    ...(isProductionLike ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {}),
+    "X-XSS-Protection": "1; mode=block",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests; block-all-mixed-content",
+    "Cross-Origin-Embedder-Policy": "require-corp",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    ...(isProductionLike ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload" } : {}),
     ...extra
   };
 }
@@ -1158,23 +1199,69 @@ async function readEventLog(limit) {
 const server = http.createServer(async (req, res) => {
   const requestId = crypto.randomUUID();
   const startTime = Date.now();
+  const clientIp = getClientIp(req);
   const requestUrl = new URL(req.url, "http://localhost");
   const requested = decodeURIComponent(requestUrl.pathname);
+
+  // CORS middleware
+  const origin = req.headers.origin || "*";
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(",").map(o => o.trim()) || ["*"];
+  const isOriginAllowed = allowedOrigins.includes("*") || allowedOrigins.includes(origin);
+
+  if (req.method === "OPTIONS") {
+    res.setHeader("Access-Control-Allow-Origin", isOriginAllowed ? origin : "");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
+    res.setHeader("Access-Control-Max-Age", "86400");
+    res.setHeader("Access-Control-Allow-Credentials", "false");
+    return res.writeHead(204).end();
+  }
+
+  if (isOriginAllowed && origin !== "*") {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  } else {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+  }
+
+  // Apply rate limiting
+  const rateLimit = applyRateLimit(clientIp);
+  res.setHeader("X-RateLimit-Limit", rateLimitConfig.maxRequests);
+  res.setHeader("X-RateLimit-Remaining", rateLimit.remaining);
+  res.setHeader("X-RateLimit-Reset", new Date(rateLimit.resetAt).toISOString());
+
+  if (!rateLimit.allowed) {
+    return sendJson(res, 429, {
+      ok: false,
+      error: "Too many requests",
+      retryAfter: Math.ceil((rateLimit.resetAt - Date.now()) / 1000)
+    });
+  }
 
   Object.entries(securityHeaders()).forEach(([key, value]) => {
     res.setHeader(key, value);
   });
   res.on("finish", () => {
-    console.log(JSON.stringify({
-      ts: new Date().toISOString(),
+    const logEntry = {
+      timestamp: new Date().toISOString(),
       level: "info",
+      event: "http.request",
       requestId,
       method: req.method,
-      path: requested,
+      url: requested,
       status: res.statusCode || 200,
       durationMs: Date.now() - startTime,
-      clientIp: String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim()
-    }));
+      clientIp,
+      userAgent: req.headers["user-agent"]?.substring(0, 100) || "",
+      referer: req.headers["referer"]?.substring(0, 100) || ""
+    };
+
+    // Log errors at error level
+    if (res.statusCode >= 400) {
+      logEntry.level = "error";
+      logEntry.error = true;
+    }
+
+    console.log(JSON.stringify(logEntry));
   });
 
   try {
@@ -1182,6 +1269,7 @@ const server = http.createServer(async (req, res) => {
       const { getIntegrationCapabilities } = require("./billingCapabilities");
       return sendJson(res, 200, {
         ok: true,
+        authRequired: authRequiredForRequest(),
         clerkPublishableKey:
           process.env.VITE_CLERK_PUBLISHABLE_KEY
           || process.env.CLERK_PUBLISHABLE_KEY

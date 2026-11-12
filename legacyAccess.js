@@ -18,7 +18,6 @@ const LEGACY_KNOWN_REQUESTS = new Set([
   "GET /api/appointments",
   "POST /api/appointments"
 ]);
-
 const PUBLIC_UPLOAD_EXTENSIONS = new Set([
   ".png",
   ".jpg",

@@ -613,25 +613,50 @@ export function WorkspaceOnboarding({ onCreated }) {
 export function useClerkPublishableKey() {
   const [key, setKey] = useState(envPublishableKey);
   const [ready, setReady] = useState(Boolean(envPublishableKey));
+  const [authRequired, setAuthRequired] = useState(false);
+  const [configError, setConfigError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (envPublishableKey) return undefined;
     let cancelled = false;
-    api
-      .get("/api/config")
-      .then((config) => {
-        if (!cancelled && config.clerkPublishableKey) setKey(config.clerkPublishableKey);
+    setReady(false);
+    setConfigError("");
+    fetch("/api/config", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`تعذر تحميل إعدادات التطبيق (HTTP ${response.status})`);
+        return response.json();
       })
-      .catch(() => {})
+      .then((config) => {
+        if (typeof config.authRequired !== "boolean") {
+          throw new Error(
+            "خادم API يعمل بإصدار قديم. أعد تشغيل خادم API ثم أعد فحص الإعدادات."
+          );
+        }
+        if (cancelled) return;
+        setKey(config.clerkPublishableKey || "");
+        setAuthRequired(config.authRequired);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setConfigError(error.message || "تعذر تحميل إعدادات التطبيق");
+        }
+      })
       .finally(() => {
         if (!cancelled) setReady(true);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [attempt]);
 
-  return { key, ready };
+  return {
+    key,
+    ready,
+    authRequired,
+    configError,
+    retryConfig: () => setAttempt((current) => current + 1)
+  };
 }
 
-export { SignedIn, SignedOut, SignIn, SignUp, useAuth, useUser, envPublishableKey };
+export { SignedIn, SignedOut, SignIn, SignUp, useAuth, useUser, useClerk, envPublishableKey };
