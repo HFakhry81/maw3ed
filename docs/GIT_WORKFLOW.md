@@ -33,6 +33,25 @@ npm run git:open-pr
 3. **CI must pass**: **`quality`** and **`branch-flow`**.
 4. Merge into `staging` only after review + green CI.
 
+## Application-independent automation
+
+Any editor or application that can run a project command can invoke the repository flow:
+
+```bash
+npm run git:setup-hooks
+npm run git:flow -- --message "fix: correct booking flow"
+```
+
+`git:flow` starts from the latest `staging` when invoked on `main` or `staging`, or continues on a valid feature branch. It stages changed files except environment/credential files, `data/`, generated `dist/`, uploads, backups, and dependency folders; scans the staged diff for common credential formats; runs the syntax check; then commits and pushes only the feature branch. It opens the feature PR to `staging` followed by a release PR to `main`.
+
+The command waits for required checks and never bypasses GitHub protections. When a required review is still pending, it requests GitHub auto-merge and stops; rerun the command after that PR merges to resume the release flow. Local commits ahead of a protected remote branch cause a refusal. Local `main`/`staging` refs are fast-forwarded only when safe. After both PRs merge, it deletes this run's remote feature branch and removes the local feature branch only if the worktree is clean and Git confirms it is merged into `staging`.
+
+Requires Git, Node.js, GitHub CLI (`gh`), and authenticated GitHub CLI access. Preview the intended flow without changing branches or files:
+
+```bash
+npm run git:flow -- --message "fix: correct booking flow" --dry-run
+```
+
 ## Release
 
 1. Open a **release PR: `staging` → `main`**.
