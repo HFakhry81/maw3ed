@@ -7,6 +7,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const {
   containsSecret,
+  filterPullRequestsByHead,
   isAllowedBranch,
   isAcceptedCommitMessage,
   isConventionalTitle,
@@ -62,6 +63,13 @@ function runTests() {
   assert.equal(selectExistingPullRequest([
     { number: 9, state: 'MERGED', headRefOid: 'old' }
   ], 'current'), null);
+  assert.equal(filterPullRequestsByHead([
+    { number: 1, headRefName: 'flow', headRepositoryOwner: { login: 'other' } },
+    { number: 2, headRefName: 'flow', headRepositoryOwner: { login: 'upnexaeg-art' } }
+  ], 'upnexaeg-art:flow').length, 1);
+  assert.equal(filterPullRequestsByHead([
+    { number: 3, headRefName: 'flow', headRepositoryOwner: { login: 'upnexaeg-art' } }
+  ], 'flow').length, 1);
   assert.throws(() => selectExistingPullRequest([
     { number: 10, state: 'CLOSED', headRefOid: 'current' }
   ], 'current'), /closed without merging/);

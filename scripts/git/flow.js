@@ -349,10 +349,18 @@ function ghJson(cwd, args) {
 
 function findPullRequests(cwd, repo, base, head) {
   const prs = ghJson(cwd, [
-    'pr', 'list', '--repo', repo, '--state', 'all', '--base', base, '--head', head,
-    '--json', 'number,title,baseRefName,headRefName,headRefOid,state'
+    'pr', 'list', '--repo', repo, '--state', 'all', '--base', base,
+    '--json', 'number,title,baseRefName,headRefName,headRefOid,headRepositoryOwner,state'
   ]);
-  return prs.sort((left, right) => right.number - left.number);
+  return filterPullRequestsByHead(prs, head).sort((left, right) => right.number - left.number);
+}
+
+function filterPullRequestsByHead(prs, head) {
+  const [expectedOwner, expectedBranch] = head.includes(':') ? head.split(':', 2) : [null, head];
+  return prs.filter((pr) => {
+    if (pr.headRefName !== expectedBranch) return false;
+    return !expectedOwner || (pr.headRepositoryOwner && pr.headRepositoryOwner.login === expectedOwner);
+  });
 }
 
 function selectExistingPullRequest(prs, headSha) {
@@ -606,6 +614,7 @@ if (require.main === module) {
 
 module.exports = {
   containsSecret,
+  filterPullRequestsByHead,
   isAllowedBranch,
   isAcceptedCommitMessage,
   isConventionalTitle,
