@@ -18,22 +18,6 @@ const LEGACY_KNOWN_REQUESTS = new Set([
   "GET /api/appointments",
   "POST /api/appointments"
 ]);
-if (classification.kind === "private-workspace") {
-  const membership = await getUserWorkspace(user.id, classification.workspaceId);
-  if (!membership) {
-    throw httpError(404, "Not found");
-  }
-  // Verify file ownership or organizational access
-  const fileMetadata = await query(
-    `SELECT * FROM uploads WHERE workspace_id = $1 AND file_name = $2`,
-    [classification.workspaceId, classification.fileName]
-  );
-  if (!fileMetadata.rows[0]) {
-    throw httpError(404, "Not found");
-  }
-  // Additional check: verify user has access to this specific file
-  return { ...classification, membership, fileMetadata: fileMetadata.rows[0] };
-}
 const PUBLIC_UPLOAD_EXTENSIONS = new Set([
   ".png",
   ".jpg",
