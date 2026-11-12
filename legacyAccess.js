@@ -125,13 +125,13 @@ async function requireLegacyWorkspaceAccess({
 
   let organizationId = membership.organization_id || null;
   if (!organizationId && membership.id) {
-    organizationId = `org-${membership.id}`;
+    // A configured database must provide an explicit organization association.
+    // The local fallback is only for installations without database-backed workspaces.
+    if (!databaseConfigured) organizationId = defaultOrganizationId || null;
   }
+
   if (!organizationId) {
-    if (databaseConfigured) {
-      throw httpError(403, "This workspace is not available for the current account");
-    }
-    organizationId = defaultOrganizationId;
+    throw httpError(403, "This workspace is not available for the current account");
   }
 
   return {
@@ -147,31 +147,48 @@ function isDevelopmentEventsAllowed(env = process.env) {
   return env.MAW3ED_ENV === "local";
 }
 
-/**
- * Workspace branding images remain publicly readable (booking page logos/photos).
- * Non-image or non-workspace uploads require auth + membership when auth is on.
- */
 function classifyUploadAccess(requestedPath) {
-  const workspaceUploadMatch = String(requestedPath || "").match(
-    /^\/data\/uploads\/workspaces\/([^/]+)\/([^/]+)$/
-  );
-  if (workspaceUploadMatch) {
-    const workspaceId = workspaceUploadMatch[1];
-    const fileName = workspaceUploadMatch[2];
-    const ext = path.extname(fileName).toLowerCase();
-    if (!PUBLIC_UPLOAD_EXTENSIONS.has(ext)) {
-      return { kind: "private-workspace", workspaceId, fileName };
-    }
-    return { kind: "public-branding", workspaceId, fileName };
+  if (typeof requestedPath !== "string" || !requestedPath.trim()) {
+    return { kind: "not-upload" };
   }
 
-  if (String(requestedPath || "").startsWith("/data/uploads/")) {
-    return { kind: "private-generic" };
+  let pathname;
+  try {
+    pathname = new URL(requestedPath, "http://localhost").pathname;
+  } catch {
+    return { kind: "not-upload" };
   }
 
-  return { kind: "not-upload" };
+  // Normalize separators and reject traversal before interpreting upload segments.
+  const normalized = path.posix.normalize(pathname.replace(/\\/g, "/"));
+  if (!normalized.startsWith("/data/uploads/")) {
+    return { kind: "not-upload" };
+  }
+
+  const relative = normalized.slice("/data/uploads/".length);
+  if (!relative || relative.startsWith("../") || relative.includes("/../")) {
+    return { kind: "not-upload" };
+  }
+
+  const segments = relative.split("/").filter(Boolean);
+  const extension = path.posix.extname(segments[segments.length - 1] || "").toLowerCase();
+  if (
+    (segments[0] === "branding" || segments[0] === "workspace-branding") &&
+    segments.length > 1 &&
+    PUBLIC_UPLOAD_EXTENSIONS.has(extension)
+  ) {
+    return { kind: "public-branding", path: normalized };
+  }
+
+  if (segments[0] === "workspaces" && segments.length === 3 && segments[1]) {
+    const workspaceUpload = { workspaceId: segments[1], path: normalized };
+    return PUBLIC_UPLOAD_EXTENSIONS.has(extension)
+      ? { kind: "public-branding", ...workspaceUpload }
+      : { kind: "private-workspace", ...workspaceUpload };
+  }
+
+  return { kind: "private-generic", path: normalized };
 }
-
 async function assertUploadReadable({
   requestedPath,
   req,
