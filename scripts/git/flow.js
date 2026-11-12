@@ -16,6 +16,7 @@ const SECRET_PATTERNS = [
   /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
   /https?:\/\/[^/\s:]+:[^@\s/]+@/i
 ];
+const REQUIRED_CHECKS = ['quality', 'branch-flow'];
 const CHECK_TIMEOUT_MS = 30 * 60 * 1000;
 
 function isConventionalTitle(value) {
@@ -410,7 +411,16 @@ function waitAndMergePullRequest({ cwd, repo, number, expectedBase, expectedHead
   if (pr.state === 'MERGED') return { state: 'merged' };
   if (pr.state !== 'OPEN') throw new Error(`PR #${number} is ${pr.state}, not open.`);
 
-  runGh(['pr', 'checks', String(number), '--repo', repo, '--watch', '--required'], CHECK_TIMEOUT_MS);
+  runGh(['pr', 'checks', String(number), '--repo', repo, '--watch'], CHECK_TIMEOUT_MS);
+  const checks = JSON.parse(runGh([
+    'pr', 'checks', String(number), '--repo', repo, '--json', 'name,bucket'
+  ]));
+  for (const requiredName of REQUIRED_CHECKS) {
+    const check = checks.find((item) => item.name === requiredName);
+    if (!check || check.bucket !== 'pass') {
+      throw new Error(`Required check "${requiredName}" is missing or not passing on PR #${number}.`);
+    }
+  }
   pr = JSON.parse(runGh(prArgs));
   if (pr.state === 'MERGED') return { state: 'merged' };
   if (pr.state !== 'OPEN') throw new Error(`PR #${number} changed to ${pr.state} while checks were running.`);

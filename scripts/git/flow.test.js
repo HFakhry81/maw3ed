@@ -157,6 +157,12 @@ function runTests() {
         mergeStateStatus: 'CLEAN'
       });
     }
+    if (args[0] === 'pr' && args[1] === 'checks' && args.includes('--json')) {
+      return JSON.stringify([
+        { name: 'quality', bucket: 'pass' },
+        { name: 'branch-flow', bucket: 'pass' }
+      ]);
+    }
     return '';
   };
   const merged = waitAndMergePullRequest({
@@ -169,7 +175,8 @@ function runTests() {
   });
   assert.deepEqual(merged, { state: 'merged' });
   assert.equal(mergeCalls.some((args) => args.includes('--admin')), false);
-  assert.equal(mergeCalls.some((args) => args.includes('--required')), true);
+  assert.equal(mergeCalls.some((args) => args.includes('--watch')), true);
+  assert.equal(mergeCalls.some((args) => args.includes('--required')), false);
   assert.equal(mergeCalls.some((args) => args.includes('--merge')), true);
 
   mergeCalls = [];
@@ -185,6 +192,12 @@ function runTests() {
         reviewDecision: 'REVIEW_REQUIRED',
         mergeStateStatus: 'BLOCKED'
       });
+    }
+    if (args[0] === 'pr' && args[1] === 'checks' && args.includes('--json')) {
+      return JSON.stringify([
+        { name: 'quality', bucket: 'pass' },
+        { name: 'branch-flow', bucket: 'pass' }
+      ]);
     }
     return '';
   };
@@ -213,6 +226,12 @@ function runTests() {
         reviewDecision: 'APPROVED',
         mergeStateStatus: viewCount < 3 ? 'QUEUED' : 'CLEAN'
       });
+    }
+    if (args[0] === 'pr' && args[1] === 'checks' && args.includes('--json')) {
+      return JSON.stringify([
+        { name: 'quality', bucket: 'pass' },
+        { name: 'branch-flow', bucket: 'pass' }
+      ]);
     }
     return '';
   };
@@ -251,6 +270,33 @@ function runTests() {
     expectedHead: 'fix/booking',
     runGh: failedChecksRunGh
   }), /required check failed/);
+  assert.equal(mergeCalls.some((args) => args[1] === 'merge'), false);
+
+  mergeCalls = [];
+  const missingRequiredCheckRunGh = (args) => {
+    mergeCalls.push(args);
+    if (args[0] === 'pr' && args[1] === 'view') {
+      return JSON.stringify({
+        state: 'OPEN',
+        baseRefName: 'staging',
+        headRefName: 'fix/booking',
+        reviewDecision: 'APPROVED',
+        mergeStateStatus: 'CLEAN'
+      });
+    }
+    if (args[0] === 'pr' && args[1] === 'checks' && args.includes('--json')) {
+      return JSON.stringify([{ name: 'branch-flow', bucket: 'pass' }]);
+    }
+    return '';
+  };
+  assert.throws(() => waitAndMergePullRequest({
+    cwd: process.cwd(),
+    repo: 'owner/repo',
+    number: 16,
+    expectedBase: 'staging',
+    expectedHead: 'fix/booking',
+    runGh: missingRequiredCheckRunGh
+  }), /Required check "quality" is missing or not passing/);
   assert.equal(mergeCalls.some((args) => args[1] === 'merge'), false);
 
   console.log('git flow tests passed');
