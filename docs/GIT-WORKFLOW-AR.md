@@ -13,6 +13,27 @@
 
 ---
 
+## أتمتة Git من أي تطبيق
+
+أي محرر أو تطبيق يقدر يشغّل أمر المشروع يقدر يستخدم نفس المسار:
+
+```powershell
+npm run git:setup-hooks
+npm run git:flow -- --message "fix: correct booking flow"
+```
+
+الأمر يبدأ من أحدث `staging` لو أنت على `main` أو `staging`، أو يكمل على فرع ميزة مسموح. بيجهّز الملفات الآمنة فقط، ويستبعد `.env*` وملفات الاعتماد و`data/` و`dist/` والرفع والنسخ الاحتياطية، ويفحص الـ diff بحثًا عن صيغ أسرار شائعة. بعد فحص syntax يعمل commit ويدفع فرع الميزة فقط، ثم يفتح PR إلى `staging` وبعد دمجه يفتح PR إصدار إلى `main`.
+
+الفحوصات ومراجعات GitHub تفضل هي الحكم النهائي؛ مفيش تجاوز للحماية أو `--admin`. لو مراجعة مطلوبة، يطلب الأمر auto-merge من GitHub ويتوقف؛ شغّله تاني بعد دمج الـ PR عشان يكمل مسار الإصدار. يرفض نشر commits محلية متقدمة على فروع الحماية، ويحدّث مراجع `main` و`staging` محليًا فقط لو التحديث fast-forward آمن. بعد اكتمال الدمجين يحذف فرع الميزة البعيد، ويحذف المحلي فقط لو شجرة العمل نظيفة وGit أكد إنه مدموج في `staging`.
+
+المتطلبات: Git وNode.js وGitHub CLI (`gh`) مع تسجيل الدخول. لمعاينة المسار من غير تغيير ملفات أو فروع:
+
+```powershell
+npm run git:flow -- --message "fix: correct booking flow" --dry-run
+```
+
+---
+
 ## 0) وصفة سريعة من الألف للياء
 
 1. احفظ كل الملفات في المحرر: **Ctrl+S** أو **Ctrl+K ثم S** (Save All).
@@ -78,7 +99,7 @@ feature branch (feat/* / fix/* / ...)
 
 1. **حماية فروع GitHub** على `main` و `staging`: ممنوع push مباشر؛ مطلوب PR؛ مطلوب فحوصات؛ مطلوب الفرع محدّث (strict up-to-date)؛ تشمل المدراء.
 2. **فحص CI اسمه `branch-flow`:** يفشل لو قاعدة الـ PR غلط أو اسم الفرع/العنوان مخالف.
-3. **Hooks محلية** في [`.githooks/`](../.githooks/) (بتتفع مع `npm install` / `prepare`):
+3. **Hooks محلية** في [`.githooks/`](../.githooks/) (تتفعّل مرة واحدة بـ `npm run git:setup-hooks`):
    - `pre-push`: يمنع الدفع لـ `main`/`staging` ويمنع أسماء فروع غير مسموحة.
    - `commit-msg`: يلزم Conventional Commits؛ **يستثني** الرسائل اللي بتبدأ بـ `Merge ` أو `Revert ` أو `fixup!` / `squash!`.
 4. **المساعدات:** `git:new-branch` و `git:open-pr` دايمًا بتبدأ من / بتفتح على **`staging`**.

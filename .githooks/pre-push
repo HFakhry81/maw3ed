@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/staging)
+      echo "[git:flow] Direct pushes to main/staging are blocked; use a pull request." >&2
+      exit 1
+      ;;
+    refs/heads/*)
+      branch=${remote_ref#refs/heads/}
+      node scripts/git/flow.js validate-branch "$branch"
+      ;;
+  esac
+done
