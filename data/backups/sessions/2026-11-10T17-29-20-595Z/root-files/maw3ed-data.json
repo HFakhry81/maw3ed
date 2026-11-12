@@ -1,0 +1,93 @@
+{
+  "stats": {
+    "newPatients": 32,
+    "completedExams": 128,
+    "attendanceRate": 96
+  },
+  "departments": [
+    { "id": "outpatient", "name": "العيادات الخارجية", "defaultService": "موعد عيادة خارجية" },
+    { "id": "internal", "name": "الباطنية", "defaultService": "كشف باطني" },
+    { "id": "pediatrics", "name": "الأطفال", "defaultService": "متابعة أطفال" },
+    { "id": "obgyn", "name": "النساء والولادة", "defaultService": "استشارة نساء وولادة" },
+    { "id": "dentistry", "name": "الأسنان", "defaultService": "عيادة الأسنان" },
+    { "id": "radiology", "name": "الأشعة", "defaultService": "أشعة سونار" },
+    { "id": "laboratory", "name": "المختبر", "defaultService": "تحاليل مخبرية" },
+    { "id": "dermatology", "name": "الجلدية", "defaultService": "كشف جلدية" },
+    { "id": "ophthalmology", "name": "العيون", "defaultService": "فحص عيون" },
+    { "id": "cardiology", "name": "القلب", "defaultService": "كشف قلب" },
+    { "id": "orthopedics", "name": "العظام", "defaultService": "كشف عظام" },
+    { "id": "ent", "name": "الأنف والأذن", "defaultService": "كشف أنف وأذن" },
+    { "id": "emergency", "name": "الطوارئ", "defaultService": "تقييم طوارئ" },
+    { "id": "physiotherapy", "name": "العلاج الطبيعي", "defaultService": "جلسة علاج طبيعي" },
+    { "id": "pharmacy", "name": "الصيدلية", "defaultService": "صرف وصفة" }
+  ],
+  "doctors": [
+    { "id": "dr-sarah", "name": "د. سارة أحمد", "specialty": "النساء والولادة" },
+    { "id": "dr-khaled", "name": "د. خالد حسن", "specialty": "الأشعة" },
+    { "id": "dr-mazen", "name": "د. مازن علي", "specialty": "القلب" }
+  ],
+  "patients": [
+    { "id": "patient-001", "name": "جود عبدالعزيز", "joinedAt": "2025-05-10", "lastVisit": "١٣ مايو ٢٠٢٥" },
+    { "id": "patient-002", "name": "ريم سعد", "joinedAt": "2025-05-12", "lastVisit": "١٣ مايو ٢٠٢٥" },
+    { "id": "patient-003", "name": "هدى أحمد", "joinedAt": "2025-05-13", "lastVisit": "١٣ مايو ٢٠٢٥" },
+    { "id": "patient-004", "name": "سلمى علي", "joinedAt": "2025-05-14", "lastVisit": "موعد أول" }
+  ],
+  "appointments": [
+    {
+      "id": "appointment-001",
+      "date": "2025-05-14",
+      "time": "09:00",
+      "period": "صباحاً",
+      "patientId": "patient-001",
+      "patientName": "جود عبدالعزيز",
+      "departmentId": "radiology",
+      "departmentName": "الأشعة",
+      "doctorId": "dr-khaled",
+      "doctorName": "د. خالد حسن",
+      "serviceName": "أشعة سونار",
+      "status": "confirmed"
+    },
+    {
+      "id": "appointment-002",
+      "date": "2025-05-14",
+      "time": "11:30",
+      "period": "صباحاً",
+      "patientId": "patient-002",
+      "patientName": "ريم سعد",
+      "departmentId": "dentistry",
+      "departmentName": "الأسنان",
+      "doctorId": "dr-sarah",
+      "doctorName": "د. سارة أحمد",
+      "serviceName": "عيادة الأسنان",
+      "status": "confirmed"
+    },
+    {
+      "id": "appointment-003",
+      "date": "2025-05-14",
+      "time": "14:00",
+      "period": "مساءً",
+      "patientId": "patient-003",
+      "patientName": "هدى أحمد",
+      "departmentId": "cardiology",
+      "departmentName": "القلب",
+      "doctorId": "dr-mazen",
+      "doctorName": "د. مازن علي",
+      "serviceName": "كشف قلب",
+      "status": "pending"
+    },
+    {
+      "id": "appointment-004",
+      "date": "2025-05-14",
+      "time": "16:30",
+      "period": "مساءً",
+      "patientId": "patient-004",
+      "patientName": "سلمى علي",
+      "departmentId": "obgyn",
+      "departmentName": "النساء والولادة",
+      "doctorId": "dr-sarah",
+      "doctorName": "د. سارة أحمد",
+      "serviceName": "استشارة نساء وولادة",
+      "status": "confirmed"
+    }
+  ]
+}

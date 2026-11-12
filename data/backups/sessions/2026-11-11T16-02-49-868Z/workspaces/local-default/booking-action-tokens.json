@@ -1,0 +1,13 @@
+{
+  "tokens": {
+    "eVPxmVcHrZRtbDS_q1m8cQ": {
+      "kind": "appointment",
+      "appointmentId": "appt-cb1be76c",
+      "usedCancel": false,
+      "usedReschedule": false,
+      "exp": 1794936563979,
+      "createdAt": "2026-11-10T17:29:23.979Z"
+    }
+  },
+  "updatedAt": "2026-11-10T17:29:23.979Z"
+}

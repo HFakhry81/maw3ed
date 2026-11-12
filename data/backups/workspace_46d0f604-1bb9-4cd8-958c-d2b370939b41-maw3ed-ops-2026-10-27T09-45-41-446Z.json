@@ -1,0 +1,395 @@
+{
+  "customerCategories": [
+    {
+      "id": "cat-vip",
+      "name": "VIP",
+      "color": "#f5a623"
+    },
+    {
+      "id": "cat-regular",
+      "name": "عادي",
+      "color": "#1967e8"
+    },
+    {
+      "id": "cat-new",
+      "name": "جديد",
+      "color": "#16ae7c"
+    }
+  ],
+  "customers": [],
+  "staff": [
+    {
+      "id": "staff-owner",
+      "name": "المسؤول",
+      "firstName": "",
+      "lastName": "",
+      "phone": "",
+      "title": "مشرف",
+      "avatarUrl": "",
+      "servicePlace": "",
+      "serviceCategoryId": "",
+      "serviceIds": [],
+      "active": true,
+      "useBusinessHours": true,
+      "workingHours": null,
+      "closedDays": [],
+      "specificDays": []
+    }
+  ],
+  "serviceCategories": [
+    {
+      "id": "edu-languages",
+      "name": "الصف الأول الإعدادي",
+      "sort": 0,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "edu-academic",
+      "name": "الصف الثاني الإعدادي",
+      "sort": 1,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "edu-exams",
+      "name": "الصف الثالث الإعدادي",
+      "sort": 2,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "edu-skills",
+      "name": "الصف الأول الثانوي - بكالوريا",
+      "sort": 3,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "svc-cat-c0d40d37",
+      "name": "الصف الثاني الثانوي - بكالوريا",
+      "sort": 4,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "svc-cat-4ad75f22",
+      "name": "الصف الثالث الثانوي - بكالوريا",
+      "sort": 5,
+      "enabled": true,
+      "active": true
+    }
+  ],
+  "services": [
+    {
+      "id": "edu-science",
+      "categoryId": "edu-academic",
+      "name": "تقوية علوم",
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 200,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-math",
+      "categoryId": "edu-academic",
+      "name": "تقوية رياضيات",
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 200,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-ielts",
+      "categoryId": "edu-exams",
+      "name": "تحضير IELTS",
+      "durationMinutes": 90,
+      "bufferMinutes": 10,
+      "pricingType": "fixed",
+      "price": 350,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-sat",
+      "categoryId": "edu-exams",
+      "name": "تحضير اختبارات دولية",
+      "durationMinutes": 90,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 400,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-en-private",
+      "categoryId": "edu-languages",
+      "name": "حصة إنجليزية فردية",
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 250,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-en-group",
+      "categoryId": "edu-languages",
+      "name": "حصة إنجليزية جماعية",
+      "durationMinutes": 90,
+      "bufferMinutes": 10,
+      "pricingType": "fixed",
+      "price": 150,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-placement",
+      "categoryId": "edu-languages",
+      "name": "اختبار تحديد مستوى",
+      "durationMinutes": 45,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 100,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": true,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-workshop",
+      "categoryId": "edu-skills",
+      "name": "ورشة عمل",
+      "durationMinutes": 120,
+      "bufferMinutes": 15,
+      "pricingType": "fixed",
+      "price": 300,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    },
+    {
+      "id": "edu-soft",
+      "categoryId": "edu-skills",
+      "name": "مهارات تواصل",
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 220,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "active": true,
+      "description": ""
+    }
+  ],
+  "workingHours": [
+    {
+      "weekday": 0,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "overnight": false,
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 1,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "overnight": false,
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 2,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "overnight": false,
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 3,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "overnight": false,
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 4,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "overnight": false,
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 5,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "overnight": false,
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 6,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "overnight": false,
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    }
+  ],
+  "closedDays": [],
+  "specificDays": [],
+  "bookingPage": {
+    "slug": "talaaee-book",
+    "businessName": "مركز طلائع التعليمي",
+    "industry": "education",
+    "email": "hello@maw3ed.app",
+    "phone": "+20 1550059876",
+    "description": "منصة مواعيد عربية للأعمال القائمة على الخدمات.",
+    "country": "مصر",
+    "state": "القاهرة",
+    "city": "القاهرة",
+    "street": "",
+    "timezone": "Africa/Cairo",
+    "onlineBookingEnabled": true,
+    "logoUrl": "/data/uploads/workspaces/workspace_46d0f604-1bb9-4cd8-958c-d2b370939b41/logo-1793044475577.png",
+    "showPlatformBranding": true,
+    "socialLinks": {
+      "facebook": "",
+      "instagram": "",
+      "website": ""
+    }
+  },
+  "calendarPreferences": {
+    "showBusinessHoursOnly": true,
+    "slotOrder": "start-to-end",
+    "appointmentColorMode": "service",
+    "multiServiceEnabled": true
+  },
+  "notifications": {
+    "email": {
+      "confirmation": true,
+      "reminder": true,
+      "followUp": false,
+      "cancellation": true,
+      "reschedule": true
+    },
+    "messagingChannel": "whatsapp",
+    "messaging": {
+      "confirmation": false,
+      "reminder": false,
+      "cancellation": false,
+      "reschedule": false
+    },
+    "pushDailyReminder": true
+  },
+  "expenses": [],
+  "appointments": [],
+  "activityMode": "flexible",
+  "activityModeLocked": true,
+  "activityTemplateId": "education",
+  "medicalDepartments": [],
+  "activityLabels": {
+    "customer": "الطلاب",
+    "staff": "المدربون",
+    "department": "المواد والبرامج",
+    "service": "الدورات",
+    "appointment": "الحصص"
+  },
+  "activityLabelsI18n": {
+    "ar": {
+      "customer": "الطلاب",
+      "staff": "المدربون",
+      "department": "المواد والبرامج",
+      "service": "الدورات",
+      "appointment": "الحصص"
+    },
+    "en": {
+      "customer": "Students",
+      "staff": "Instructors",
+      "department": "Subjects & programs",
+      "service": "Courses",
+      "appointment": "Classes"
+    }
+  },
+  "planKey": "free"
+}
