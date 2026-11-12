@@ -9,10 +9,12 @@ import {
   Maw3edClerkProvider,
   ClerkTokenBridge,
   FreshTrialGate,
+  clearLocalAppSession,
   AuthControls,
   AuthSessionGate,
   WorkspaceOnboarding,
   useClerkPublishableKey,
+  useClerk,
   useAuth,
   useUser
 } from "./ClerkGate.jsx";
@@ -1929,12 +1931,23 @@ createRoot(document.getElementById("root")).render(<Root />);
 
 function AuthenticatedShell() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { signOut } = useClerk();
   const { user } = useUser();
   const userEmail = clerkUserEmail(user);
   const [workspaces, setWorkspaces] = useState(null);
   const [bootError, setBootError] = useState("");
   const [authBlocked, setAuthBlocked] = useState(false);
+  const [bootstrapAttempt, setBootstrapAttempt] = useState(0);
   const didBootSelectRef = useRef(false);
+
+  const handleReauthenticate = async () => {
+    try {
+      await signOut();
+      clearLocalAppSession();
+    } catch (error) {
+      setBootError(`تعذر إنهاء جلسة Clerk: ${error.message || "خطأ غير معروف"}`);
+    }
+  };
 
   useEffect(() => {
     // Do not call /api/workspaces until Clerk finished loading and the user is signed in.
@@ -1948,6 +1961,9 @@ function AuthenticatedShell() {
       return undefined;
     }
 
+    setWorkspaces(null);
+    setBootError("");
+    setAuthBlocked(false);
     let cancelled = false;
     let tokenAttempts = 0;
 
@@ -1970,7 +1986,10 @@ function AuthenticatedShell() {
 
         const result = await api.get("/api/workspaces");
         if (cancelled) return;
-        const list = result.workspaces || [];
+        if (!Array.isArray(result.workspaces)) {
+          throw new Error("استجابة مساحات العمل غير صالحة");
+        }
+        const list = result.workspaces;
         setBootError("");
         setAuthBlocked(false);
         setWorkspaces(list);
@@ -2017,7 +2036,7 @@ function AuthenticatedShell() {
           return;
         }
         setBootError(message);
-        setWorkspaces([]);
+        setWorkspaces(null);
       }
     };
 
@@ -2025,14 +2044,26 @@ function AuthenticatedShell() {
     return () => {
       cancelled = true;
     };
-  }, [isLoaded, isSignedIn, getToken, userEmail]);
+  }, [isLoaded, isSignedIn, getToken, userEmail, bootstrapAttempt]);
 
   if (!isLoaded || (isSignedIn && workspaces === null && !authBlocked)) {
     return (
       <div className="auth-landing">
         <div className="auth-landing-card">
-          <p>جارٍ التحقق من الحساب ومساحات العمل…</p>
+          <p>{bootError ? "تعذر تحميل مساحات العمل" : "جارٍ التحقق من الحساب ومساحات العمل…"}</p>
           {bootError && <div className="error-banner">{bootError}</div>}
+          {bootError && (
+            <button
+              type="button"
+              className="primary-button auth-cta"
+              onClick={() => {
+                setBootError("");
+                setBootstrapAttempt((attempt) => attempt + 1);
+              }}
+            >
+              إعادة المحاولة
+            </button>
+          )}
         </div>
       </div>
     );
@@ -2045,13 +2076,14 @@ function AuthenticatedShell() {
           <img className="auth-brand-logo" src="/assets/maw3ed-icon.svg" alt="موعد" width={112} height={112} />
           <h1>مطلوب تسجيل الدخول</h1>
           <p>{bootError || "انتهت الجلسة أو لم يُربط التوكن بعد. سجّل الدخول مرة أخرى."}</p>
-          <a
-            className="primary-button auth-cta"
-            href="/?mode=sign-in"
-            style={{ display: "grid", placeItems: "center", textDecoration: "none" }}
-          >
-            فتح صفحة الدخول
-          </a>
+          {authBlocked && (
+            <p className="muted">
+              إذا استمر الرفض بعد تسجيل الدخول، تحقق من تطابق مفاتيح Clerk في الواجهة والخادم وراجع سجل الخادم.
+            </p>
+          )}
+          <button type="button" className="primary-button auth-cta" onClick={handleReauthenticate}>
+            إنهاء الجلسة وفتح تسجيل الدخول
+          </button>
         </div>
       </div>
     );
@@ -2097,7 +2129,8 @@ function KeyboardInsetHost({ children }) {
 }
 
 function Root() {
-  const { key, ready } = useClerkPublishableKey();
+  const { key, ready, authRequired, configError, retryConfig } = useClerkPublishableKey();
+  const [allowLocalWithoutAuth, setAllowLocalWithoutAuth] = useState(false);
   if (!ready) {
     return (
       <KeyboardInsetHost>
@@ -2110,7 +2143,55 @@ function Root() {
       </KeyboardInsetHost>
     );
   }
+  if (configError) {
+    return (
+      <KeyboardInsetHost>
+        <div className="auth-landing">
+          <div className="auth-landing-card">
+            <h1>تعذر تحميل إعدادات المنصة</h1>
+            <p>{configError}</p>
+            <p className="muted">
+              لا يمكن للمتصفح إعادة تشغيل خادم Node. شغّل أو أعد تشغيل خادم API في الطرفية
+              بالأمر <code>npm run dev:api</code>، ثم أعد فحص الإعدادات هنا.
+            </p>
+            <button
+              type="button"
+              className="primary-button auth-cta"
+              onClick={retryConfig}
+            >
+              إعادة فحص الإعدادات
+            </button>
+          </div>
+        </div>
+      </KeyboardInsetHost>
+    );
+  }
   if (!key) {
+    if (authRequired || !allowLocalWithoutAuth) {
+      return (
+        <KeyboardInsetHost>
+          <div className="auth-landing">
+            <div className="auth-landing-card">
+              <h1>تسجيل الدخول غير مُعدّ</h1>
+              <p>
+                لإظهار صفحة الدخول، أضف <code>CLERK_SECRET_KEY</code> و
+                <code>CLERK_PUBLISHABLE_KEY</code> إلى ملف البيئة المحلي، ثم أعد تشغيل خادم API.
+                لم يتم فتح مساحة العمل.
+              </p>
+              {!authRequired && (
+                <button
+                  type="button"
+                  className="ghost-button auth-cta"
+                  onClick={() => setAllowLocalWithoutAuth(true)}
+                >
+                  متابعة محلية بدون تسجيل دخول
+                </button>
+              )}
+            </div>
+          </div>
+        </KeyboardInsetHost>
+      );
+    }
     return (
       <KeyboardInsetHost>
         <App />

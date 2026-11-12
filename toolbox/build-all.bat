@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 setlocal EnableExtensions
 title Maw3ed - Master Build (Local)

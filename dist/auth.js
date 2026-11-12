@@ -361,13 +361,13 @@ function redirectAfterAuth(isSignUp) {
     detail.style.marginTop = "12px";
     detail.style.color = "#9b1c1c";
     detail.textContent = error?.message || String(error);
-    const home = document.createElement("a");
-    home.href = "/?onboarding=1";
-    home.textContent = "الانتقال إلى التطبيق مباشرة";
-    home.style.display = "inline-block";
-    home.style.marginTop = "14px";
-    home.style.color = "#246bd2";
-    container.append(title, detail, home);
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.textContent = "إعادة المحاولة";
+    retry.onclick = () => window.location.reload();
+    retry.style.display = "inline-block";
+    retry.style.marginTop = "14px";
+    container.append(title, detail, retry);
     console.error("[maw3ed-auth]", error);
   }
 })();
