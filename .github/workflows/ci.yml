@@ -1,0 +1,44 @@
+# Reliable quality gate for GitHub-hosted runners (no Postgres/secrets/smoke).
+# Stable check name: "quality"
+name: CI
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install (npm ci)
+        run: npm ci
+
+      - name: Syntax check (node --check)
+        run: npm run ci:syntax
+
+      - name: Branch-flow script self-check
+        run: |
+          BASE_REF=staging HEAD_REF=feat/ci-self-check PR_TITLE='chore: ci self-check' \
+            bash scripts/git/check-pr-flow.sh
+          if BASE_REF=main HEAD_REF=feat/illegal PR_TITLE='feat: should fail' \
+            bash scripts/git/check-pr-flow.sh; then
+            echo "expected failure for feat -> main" >&2
+            exit 1
+          fi
+          echo "[ci] branch-flow self-check OK"
