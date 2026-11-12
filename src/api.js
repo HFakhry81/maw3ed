@@ -24,6 +24,20 @@ export const api = {
     return null;
   },
 
+  async refreshToken() {
+    if (typeof this.getToken !== "function") return null;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        const token = await this.getToken({ skipCache: true });
+        if (token) return token;
+      } catch {
+        /* session not ready yet */
+      }
+      await new Promise((resolve) => setTimeout(resolve, 120 * (attempt + 1)));
+    }
+    return null;
+  },
+
   async authHeaders(extra = {}) {
     const headers = { ...extra };
     if (this.workspaceId) headers["x-workspace-id"] = this.workspaceId;
@@ -74,53 +88,56 @@ export const api = {
     return payload;
   },
 
+  async request(url, options = {}) {
+    const needsAuth = this.needsAuth(url);
+    const headers = needsAuth
+      ? await this.authHeadersRequired(options.headers || {})
+      : await this.authHeaders(options.headers || {});
+    let response = await fetch(url, { ...options, headers });
+
+    if (needsAuth && response.status === 401 && typeof this.getToken === "function") {
+      const token = await this.refreshToken();
+      if (token) {
+        response = await fetch(url, {
+          ...options,
+          headers: { ...headers, Authorization: `Bearer ${token}` }
+        });
+      }
+    }
+
+    return this.parse(response);
+  },
+
   needsAuth(url) {
     const path = String(url || "").split("?")[0];
     return path.startsWith("/api/") && path !== "/api/config";
   },
 
   async get(url) {
-    const headers = this.needsAuth(url) ? await this.authHeadersRequired() : await this.authHeaders();
-    return this.parse(await fetch(url, { headers }));
+    return this.request(url);
   },
   async post(url, body) {
-    const headers = this.needsAuth(url)
-      ? await this.authHeadersRequired({ "Content-Type": "application/json" })
-      : await this.authHeaders({ "Content-Type": "application/json" });
-    return this.parse(
-      await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body)
-      })
-    );
+    return this.request(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
   },
   async put(url, body) {
-    const headers = this.needsAuth(url)
-      ? await this.authHeadersRequired({ "Content-Type": "application/json" })
-      : await this.authHeaders({ "Content-Type": "application/json" });
-    return this.parse(
-      await fetch(url, {
-        method: "PUT",
-        headers,
-        body: JSON.stringify(body)
-      })
-    );
+    return this.request(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
   },
   async patch(url, body) {
-    const headers = this.needsAuth(url)
-      ? await this.authHeadersRequired({ "Content-Type": "application/json" })
-      : await this.authHeaders({ "Content-Type": "application/json" });
-    return this.parse(
-      await fetch(url, {
-        method: "PATCH",
-        headers,
-        body: JSON.stringify(body)
-      })
-    );
+    return this.request(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
   },
   async del(url) {
-    const headers = this.needsAuth(url) ? await this.authHeadersRequired() : await this.authHeaders();
-    return this.parse(await fetch(url, { method: "DELETE", headers }));
+    return this.request(url, { method: "DELETE" });
   }
 };

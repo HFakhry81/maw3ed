@@ -100,6 +100,11 @@ async function main() {
 
   try {
     await waitForServer();
+    const config = await request("GET", "/api/config");
+    if (config.status !== 200 || typeof config.json.authRequired !== "boolean") {
+      throw new Error("config endpoint must report the authentication requirement");
+    }
+
     const bootstrap = await request("GET", "/api/ops/bootstrap");
     if (bootstrap.status !== 200 || !bootstrap.json.ok) {
       throw new Error(`bootstrap failed: ${bootstrap.status}`);
@@ -153,6 +158,7 @@ async function main() {
       ok: true,
       suite: "smoke-http",
       port,
+      authRequired: config.json.authRequired,
       slug,
       slotCount: slots.json.slots.length,
       appointmentId: book.json.appointment.id,

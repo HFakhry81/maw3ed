@@ -32,5 +32,6 @@
             "approve": true,
             "matchCommandLine": true
         }
-    }
+    },
+    "chat.permissions.default": "autoApprove"
 }
