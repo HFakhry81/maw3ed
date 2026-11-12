@@ -5,6 +5,9 @@
   "description": "موعد Maw3ed — Arabic appointment platform by UpNexa-eg.com",
   "scripts": {
     "ci:syntax": "node scripts/ci-syntax-check.js",
+    "git:flow": "node scripts/git/flow.js",
+    "git:setup-hooks": "node scripts/git/flow.js setup-hooks",
+    "test:git-flow": "node scripts/git/flow.test.js",
     "env:local": "node -e \"require('fs').writeFileSync('.env.mode','local\\n')\"",
     "env:production": "node -e \"require('fs').writeFileSync('.env.mode','production\\n')\"",
     "start": "npm run build && node --use-system-ca server.js",
