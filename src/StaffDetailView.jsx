@@ -5,6 +5,7 @@ import { SmartTimePicker } from "./SmartTimePicker.jsx";
 import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 import { formatMoney } from "./i18n";
 import { CategoryProvidersTable } from "./ServiceProvidersTable.jsx";
+import { localDateString } from "../civilDate.js";
 
 export const STAFF_SECTIONS = [
   { id: "history", label: "تاريخ المواعيد", icon: "⏱" },
@@ -103,7 +104,7 @@ function NewAppointmentForm({ person, ops, onCreated }) {
   );
   const [form, setForm] = useState({
     customerName: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: localDateString(),
     time: "10:00",
     serviceId: services[0]?.id || "",
     notes: ""
@@ -172,7 +173,7 @@ export function StaffDetailView({
   reloadAppointments,
   onGoToServicesCategory
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = ops?.stats?.today || localDateString();
   const staffAppointments = useMemo(
     () => (appointments || []).filter((item) => item.staffId === person.id && item.status !== "cancelled"),
     [appointments, person.id]

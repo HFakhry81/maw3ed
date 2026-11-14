@@ -1,3 +1,5 @@
+const { localDateString } = require("./civilDate");
+
 /**
  * Shared shift-hour helpers (same-day + dedicated overnight / night shifts).
  *
@@ -107,7 +109,7 @@ function overnightHint(day) {
 function addCalendarDays(dateStr, delta) {
   const day = new Date(`${dateStr}T12:00:00`);
   day.setDate(day.getDate() + delta);
-  return day.toISOString().slice(0, 10);
+  return localDateString(day);
 }
 
 function simplifyBreakBlocks(hours, segment) {
