@@ -1,0 +1,517 @@
+{
+  "customerCategories": [
+    {
+      "id": "cat-vip",
+      "name": "VIP",
+      "color": "#f5a623"
+    },
+    {
+      "id": "cat-regular",
+      "name": "عادي",
+      "color": "#1967e8"
+    },
+    {
+      "id": "cat-new",
+      "name": "جديد",
+      "color": "#16ae7c"
+    }
+  ],
+  "customers": [
+    {
+      "id": "student-001",
+      "firstName": "جود",
+      "lastName": "عبدالعزيز",
+      "phone": "01000000001",
+      "email": "",
+      "address": "",
+      "categoryId": "cat-regular",
+      "avatarUrl": ""
+    },
+    {
+      "id": "student-002",
+      "firstName": "ريم",
+      "lastName": "سعد",
+      "phone": "01000000002",
+      "email": "",
+      "address": "",
+      "categoryId": "cat-new",
+      "avatarUrl": ""
+    }
+  ],
+  "staff": [
+    {
+      "id": "staff-owner",
+      "name": "المسؤول",
+      "title": "مشرف",
+      "active": true,
+      "firstName": "",
+      "lastName": "",
+      "phone": "",
+      "avatarUrl": "",
+      "servicePlace": "",
+      "serviceCategoryId": "",
+      "serviceIds": [],
+      "useBusinessHours": true,
+      "workingHours": null,
+      "closedDays": [],
+      "specificDays": []
+    },
+    {
+      "id": "staff-edu-lead",
+      "name": "مدرب رئيسي",
+      "firstName": "مدرب",
+      "lastName": "رئيسي",
+      "title": "مدرب",
+      "active": true,
+      "servicePlace": "طلائع",
+      "phone": "",
+      "avatarUrl": "",
+      "serviceCategoryId": "",
+      "serviceIds": [
+        "edu-en-group",
+        "edu-en-private",
+        "edu-ielts",
+        "edu-math",
+        "edu-placement",
+        "edu-sat",
+        "edu-science",
+        "edu-soft",
+        "edu-workshop"
+      ],
+      "useBusinessHours": true,
+      "workingHours": null,
+      "closedDays": [],
+      "specificDays": []
+    },
+    {
+      "id": "staff-edu-rec",
+      "name": "استقبال طلائع",
+      "firstName": "استقبال",
+      "lastName": "طلائع",
+      "title": "استقبال",
+      "active": true,
+      "servicePlace": "الاستقبال",
+      "phone": "",
+      "avatarUrl": "",
+      "serviceCategoryId": "",
+      "serviceIds": [],
+      "useBusinessHours": true,
+      "workingHours": null,
+      "closedDays": [],
+      "specificDays": []
+    }
+  ],
+  "serviceCategories": [
+    {
+      "id": "edu-languages",
+      "name": "اللغات",
+      "nameI18n": {
+        "ar": "اللغات",
+        "en": "Languages"
+      },
+      "sort": 0,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "edu-academic",
+      "name": "الدعم الأكاديمي",
+      "nameI18n": {
+        "ar": "الدعم الأكاديمي",
+        "en": "Academic tutoring"
+      },
+      "sort": 1,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "edu-exams",
+      "name": "التحضير للاختبارات",
+      "nameI18n": {
+        "ar": "التحضير للاختبارات",
+        "en": "Test prep"
+      },
+      "sort": 2,
+      "enabled": true,
+      "active": true
+    },
+    {
+      "id": "edu-skills",
+      "name": "مهارات وتطوير",
+      "nameI18n": {
+        "ar": "مهارات وتطوير",
+        "en": "Skills & soft skills"
+      },
+      "sort": 3,
+      "enabled": true,
+      "active": true
+    }
+  ],
+  "services": [
+    {
+      "id": "edu-en-private",
+      "categoryId": "edu-languages",
+      "name": "حصة إنجليزية فردية",
+      "nameI18n": {
+        "ar": "حصة إنجليزية فردية",
+        "en": "Private English lesson"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 250,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-en-group",
+      "categoryId": "edu-languages",
+      "name": "حصة إنجليزية جماعية",
+      "nameI18n": {
+        "ar": "حصة إنجليزية جماعية",
+        "en": "Group English class"
+      },
+      "durationMinutes": 90,
+      "bufferMinutes": 10,
+      "pricingType": "fixed",
+      "price": 150,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-placement",
+      "categoryId": "edu-languages",
+      "name": "اختبار تحديد مستوى",
+      "nameI18n": {
+        "ar": "اختبار تحديد مستوى",
+        "en": "Placement test"
+      },
+      "durationMinutes": 45,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 100,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": true,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-math",
+      "categoryId": "edu-academic",
+      "name": "تقوية رياضيات",
+      "nameI18n": {
+        "ar": "تقوية رياضيات",
+        "en": "Math tutoring"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 200,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-science",
+      "categoryId": "edu-academic",
+      "name": "تقوية علوم",
+      "nameI18n": {
+        "ar": "تقوية علوم",
+        "en": "Science tutoring"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 200,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-ielts",
+      "categoryId": "edu-exams",
+      "name": "تحضير IELTS",
+      "nameI18n": {
+        "ar": "تحضير IELTS",
+        "en": "IELTS prep"
+      },
+      "durationMinutes": 90,
+      "bufferMinutes": 10,
+      "pricingType": "fixed",
+      "price": 350,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-sat",
+      "categoryId": "edu-exams",
+      "name": "تحضير اختبارات دولية",
+      "nameI18n": {
+        "ar": "تحضير اختبارات دولية",
+        "en": "International exam prep"
+      },
+      "durationMinutes": 90,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 400,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-workshop",
+      "categoryId": "edu-skills",
+      "name": "ورشة عمل",
+      "nameI18n": {
+        "ar": "ورشة عمل",
+        "en": "Workshop"
+      },
+      "durationMinutes": 120,
+      "bufferMinutes": 15,
+      "pricingType": "fixed",
+      "price": 300,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    },
+    {
+      "id": "edu-soft",
+      "categoryId": "edu-skills",
+      "name": "مهارات تواصل",
+      "nameI18n": {
+        "ar": "مهارات تواصل",
+        "en": "Communication skills"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 220,
+      "priceMin": 0,
+      "priceMax": 0,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-edu-lead"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": "",
+      "active": true
+    }
+  ],
+  "workingHours": [
+    {
+      "weekday": 0,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": true,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00",
+      "overnight": false
+    },
+    {
+      "weekday": 1,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": true,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00",
+      "overnight": false
+    },
+    {
+      "weekday": 2,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": true,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00",
+      "overnight": false
+    },
+    {
+      "weekday": 3,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": true,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00",
+      "overnight": false
+    },
+    {
+      "weekday": 4,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": true,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00",
+      "overnight": false
+    },
+    {
+      "weekday": 5,
+      "isOpen": false,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": true,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00",
+      "overnight": false
+    },
+    {
+      "weekday": 6,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": true,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00",
+      "overnight": false
+    }
+  ],
+  "closedDays": [],
+  "specificDays": [],
+  "bookingPage": {
+    "slug": "talaaee-book",
+    "businessName": "مركز طلائع التعليمي",
+    "industry": "education",
+    "email": "contact.haitham@yahoo.com",
+    "phone": "+20 1550059876",
+    "description": "منصة مواعيد عربية للأعمال القائمة على الخدمات.",
+    "country": "مصر",
+    "state": "القاهرة",
+    "city": "القاهرة",
+    "street": "",
+    "timezone": "Africa/Cairo",
+    "onlineBookingEnabled": true,
+    "logoUrl": "/data/uploads/workspaces/workspace_46d0f604-1bb9-4cd8-958c-d2b370939b41/logo-1793044475577.png",
+    "showPlatformBranding": true,
+    "socialLinks": {
+      "facebook": "",
+      "instagram": "",
+      "website": ""
+    },
+    "locale": "ar"
+  },
+  "calendarPreferences": {
+    "showBusinessHoursOnly": true,
+    "slotOrder": "start-to-end",
+    "appointmentColorMode": "service",
+    "multiServiceEnabled": true
+  },
+  "notifications": {
+    "email": {
+      "confirmation": true,
+      "reminder": true,
+      "followUp": false,
+      "cancellation": true,
+      "reschedule": true
+    },
+    "messagingChannel": "whatsapp",
+    "messaging": {
+      "confirmation": false,
+      "reminder": false,
+      "cancellation": false,
+      "reschedule": false
+    },
+    "pushDailyReminder": true
+  },
+  "expenses": [],
+  "appointments": [],
+  "activityMode": "education",
+  "activityModeLocked": false,
+  "activityTemplateId": "education",
+  "medicalDepartments": [],
+  "activityLabels": {
+    "customer": "الطلاب",
+    "staff": "المدربون",
+    "department": "المواد والبرامج",
+    "service": "الدورات",
+    "appointment": "الحصص"
+  },
+  "activityLabelsI18n": {
+    "ar": {
+      "customer": "الطلاب",
+      "staff": "المدربون",
+      "department": "المواد والبرامج",
+      "service": "الدورات",
+      "appointment": "الحصص"
+    },
+    "en": {
+      "customer": "Students",
+      "staff": "Instructors",
+      "department": "Subjects & programs",
+      "service": "Courses",
+      "appointment": "Classes"
+    }
+  },
+  "planKey": "free"
+}
