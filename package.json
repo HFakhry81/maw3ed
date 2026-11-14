@@ -5,6 +5,9 @@
   "description": "موعد Maw3ed — Arabic appointment platform by UpNexa-eg.com",
   "scripts": {
     "ci:syntax": "node scripts/ci-syntax-check.js",
+    "git:flow": "node scripts/git/flow.js",
+    "git:setup-hooks": "node scripts/git/flow.js setup-hooks",
+    "test:git-flow": "node scripts/git/flow.test.js",
     "env:local": "node -e \"require('fs').writeFileSync('.env.mode','local\\n')\"",
     "env:production": "node -e \"require('fs').writeFileSync('.env.mode','production\\n')\"",
     "start": "npm run build && node --use-system-ca server.js",
@@ -37,6 +40,7 @@
     "test:atomic-booking": "node scripts/smoke-atomic-booking.js",
     "test:atomic-booking-pg": "node scripts/smoke-atomic-booking-pg.js",
     "test:booking-timezone": "node scripts/smoke-booking-timezone.js",
+    "test:civil-date": "node scripts/smoke-civil-date.js",
     "test:phase3-booking": "npm run test:atomic-booking && npm run test:booking-timezone && npm run test:atomic-booking-pg",
     "test:capacity-modes": "node scripts/smoke-capacity-modes.js",
     "test:capacity-pg": "node scripts/smoke-capacity-pg.js",

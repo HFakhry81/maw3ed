@@ -64,6 +64,7 @@ import { ServicesDirectory } from "./ServicesDirectory.jsx";
 import { DepartmentDeskView } from "./DepartmentDeskView.jsx";
 import { ResourcesView } from "./ResourcesView.jsx";
 import { occupancyModeLabel, compositionLabel } from "./occupancyLabels.js";
+import { localDateString } from "../civilDate.js";
 import {
   canCreateAppointments,
   canManageFinance,
@@ -1261,7 +1262,7 @@ function IndustryTemplatesView({ ops, reload, locale }) {
 
 function OverviewView({ ops, appointments, locale, onNavigate }) {
   const stats = ops?.stats || {};
-  const today = new Date().toISOString().slice(0, 10);
+  const today = stats.today || localDateString();
   const todayItems = (appointments || []).filter((item) => item.date === today && item.status !== "cancelled").slice(0, 6);
   const usage = ops?.planUsage;
   const showPlanUi = usage?.limitsEnforced === true;
@@ -1341,7 +1342,7 @@ function StatsView({ ops, locale }) {
 
 function ExpensesView({ ops, reload, locale }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", amount: 0, category: "rent", date: new Date().toISOString().slice(0, 10), description: "", recurrence: "none" });
+  const [form, setForm] = useState({ name: "", amount: 0, category: "rent", date: localDateString(), description: "", recurrence: "none" });
   const submit = async (event) => {
     event.preventDefault();
     try {

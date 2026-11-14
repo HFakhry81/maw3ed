@@ -3,17 +3,13 @@
  * Works on top of opsStore appointment records (visit fields live on the appointment).
  */
 const crypto = require("crypto");
+const { localDateString, civilDateInTimeZone } = require("./civilDate");
 
 function todayInTimezone(timezone = "Africa/Cairo") {
   try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone || "Africa/Cairo",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(new Date());
+    return civilDateInTimeZone(new Date(), timezone);
   } catch {
-    return new Date().toISOString().slice(0, 10);
+    return localDateString();
   }
 }
 

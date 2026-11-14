@@ -10,6 +10,7 @@
  * workspaces additionally use advisory locks inside opsWorkspace.runWithWorkspaceAsync.
  */
 const workspaceLocks = new Map();
+const { localDateString, civilDateInTimeZone: formatCivilDateInTimeZone } = require("./civilDate");
 
 const OCCUPYING_STATUSES = new Set([
   "pending",
@@ -163,14 +164,9 @@ function purgeExpiredHoldsOnce(holdsMap, now = Date.now(), persistFn) {
  */
 function civilDateInTimeZone(instant = new Date(), timeZone = "Africa/Cairo") {
   try {
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: timeZone || "Africa/Cairo",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    }).format(instant instanceof Date ? instant : new Date(instant));
+    return formatCivilDateInTimeZone(instant, timeZone);
   } catch {
-    return new Date(instant).toISOString().slice(0, 10);
+    return localDateString(instant instanceof Date ? instant : new Date(instant));
   }
 }
 

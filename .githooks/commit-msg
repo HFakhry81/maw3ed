@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+
+node scripts/git/flow.js validate-message-file "$1"
