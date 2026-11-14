@@ -1,0 +1,410 @@
+{
+  "customerCategories": [
+    {
+      "id": "cat-vip",
+      "name": "VIP",
+      "color": "#f5a623"
+    },
+    {
+      "id": "cat-regular",
+      "name": "عادي",
+      "color": "#1967e8"
+    },
+    {
+      "id": "cat-new",
+      "name": "جديد",
+      "color": "#16ae7c"
+    }
+  ],
+  "customers": [],
+  "staff": [
+    {
+      "id": "staff-hf",
+      "name": "هيثم فخري",
+      "title": "مشرف حجز",
+      "active": true,
+      "serviceIds": []
+    },
+    {
+      "id": "staff-rec",
+      "name": "أحمد استقبال",
+      "title": "Reception",
+      "active": true,
+      "serviceIds": []
+    }
+  ],
+  "serviceCategories": [
+    {
+      "id": "edu-languages",
+      "name": "اللغات",
+      "nameI18n": {
+        "ar": "اللغات",
+        "en": "Languages"
+      },
+      "sort": 0,
+      "enabled": true
+    },
+    {
+      "id": "edu-academic",
+      "name": "الدعم الأكاديمي",
+      "nameI18n": {
+        "ar": "الدعم الأكاديمي",
+        "en": "Academic tutoring"
+      },
+      "sort": 1,
+      "enabled": true
+    },
+    {
+      "id": "edu-exams",
+      "name": "التحضير للاختبارات",
+      "nameI18n": {
+        "ar": "التحضير للاختبارات",
+        "en": "Test prep"
+      },
+      "sort": 2,
+      "enabled": true
+    },
+    {
+      "id": "edu-skills",
+      "name": "مهارات وتطوير",
+      "nameI18n": {
+        "ar": "مهارات وتطوير",
+        "en": "Skills & soft skills"
+      },
+      "sort": 3,
+      "enabled": true
+    }
+  ],
+  "services": [
+    {
+      "id": "edu-en-private",
+      "categoryId": "edu-languages",
+      "name": "حصة إنجليزية فردية",
+      "nameI18n": {
+        "ar": "حصة إنجليزية فردية",
+        "en": "Private English lesson"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 250,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "edu-en-group",
+      "categoryId": "edu-languages",
+      "name": "حصة إنجليزية جماعية",
+      "nameI18n": {
+        "ar": "حصة إنجليزية جماعية",
+        "en": "Group English class"
+      },
+      "durationMinutes": 90,
+      "bufferMinutes": 10,
+      "pricingType": "fixed",
+      "price": 150,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "edu-placement",
+      "categoryId": "edu-languages",
+      "name": "اختبار تحديد مستوى",
+      "nameI18n": {
+        "ar": "اختبار تحديد مستوى",
+        "en": "Placement test"
+      },
+      "durationMinutes": 45,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 100,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": true,
+      "description": ""
+    },
+    {
+      "id": "edu-math",
+      "categoryId": "edu-academic",
+      "name": "تقوية رياضيات",
+      "nameI18n": {
+        "ar": "تقوية رياضيات",
+        "en": "Math tutoring"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 200,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "edu-science",
+      "categoryId": "edu-academic",
+      "name": "تقوية علوم",
+      "nameI18n": {
+        "ar": "تقوية علوم",
+        "en": "Science tutoring"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 200,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "edu-ielts",
+      "categoryId": "edu-exams",
+      "name": "تحضير IELTS",
+      "nameI18n": {
+        "ar": "تحضير IELTS",
+        "en": "IELTS prep"
+      },
+      "durationMinutes": 90,
+      "bufferMinutes": 10,
+      "pricingType": "fixed",
+      "price": 350,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "edu-sat",
+      "categoryId": "edu-exams",
+      "name": "تحضير اختبارات دولية",
+      "nameI18n": {
+        "ar": "تحضير اختبارات دولية",
+        "en": "International exam prep"
+      },
+      "durationMinutes": 90,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 400,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "edu-workshop",
+      "categoryId": "edu-skills",
+      "name": "ورشة عمل",
+      "nameI18n": {
+        "ar": "ورشة عمل",
+        "en": "Workshop"
+      },
+      "durationMinutes": 120,
+      "bufferMinutes": 15,
+      "pricingType": "fixed",
+      "price": 300,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "edu-soft",
+      "categoryId": "edu-skills",
+      "name": "مهارات تواصل",
+      "nameI18n": {
+        "ar": "مهارات تواصل",
+        "en": "Communication skills"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 220,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    }
+  ],
+  "workingHours": [
+    {
+      "weekday": 0,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 1,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 2,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 3,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 4,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 5,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 6,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    }
+  ],
+  "closedDays": [],
+  "specificDays": [],
+  "bookingPage": {
+    "slug": "ofok-center",
+    "businessName": "مركز أفق التعليمي",
+    "industry": "education",
+    "email": "hello@maw3ed.app",
+    "phone": "+20 1550059876",
+    "description": "منصة مواعيد عربية للأعمال القائمة على الخدمات.",
+    "country": "مصر",
+    "state": "القاهرة",
+    "city": "القاهرة",
+    "street": "",
+    "timezone": "Africa/Cairo",
+    "onlineBookingEnabled": true,
+    "logoUrl": "/data/uploads/workspaces/workspace_8a975363-6516-4cfa-9df9-ae08697c075d/logo-1790855749754.png",
+    "showPlatformBranding": true,
+    "socialLinks": {
+      "facebook": "",
+      "instagram": "",
+      "website": ""
+    }
+  },
+  "calendarPreferences": {
+    "showBusinessHoursOnly": true,
+    "slotOrder": "start-to-end",
+    "appointmentColorMode": "service",
+    "multiServiceEnabled": true
+  },
+  "notifications": {
+    "email": {
+      "confirmation": true,
+      "reminder": true,
+      "followUp": false,
+      "cancellation": true,
+      "reschedule": true
+    },
+    "messagingChannel": "whatsapp",
+    "messaging": {
+      "confirmation": false,
+      "reminder": false,
+      "cancellation": false,
+      "reschedule": false
+    },
+    "pushDailyReminder": true
+  },
+  "expenses": [],
+  "appointments": [],
+  "activityMode": "flexible",
+  "activityModeLocked": true,
+  "activityTemplateId": "education",
+  "medicalDepartments": [],
+  "activityLabels": {
+    "customer": "الطلاب",
+    "staff": "المدربون",
+    "department": "المواد والبرامج",
+    "service": "الدورات",
+    "appointment": "الحصص"
+  },
+  "activityLabelsI18n": {
+    "ar": {
+      "customer": "الطلاب",
+      "staff": "المدربون",
+      "department": "المواد والبرامج",
+      "service": "الدورات",
+      "appointment": "الحصص"
+    },
+    "en": {
+      "customer": "Students",
+      "staff": "Instructors",
+      "department": "Subjects & programs",
+      "service": "Courses",
+      "appointment": "Classes"
+    }
+  },
+  "planKey": "free"
+}

@@ -1,32 +1,60 @@
+# Dependencies
 node_modules/
-.npm-cache/
-.yarn/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+
+# Environment files
 .env
 .env.local
-.env.production
-.env.mode
-data/maw3ed-ops.json
-data/maw3ed-holds.json
-data/slug-index.json
-data/workspaces/**
-!data/workspaces/.gitkeep
-data/backups/
-# Durable demo seed (tracked) — do not ignore data/seeds/
-data/email-outbox.jsonl
-data/transactional-outbox.jsonl
-data/webhook-sandbox-ledger.jsonl
-data/provider-sandbox-deliveries.jsonl
-data/outbox-smoke-*.jsonl
-data/webhook-ledger-smoke-*.jsonl
-data/provider-sandbox-smoke-*.jsonl
-data/outbox-phase7-smoke-*.jsonl
-data/retention-smoke-*.jsonl
-data/development-events.jsonl
-data/local-clerk-workspaces.json
+.env.*.local
+
+# Data files
+data/*.json
+data/*.jsonl
+!data/.gitkeep
+
+# Logs
+logs/
 *.log
+npm-debug.log*
+
+# OS files
 .DS_Store
-data/last-refresh-report.json
-data/last-update-report.json
-data/last-release-prepare.json
-data/uploads/*
-!data/uploads/.gitkeep
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Testing
+coverage/
+.nyc_output/
+
+# Uploads
+uploads/
+temp_uploads/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Clerk
+.clerk/
