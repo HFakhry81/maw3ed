@@ -57,6 +57,21 @@
     <script type="module">
       const params = new URLSearchParams(location.search);
       const slug = params.get("slug") || "maw3ed-demo";
+      function todayInTimezone(timeZone) {
+        try {
+          const parts = new Intl.DateTimeFormat("en", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+          }).formatToParts(new Date());
+          const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+          return `${values.year}-${values.month}-${values.day}`;
+        } catch {
+          const now = new Date();
+          return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        }
+      }
       const browserLang = (navigator.language || "ar").toLowerCase();
       if (!browserLang.startsWith("ar") && !browserLang.startsWith("ur")) {
         document.documentElement.lang = "en";
@@ -108,7 +123,7 @@
         categoryId: "all",
         serviceId: "",
         staffId: "any",
-        date: new Date().toISOString().slice(0, 10),
+        date: todayInTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone),
         time: "",
         slots: [],
         loadingSlots: false,
@@ -551,6 +566,7 @@
         if (!response.ok) throw new Error(payload.error || "تعذر فتح صفحة الحجز");
         state.data = payload;
         state.serviceId = payload.services?.[0]?.id || "";
+        state.date = todayInTimezone(payload.page?.timezone || "Africa/Cairo");
         render();
       } catch (error) {
         state.error = error.message;

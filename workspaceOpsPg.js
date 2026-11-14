@@ -1,4 +1,5 @@
 const { pool } = require("./db");
+const { civilDateInTimeZone } = require("./civilDate");
 
 const tables = [
   "workspace_ops_attendance_records",
@@ -728,7 +729,8 @@ async function saveStore(client, workspaceId, input) {
     ["workspace_id", "id", "name", "amount", "category", "expense_date", "description", "recurrence"],
     clean(data.expenses).map((row) => [
       workspaceId, String(row.id), String(row.name || ""), numberOr(row.amount),
-      row.category || "general", dateOnly(row.date) || new Date().toISOString().slice(0, 10),
+      row.category || "general",
+      dateOnly(row.date) || civilDateInTimeZone(new Date(), data.bookingPage?.timezone || "Africa/Cairo"),
       String(row.description || ""), row.recurrence || "none"
     ]));
 

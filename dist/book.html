@@ -43,10 +43,17 @@
       .foot { margin-top: 16px; color: var(--muted); font-size: .85rem; }
       .muted { color: var(--muted); font-size: .85rem; }
       .keyboard-spacer { height: var(--keyboard-inset); min-height: var(--keyboard-inset); width: 100%; pointer-events: none; transition: height .15s ease; }
+      .skip { position: absolute; inset-inline-start: -999px; top: 0; background: #000; color: #fff; padding: 8px 12px; z-index: 20; }
+      .skip:focus { inset-inline-start: 12px; top: 12px; }
+      button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+        outline: 3px solid #1a6deb66; outline-offset: 2px;
+      }
+      .err { color: #9a3412; }
     </style>
   </head>
   <body>
-    <div class="wrap" id="app">جارٍ تجهيز موظف الاستقبال الرقمي...</div>
+    <a class="skip" href="#app">تخطّي إلى محتوى الحجز</a>
+    <div class="wrap" id="app" role="main" aria-live="polite">جارٍ تجهيز موظف الاستقبال الرقمي...</div>
     <script type="module">
       const params = new URLSearchParams(location.search);
       const slug = params.get("slug") || "maw3ed-demo";
@@ -110,18 +117,46 @@
         email: "",
         notes: "",
         result: null,
+        manageUrl: "",
+        occurrenceId: "",
+        occurrences: [],
+        loadingSessions: false,
+        seats: 1,
+        enrollmentResult: null,
         error: ""
       };
       const root = document.getElementById("app");
 
       const services = () => (state.data?.services || []).filter((service) => state.categoryId === "all" || service.categoryId === state.categoryId);
       const service = () => (state.data?.services || []).find((item) => item.id === state.serviceId);
+      const isSessionService = () => String(service()?.occupancyMode || "").toLowerCase() === "session_capacity";
       const staffForService = () => {
         const item = service();
         const ids = item?.providerIds || [];
         const all = state.data?.staff || [];
         return ids.length ? all.filter((person) => ids.includes(person.id)) : all;
       };
+
+      async function loadSessions() {
+        if (!state.serviceId || !isSessionService()) return;
+        state.loadingSessions = true;
+        state.error = "";
+        render();
+        try {
+          const query = new URLSearchParams({ serviceId: state.serviceId });
+          const response = await fetch(`/api/public/booking/${encodeURIComponent(slug)}/sessions?${query}`);
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || "تعذر تحميل الجلسات");
+          state.occurrences = payload.occurrences || [];
+          if (!state.occurrences.some((row) => row.id === state.occurrenceId)) state.occurrenceId = "";
+        } catch (error) {
+          state.occurrences = [];
+          state.error = error.message;
+        } finally {
+          state.loadingSessions = false;
+          render();
+        }
+      }
 
       async function loadSlots() {
         if (!state.serviceId || !state.date) return;
@@ -162,13 +197,13 @@
             <p>${page.description || ""}</p>
             <div class="meta">${page.phone || ""} · ${page.email || ""} · ${[page.city, page.country].filter(Boolean).join("، ")}</div>
           </section>
-          <div class="steps">
-            <span class="${state.step === 1 ? "on" : ""}">1. الهوية</span>
-            <span class="${state.step === 2 ? "on" : ""}">2. الخدمة</span>
-            <span class="${state.step === 3 ? "on" : ""}">3. الموظف</span>
-            <span class="${state.step === 4 ? "on" : ""}">4. الوقت</span>
-            <span class="${state.step === 5 ? "on" : ""}">5. بياناتك</span>
-            <span class="${state.step === 6 ? "on" : ""}">6. تأكيد</span>
+          <div class="steps" role="list" aria-label="خطوات الحجز">
+            <span role="listitem" class="${state.step === 1 ? "on" : ""}" aria-current="${state.step === 1 ? "step" : "false"}">1. الهوية</span>
+            <span role="listitem" class="${state.step === 2 ? "on" : ""}" aria-current="${state.step === 2 ? "step" : "false"}">2. الخدمة</span>
+            <span role="listitem" class="${state.step === 3 ? "on" : ""}" aria-current="${state.step === 3 ? "step" : "false"}">${isSessionService() ? "3. الجلسة" : "3. الموظف"}</span>
+            <span role="listitem" class="${state.step === 4 ? "on" : ""}" aria-current="${state.step === 4 ? "step" : "false"}">${isSessionService() ? "4. المقاعد" : "4. الوقت"}</span>
+            <span role="listitem" class="${state.step === 5 ? "on" : ""}" aria-current="${state.step === 5 ? "step" : "false"}">5. بياناتك</span>
+            <span role="listitem" class="${state.step === 6 ? "on" : ""}" aria-current="${state.step === 6 ? "step" : "false"}">6. تأكيد</span>
           </div>
 
           ${state.step === 1 ? `
@@ -185,31 +220,60 @@
                 <button type="button" class="chip ${state.categoryId === "all" ? "on" : ""}" data-cat="all">الكل</button>
                 ${categories.map((category) => `<button type="button" class="chip ${state.categoryId === category.id ? "on" : ""}" data-cat="${category.id}">${category.name}</button>`).join("")}
               </div>
-              ${list.map((item) => `
-                <button type="button" class="pick ${state.serviceId === item.id ? "on" : ""}" data-service="${item.id}">
-                  <div><b>${item.name}</b><div class="muted">${item.durationMinutes} د${item.bufferMinutes ? ` · فاصل ${item.bufferMinutes}د` : ""}</div></div>
+              ${list.map((item) => {
+                const mode = String(item.occupancyMode || "exclusive").toLowerCase();
+                const modeHint = mode === "session_capacity"
+                  ? ` · جلسة بسعة ${item.defaultCapacity || 1}`
+                  : mode === "rental"
+                    ? " · تأجير مورد"
+                    : "";
+                return `
+                <button type="button" class="pick ${state.serviceId === item.id ? "on" : ""}" data-service="${item.id}" aria-label="${item.name}${modeHint}">
+                  <div><b>${item.name}</b><div class="muted">${item.durationMinutes} د${item.bufferMinutes ? ` · فاصل ${item.bufferMinutes}د` : ""}${modeHint}</div></div>
                   <div><b>${
                     item.pricingType === "free" ? "مجاني"
                     : item.pricingType === "on_request" ? "عند الطلب"
                     : item.pricingType === "range" ? `E£${item.priceMin ?? item.price ?? 0}–${item.priceMax ?? item.price ?? 0}`
                     : item.price ? `E£${item.price}` : "مجاني"
                   }</b></div>
-                </button>
-              `).join("") || "<p>لا توجد خدمات في هذا القسم.</p>"}
+                </button>`;
+              }).join("") || "<p>لا توجد خدمات في هذا القسم.</p>"}
               <div class="actions">
                 <button class="ghost" id="back1">رجوع</button>
                 <button class="cta" id="to3" ${state.serviceId ? "" : "disabled"}>التالي</button>
               </div>
             </section>` : ""}
 
-          ${state.step === 3 ? `
-            <section class="card">
-              <h2 style="margin-top:0">مقدّم الخدمة</h2>
-              <button type="button" class="pick ${state.staffId === "any" ? "on" : ""}" data-staff="any">
+          ${state.step === 3 && isSessionService() ? `
+            <section class="card" aria-labelledby="session-pick-title">
+              <h2 id="session-pick-title" style="margin-top:0">اختر الجلسة</h2>
+              <p class="muted">تسجيل في جلسة بسعة مقاعد — لا يُعلن هذا مسار التعليم/الرياضة كمنتج جاهز، بل نواة سعة عامة.</p>
+              ${state.loadingSessions ? "<p class='muted'>جارٍ تحميل الجلسات…</p>" : ""}
+              ${!state.loadingSessions && !state.occurrences.length ? "<p class='muted'>لا جلسات متاحة حالياً لهذه الخدمة.</p>" : ""}
+              ${(state.occurrences || []).map((row) => `
+                <button type="button" class="pick ${state.occurrenceId === row.id ? "on" : ""}" data-occurrence="${row.id}" aria-pressed="${state.occurrenceId === row.id ? "true" : "false"}">
+                  <div>
+                    <b>${row.title || selected?.name || "جلسة"}</b>
+                    <div class="muted">${row.startsAt || ""} → ${row.endsAt || ""}</div>
+                  </div>
+                  <div><b>متبقي ${row.remaining}/${row.capacity}</b></div>
+                </button>
+              `).join("")}
+              ${state.error ? `<p class="err" role="alert">${state.error}</p>` : ""}
+              <div class="actions">
+                <button class="ghost" id="back2">رجوع</button>
+                <button class="cta" id="to4" ${state.occurrenceId ? "" : "disabled"}>التالي</button>
+              </div>
+            </section>` : ""}
+
+          ${state.step === 3 && !isSessionService() ? `
+            <section class="card" aria-labelledby="staff-pick-title">
+              <h2 id="staff-pick-title" style="margin-top:0">مقدّم الخدمة</h2>
+              <button type="button" class="pick ${state.staffId === "any" ? "on" : ""}" data-staff="any" aria-pressed="${state.staffId === "any" ? "true" : "false"}">
                 <div><b>أي متاح</b><div class="muted">نسند أول موظف حر في الوقت الذي تختاره</div></div>
               </button>
               ${staffForService().map((person) => `
-                <button type="button" class="pick ${state.staffId === person.id ? "on" : ""}" data-staff="${person.id}">
+                <button type="button" class="pick ${state.staffId === person.id ? "on" : ""}" data-staff="${person.id}" aria-pressed="${state.staffId === person.id ? "true" : "false"}">
                   <div><b>${person.name}</b><div class="muted">${person.title || ""}</div></div>
                 </button>
               `).join("")}
@@ -219,20 +283,32 @@
               </div>
             </section>` : ""}
 
-          ${state.step === 4 ? `
-            <section class="card stack">
-              <h2 style="margin-top:0">التاريخ والوقت المتاح</h2>
-              <p class="muted">${selected ? `${selected.name} · كتلة ${Number(selected.durationMinutes || 0) + Number(selected.bufferMinutes || 0)} دقيقة` : ""}</p>
+          ${state.step === 4 && isSessionService() ? `
+            <section class="card stack" aria-labelledby="seats-title">
+              <h2 id="seats-title" style="margin-top:0">المقاعد</h2>
+              <p class="muted">${selected?.name || ""} · الجلسة المحددة تستهلك مقاعد من السعة المعلنة.</p>
+              <label>عدد المقاعد<input type="number" id="seats" min="1" max="20" value="${state.seats || 1}" aria-describedby="seats-hint" /></label>
+              <p id="seats-hint" class="muted">المتبقي في الجلسة: ${(state.occurrences || []).find((row) => row.id === state.occurrenceId)?.remaining ?? "—"}</p>
+              <div class="actions">
+                <button class="ghost" id="back3">رجوع</button>
+                <button class="cta" id="to5">التالي</button>
+              </div>
+            </section>` : ""}
+
+          ${state.step === 4 && !isSessionService() ? `
+            <section class="card stack" aria-labelledby="slot-title">
+              <h2 id="slot-title" style="margin-top:0">التاريخ والوقت المتاح</h2>
+              <p class="muted">${selected ? `${selected.name} · كتلة ${Number(selected.durationMinutes || 0) + Number(selected.bufferMinutes || 0)} دقيقة${String(selected.occupancyMode || "").toLowerCase() === "rental" ? " · تأجير مورد" : ""}` : ""}</p>
               <label>اليوم<input type="date" id="date" value="${state.date}" /></label>
               <div>
-                <b>الأوقات المتاحة</b>
-                <div class="slots" style="margin-top:8px">
+                <b id="slots-label">الأوقات المتاحة</b>
+                <div class="slots" style="margin-top:8px" role="listbox" aria-labelledby="slots-label">
                   ${state.loadingSlots ? "<span class='muted'>جارٍ الحساب...</span>" : ""}
                   ${!state.loadingSlots && !state.slots.length ? "<span class='muted'>لا توجد أوقات في هذا اليوم</span>" : ""}
-                  ${state.slots.map((slot) => `<button type="button" class="slot ${state.time === slot.time ? "on" : ""}" data-time="${slot.time}" data-slot-staff="${slot.staffId}">${slot.time}${state.staffId === "any" ? ` · ${slot.staffName}` : ""}</button>`).join("")}
+                  ${state.slots.map((slot) => `<button type="button" class="slot ${state.time === slot.time ? "on" : ""}" role="option" aria-selected="${state.time === slot.time ? "true" : "false"}" data-time="${slot.time}" data-slot-staff="${slot.staffId}">${slot.time}${state.staffId === "any" ? ` · ${slot.staffName}` : ""}</button>`).join("")}
                 </div>
               </div>
-              ${state.error ? `<p class="err">${state.error}</p>` : ""}
+              ${state.error ? `<p class="err" role="alert">${state.error}</p>` : ""}
               <div class="actions">
                 <button class="ghost" id="back3">رجوع</button>
                 <button class="cta" id="to5" ${state.time ? "" : "disabled"}>التالي</button>
@@ -264,7 +340,14 @@
           ${state.step === 6 ? `
             <section class="card ${state.result ? "ok" : ""}">
               <h2 style="margin-top:0">${state.result ? "تم تأكيد الحجز" : "تأكيد الحجز"}</h2>
-              ${state.result ? `
+              ${state.enrollmentResult ? `
+                <p role="status">تم التسجيل في الجلسة</p>
+                <p>المرجع: <b>${state.enrollmentResult.enrollment?.id || ""}</b></p>
+                <p>${state.enrollmentResult.occurrence?.serviceName || ""} · ${state.enrollmentResult.occurrence?.startsAt || ""}</p>
+                <p>المقاعد: ${state.enrollmentResult.enrollment?.seats || 1} · المتبقي: ${state.enrollmentResult.remaining ?? "—"}</p>
+                ${state.manageUrl ? `<p><a class="cta" style="display:inline-block;text-decoration:none;padding:10px 14px" href="${state.manageUrl}">إلغاء التسجيل (رابط موقّع)</a></p>` : ""}
+                <p class="muted">بطاقة الحضور QR عبر واتساب/SMS غير موصولة بعد.</p>
+              ` : state.result ? `
                 <p>المرجع: <b>${state.result.id}</b></p>
                 <p>${state.result.serviceName} · ${state.result.date} · ${state.result.time}</p>
                 <p>مع: ${state.result.staffName} · الحالة: ${state.result.status}</p>
@@ -277,18 +360,21 @@
                         ? "المبلغ: مجاني"
                         : `المبلغ: E£${state.result.amount ?? 0}`
                 }</p>
+                ${state.manageUrl ? `<p><a class="cta" style="display:inline-block;text-decoration:none;padding:10px 14px;background:#eaf1fb;color:inherit" href="${state.manageUrl}">إلغاء / إعادة جدولة (رابط موقّع)</a></p>` : ""}
                 ${state.result.checkInToken ? `
-                  <div style="margin-top:14px;padding:12px;border:1px solid #fdba74;background:#fff7ed;border-radius:12px;text-align:center">
+                  <div style="margin-top:14px;padding:12px;border:1px solid #fdba74;background:#fff7ed;border-radius:12px;text-align:center" role="note">
                     <b>يجب تحميل وحفظ رمز QR</b>
                     <p style="margin:8px 0;color:#9a3412;font-weight:700">لا يتم تسجيل الحضور عند الاستقبال بدون إظهار هذا الرمز. احفظ الملف على جهازك ثم أظهره لموظف الاستقبال.</p>
-                    <div id="checkin-qr" style="width:180px;margin:0 auto"></div>
+                    <div id="checkin-qr" style="width:180px;margin:0 auto" aria-label="رمز QR للحضور"></div>
                     <p style="margin-top:8px"><a class="cta" style="display:inline-block;text-decoration:none;padding:10px 14px" href="${state.passUrl || `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(state.result.checkInToken)}`}" target="_blank" rel="noopener">فتح البطاقة وتحميل PDF</a></p>
                   </div>
                 ` : ""}
               ` : `
                 <p><b>${selected?.name || ""}</b></p>
-                <p>${state.date} · ${state.time}</p>
-                <p>${state.staffId === "any" ? "أي متاح" : (staffForService().find((p) => p.id === state.staffId)?.name || "")}</p>
+                <p>${isSessionService()
+                  ? ((state.occurrences || []).find((row) => row.id === state.occurrenceId)?.startsAt || "جلسة") + ` · مقاعد ${state.seats || 1}`
+                  : `${state.date} · ${state.time}`}</p>
+                <p>${isSessionService() ? "تسجيل سعة جلسة" : (state.staffId === "any" ? "أي متاح" : (staffForService().find((p) => p.id === state.staffId)?.name || ""))}</p>
                 <p>${state.customerName} · ${state.phone}</p>
                 <p class="muted">${
                   selected?.pricingType === "range"
@@ -318,10 +404,18 @@
         root.querySelectorAll("[data-service]").forEach((button) => button.addEventListener("click", () => {
           state.serviceId = button.getAttribute("data-service");
           state.staffId = "any";
+          state.occurrenceId = "";
+          state.occurrences = [];
+          state.enrollmentResult = null;
+          state.result = null;
           render();
         }));
         root.querySelectorAll("[data-staff]").forEach((button) => button.addEventListener("click", () => {
           state.staffId = button.getAttribute("data-staff");
+          render();
+        }));
+        root.querySelectorAll("[data-occurrence]").forEach((button) => button.addEventListener("click", () => {
+          state.occurrenceId = button.getAttribute("data-occurrence");
           render();
         }));
         root.querySelectorAll("[data-time]").forEach((button) => button.addEventListener("click", () => {
@@ -332,15 +426,30 @@
 
         document.getElementById("to2")?.addEventListener("click", () => { state.step = 2; render(); });
         document.getElementById("back1")?.addEventListener("click", () => { state.step = 1; render(); });
-        document.getElementById("to3")?.addEventListener("click", () => { state.step = 3; render(); });
+        document.getElementById("to3")?.addEventListener("click", async () => {
+          state.step = 3;
+          if (isSessionService()) await loadSessions();
+          else render();
+        });
         document.getElementById("back2")?.addEventListener("click", () => { state.step = 2; render(); });
-        document.getElementById("to4")?.addEventListener("click", async () => { state.step = 4; await loadSlots(); });
+        document.getElementById("to4")?.addEventListener("click", async () => {
+          state.step = 4;
+          if (isSessionService()) render();
+          else await loadSlots();
+        });
         document.getElementById("back3")?.addEventListener("click", () => { state.step = 3; render(); });
         document.getElementById("date")?.addEventListener("change", async (event) => {
           state.date = event.target.value;
           await loadSlots();
         });
         document.getElementById("to5")?.addEventListener("click", async () => {
+          if (isSessionService()) {
+            const seatsInput = document.getElementById("seats");
+            state.seats = Math.max(1, Number(seatsInput?.value) || 1);
+            state.step = 5;
+            render();
+            return;
+          }
           const holdStaffId = state.staffId === "any" ? (state.heldStaffId || "any") : state.staffId;
           try {
             const holdResponse = await fetch(`/api/public/booking/${encodeURIComponent(slug)}/hold`, {
@@ -375,27 +484,52 @@
           const button = document.getElementById("submit");
           button.disabled = true;
           try {
-            const response = await fetch(`/api/public/booking/${encodeURIComponent(slug)}/appointments`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                serviceId: state.serviceId,
-                staffId: state.staffId === "any" ? (state.heldStaffId || "any") : state.staffId,
-                date: state.date,
-                time: state.time,
-                customerName: state.customerName,
-                phone: state.phone,
-                email: state.email,
-                notes: state.notes
-              })
-            });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error || "فشل التأكيد");
-            state.result = payload.appointment;
-            state.passUrl = payload.passUrl || (payload.appointment?.checkInToken
-              ? `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(payload.appointment.checkInToken)}`
-              : "");
-            state.error = "";
+            if (isSessionService()) {
+              const response = await fetch(
+                `/api/public/booking/${encodeURIComponent(slug)}/sessions/${encodeURIComponent(state.occurrenceId)}/enroll`,
+                {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    customerName: state.customerName,
+                    phone: state.phone,
+                    email: state.email,
+                    seats: state.seats || 1,
+                    notes: state.notes
+                  })
+                }
+              );
+              const payload = await response.json();
+              if (!response.ok) throw new Error(payload.error || "فشل التسجيل");
+              state.enrollmentResult = payload;
+              state.result = null;
+              state.manageUrl = payload.manageUrl || "";
+              state.error = "";
+            } else {
+              const response = await fetch(`/api/public/booking/${encodeURIComponent(slug)}/appointments`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  serviceId: state.serviceId,
+                  staffId: state.staffId === "any" ? (state.heldStaffId || "any") : state.staffId,
+                  date: state.date,
+                  time: state.time,
+                  customerName: state.customerName,
+                  phone: state.phone,
+                  email: state.email,
+                  notes: state.notes
+                })
+              });
+              const payload = await response.json();
+              if (!response.ok) throw new Error(payload.error || "فشل التأكيد");
+              state.result = payload.appointment;
+              state.enrollmentResult = null;
+              state.passUrl = payload.passUrl || (payload.appointment?.checkInToken
+                ? `/pass.html?slug=${encodeURIComponent(slug)}&token=${encodeURIComponent(payload.appointment.checkInToken)}`
+                : "");
+              state.manageUrl = payload.manageUrl || "";
+              state.error = "";
+            }
           } catch (error) {
             state.error = error.message;
           }
