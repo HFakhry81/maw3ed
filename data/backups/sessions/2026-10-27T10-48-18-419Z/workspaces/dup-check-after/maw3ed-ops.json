@@ -1,0 +1,604 @@
+{
+  "customerCategories": [
+    {
+      "id": "cat-vip",
+      "name": "VIP",
+      "color": "#f5a623"
+    },
+    {
+      "id": "cat-regular",
+      "name": "عادي",
+      "color": "#1967e8"
+    },
+    {
+      "id": "cat-new",
+      "name": "جديد",
+      "color": "#16ae7c"
+    }
+  ],
+  "customers": [],
+  "staff": [
+    {
+      "id": "staff-4f4af4c2",
+      "name": "أحمد محمد",
+      "firstName": "أحمد محمد",
+      "lastName": "",
+      "phone": "",
+      "title": "استقبال",
+      "avatarUrl": "",
+      "servicePlace": "",
+      "serviceCategoryId": "",
+      "serviceIds": [],
+      "active": true,
+      "useBusinessHours": true,
+      "workingHours": null,
+      "closedDays": [],
+      "specificDays": []
+    },
+    {
+      "id": "staff-hf",
+      "name": "هيثم فخري",
+      "title": "مشرف حجز",
+      "active": true
+    },
+    {
+      "id": "staff-rec",
+      "name": "أحمد استقبال",
+      "title": "Reception",
+      "active": true
+    }
+  ],
+  "serviceCategories": [
+    {
+      "id": "dept-outpatient",
+      "name": "العيادات الخارجية",
+      "nameI18n": {
+        "ar": "العيادات الخارجية",
+        "en": "Outpatient clinics"
+      },
+      "sort": 0,
+      "enabled": true
+    },
+    {
+      "id": "dept-internal",
+      "name": "الباطنية",
+      "nameI18n": {
+        "ar": "الباطنية",
+        "en": "Internal medicine"
+      },
+      "sort": 1,
+      "enabled": true
+    },
+    {
+      "id": "dept-pediatrics",
+      "name": "الأطفال",
+      "nameI18n": {
+        "ar": "الأطفال",
+        "en": "Pediatrics"
+      },
+      "sort": 2,
+      "enabled": true
+    },
+    {
+      "id": "dept-obgyn",
+      "name": "النساء والولادة",
+      "nameI18n": {
+        "ar": "النساء والولادة",
+        "en": "Obstetrics & gynecology"
+      },
+      "sort": 3,
+      "enabled": true
+    },
+    {
+      "id": "dept-dental",
+      "name": "الأسنان",
+      "nameI18n": {
+        "ar": "الأسنان",
+        "en": "Dentistry"
+      },
+      "sort": 4,
+      "enabled": true
+    },
+    {
+      "id": "dept-radiology",
+      "name": "الأشعة",
+      "nameI18n": {
+        "ar": "الأشعة",
+        "en": "Radiology"
+      },
+      "sort": 5,
+      "enabled": true
+    },
+    {
+      "id": "dept-lab",
+      "name": "المختبر",
+      "nameI18n": {
+        "ar": "المختبر",
+        "en": "Laboratory"
+      },
+      "sort": 6,
+      "enabled": true
+    },
+    {
+      "id": "dept-dermatology",
+      "name": "الجلدية",
+      "nameI18n": {
+        "ar": "الجلدية",
+        "en": "Dermatology"
+      },
+      "sort": 7,
+      "enabled": true
+    },
+    {
+      "id": "dept-ophthalmology",
+      "name": "العيون",
+      "nameI18n": {
+        "ar": "العيون",
+        "en": "Ophthalmology"
+      },
+      "sort": 8,
+      "enabled": true
+    },
+    {
+      "id": "dept-cardiology",
+      "name": "القلب",
+      "nameI18n": {
+        "ar": "القلب",
+        "en": "Cardiology"
+      },
+      "sort": 9,
+      "enabled": true
+    },
+    {
+      "id": "dept-orthopedics",
+      "name": "العظام",
+      "nameI18n": {
+        "ar": "العظام",
+        "en": "Orthopedics"
+      },
+      "sort": 10,
+      "enabled": true
+    },
+    {
+      "id": "dept-ent",
+      "name": "الأنف والأذن",
+      "nameI18n": {
+        "ar": "الأنف والأذن",
+        "en": "ENT"
+      },
+      "sort": 11,
+      "enabled": true
+    },
+    {
+      "id": "dept-er",
+      "name": "الطوارئ",
+      "nameI18n": {
+        "ar": "الطوارئ",
+        "en": "Emergency"
+      },
+      "sort": 12,
+      "enabled": true
+    },
+    {
+      "id": "dept-physio",
+      "name": "العلاج الطبيعي",
+      "nameI18n": {
+        "ar": "العلاج الطبيعي",
+        "en": "Physiotherapy"
+      },
+      "sort": 13,
+      "enabled": true
+    },
+    {
+      "id": "dept-pharmacy",
+      "name": "الصيدلية",
+      "nameI18n": {
+        "ar": "الصيدلية",
+        "en": "Pharmacy"
+      },
+      "sort": 14,
+      "enabled": true
+    },
+    {
+      "id": "svc-cat-ef8effcb",
+      "name": "فئة اختبار",
+      "sort": 15,
+      "enabled": true,
+      "active": true
+    }
+  ],
+  "services": [
+    {
+      "id": "svc-opd-gp",
+      "categoryId": "dept-outpatient",
+      "name": "كشف عام",
+      "nameI18n": {
+        "ar": "كشف عام",
+        "en": "General consultation"
+      },
+      "durationMinutes": 20,
+      "bufferMinutes": 10,
+      "pricingType": "fixed",
+      "price": 100,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-hf"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "svc-opd-followup",
+      "categoryId": "dept-outpatient",
+      "name": "متابعة",
+      "nameI18n": {
+        "ar": "متابعة",
+        "en": "Follow-up visit"
+      },
+      "durationMinutes": 15,
+      "bufferMinutes": 5,
+      "pricingType": "fixed",
+      "price": 75,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#16ae7c",
+      "providerIds": [
+        "staff-rec"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "svc-lab-basic",
+      "categoryId": "dept-lab",
+      "name": "تحاليل أساسية",
+      "nameI18n": {
+        "ar": "تحاليل أساسية",
+        "en": "Basic lab panel"
+      },
+      "durationMinutes": 15,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 200,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#7c3aed",
+      "providerIds": [
+        "staff-hf"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": true,
+      "description": ""
+    },
+    {
+      "id": "svc-er-specialist",
+      "categoryId": "dept-er",
+      "name": "كشف أخصائي",
+      "nameI18n": {
+        "ar": "كشف أخصائي",
+        "en": "Specialist consultation"
+      },
+      "durationMinutes": 30,
+      "bufferMinutes": 15,
+      "pricingType": "fixed",
+      "price": 150,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [
+        "staff-rec"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "svc-er-ticket",
+      "categoryId": "dept-er",
+      "name": "تذكرة دخول طوارئ",
+      "nameI18n": {
+        "ar": "تذكرة دخول طوارئ",
+        "en": "Emergency admission ticket"
+      },
+      "durationMinutes": 45,
+      "bufferMinutes": 15,
+      "pricingType": "fixed",
+      "price": 150,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#16ae7c",
+      "providerIds": [
+        "staff-hf"
+      ],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": true,
+      "description": ""
+    }
+  ],
+  "workingHours": [
+    {
+      "weekday": 0,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 1,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 2,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 3,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 4,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 5,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 6,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    }
+  ],
+  "closedDays": [],
+  "specificDays": [],
+  "bookingPage": {
+    "slug": "maw3ed-demo--after",
+    "businessName": "موعد — مساحة تجريبية",
+    "industry": "healthcare",
+    "email": "hello@maw3ed.app",
+    "phone": "+20 1550059876",
+    "description": "منصة مواعيد عربية للأعمال القائمة على الخدمات.",
+    "country": "مصر",
+    "state": "القاهرة",
+    "city": "القاهرة",
+    "street": "",
+    "timezone": "Africa/Cairo",
+    "onlineBookingEnabled": true,
+    "logoUrl": "",
+    "showPlatformBranding": true,
+    "socialLinks": {
+      "facebook": "",
+      "instagram": "",
+      "website": ""
+    }
+  },
+  "calendarPreferences": {
+    "showBusinessHoursOnly": true,
+    "slotOrder": "start-to-end",
+    "appointmentColorMode": "service",
+    "multiServiceEnabled": true
+  },
+  "notifications": {
+    "email": {
+      "confirmation": true,
+      "reminder": true,
+      "followUp": false,
+      "cancellation": true,
+      "reschedule": true
+    },
+    "messagingChannel": "whatsapp",
+    "messaging": {
+      "confirmation": false,
+      "reminder": false,
+      "cancellation": false,
+      "reschedule": false
+    },
+    "pushDailyReminder": true
+  },
+  "expenses": [],
+  "appointments": [],
+  "activityMode": "medical",
+  "activityModeLocked": false,
+  "activityTemplateId": "medical",
+  "medicalDepartments": [
+    {
+      "id": "dept-outpatient",
+      "name": "العيادات الخارجية",
+      "nameI18n": {
+        "ar": "العيادات الخارجية",
+        "en": "Outpatient clinics"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-internal",
+      "name": "الباطنية",
+      "nameI18n": {
+        "ar": "الباطنية",
+        "en": "Internal medicine"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-pediatrics",
+      "name": "الأطفال",
+      "nameI18n": {
+        "ar": "الأطفال",
+        "en": "Pediatrics"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-obgyn",
+      "name": "النساء والولادة",
+      "nameI18n": {
+        "ar": "النساء والولادة",
+        "en": "Obstetrics & gynecology"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-dental",
+      "name": "الأسنان",
+      "nameI18n": {
+        "ar": "الأسنان",
+        "en": "Dentistry"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-radiology",
+      "name": "الأشعة",
+      "nameI18n": {
+        "ar": "الأشعة",
+        "en": "Radiology"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-lab",
+      "name": "المختبر",
+      "nameI18n": {
+        "ar": "المختبر",
+        "en": "Laboratory"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-dermatology",
+      "name": "الجلدية",
+      "nameI18n": {
+        "ar": "الجلدية",
+        "en": "Dermatology"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-ophthalmology",
+      "name": "العيون",
+      "nameI18n": {
+        "ar": "العيون",
+        "en": "Ophthalmology"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-cardiology",
+      "name": "القلب",
+      "nameI18n": {
+        "ar": "القلب",
+        "en": "Cardiology"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-orthopedics",
+      "name": "العظام",
+      "nameI18n": {
+        "ar": "العظام",
+        "en": "Orthopedics"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-ent",
+      "name": "الأنف والأذن",
+      "nameI18n": {
+        "ar": "الأنف والأذن",
+        "en": "ENT"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-er",
+      "name": "الطوارئ",
+      "nameI18n": {
+        "ar": "الطوارئ",
+        "en": "Emergency"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-physio",
+      "name": "العلاج الطبيعي",
+      "nameI18n": {
+        "ar": "العلاج الطبيعي",
+        "en": "Physiotherapy"
+      },
+      "enabled": true
+    },
+    {
+      "id": "dept-pharmacy",
+      "name": "الصيدلية",
+      "nameI18n": {
+        "ar": "الصيدلية",
+        "en": "Pharmacy"
+      },
+      "enabled": true
+    }
+  ],
+  "activityLabels": {
+    "customer": "المرضى",
+    "staff": "الأطباء",
+    "department": "الأقسام والعيادات",
+    "service": "الخدمات",
+    "appointment": "المواعيد"
+  },
+  "activityLabelsI18n": {
+    "ar": {
+      "customer": "المرضى",
+      "staff": "الأطباء",
+      "department": "الأقسام والعيادات",
+      "service": "الخدمات",
+      "appointment": "المواعيد"
+    },
+    "en": {
+      "customer": "Patients",
+      "staff": "Doctors",
+      "department": "Departments",
+      "service": "Services",
+      "appointment": "Appointments"
+    }
+  },
+  "planKey": "free"
+}

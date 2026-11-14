@@ -1,0 +1,309 @@
+{
+  "customerCategories": [
+    {
+      "id": "cat-vip",
+      "name": "VIP",
+      "color": "#f5a623"
+    },
+    {
+      "id": "cat-regular",
+      "name": "عادي",
+      "color": "#1967e8"
+    },
+    {
+      "id": "cat-new",
+      "name": "جديد",
+      "color": "#16ae7c"
+    }
+  ],
+  "customers": [],
+  "staff": [
+    {
+      "id": "staff-owner",
+      "name": "المسؤول",
+      "title": "مشرف",
+      "active": true
+    }
+  ],
+  "serviceCategories": [
+    {
+      "id": "events-consult",
+      "name": "الاستشارات",
+      "nameI18n": {
+        "ar": "الاستشارات",
+        "en": "Consultations"
+      },
+      "sort": 0,
+      "enabled": true
+    },
+    {
+      "id": "events-packages",
+      "name": "باقات الفعاليات",
+      "nameI18n": {
+        "ar": "باقات الفعاليات",
+        "en": "Event packages"
+      },
+      "sort": 1,
+      "enabled": true
+    },
+    {
+      "id": "events-venue",
+      "name": "حجز القاعة",
+      "nameI18n": {
+        "ar": "حجز القاعة",
+        "en": "Venue booking"
+      },
+      "sort": 2,
+      "enabled": true
+    }
+  ],
+  "services": [
+    {
+      "id": "events-intro",
+      "categoryId": "events-consult",
+      "name": "استشارة أولية",
+      "nameI18n": {
+        "ar": "استشارة أولية",
+        "en": "Initial consultation"
+      },
+      "durationMinutes": 45,
+      "bufferMinutes": 0,
+      "pricingType": "free",
+      "price": 0,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "events-planning",
+      "categoryId": "events-consult",
+      "name": "جلسة تخطيط",
+      "nameI18n": {
+        "ar": "جلسة تخطيط",
+        "en": "Planning session"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 500,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "events-small",
+      "categoryId": "events-packages",
+      "name": "فعالية صغيرة",
+      "nameI18n": {
+        "ar": "فعالية صغيرة",
+        "en": "Small event package"
+      },
+      "durationMinutes": 120,
+      "bufferMinutes": 0,
+      "pricingType": "range",
+      "price": 1500,
+      "priceMin": 1500,
+      "priceMax": 5000,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "events-custom",
+      "categoryId": "events-packages",
+      "name": "تنظيم حسب الطلب",
+      "nameI18n": {
+        "ar": "تنظيم حسب الطلب",
+        "en": "Custom event"
+      },
+      "durationMinutes": 180,
+      "bufferMinutes": 0,
+      "pricingType": "on_request",
+      "price": 0,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    },
+    {
+      "id": "events-hall-hour",
+      "categoryId": "events-venue",
+      "name": "حجز قاعة بالساعة",
+      "nameI18n": {
+        "ar": "حجز قاعة بالساعة",
+        "en": "Hall hourly booking"
+      },
+      "durationMinutes": 60,
+      "bufferMinutes": 0,
+      "pricingType": "fixed",
+      "price": 400,
+      "priceMin": null,
+      "priceMax": null,
+      "color": "#1967e8",
+      "providerIds": [],
+      "publicBooking": true,
+      "autoAccept": true,
+      "autoComplete": false,
+      "description": ""
+    }
+  ],
+  "workingHours": [
+    {
+      "weekday": 0,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 1,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 2,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 3,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 4,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 5,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    },
+    {
+      "weekday": 6,
+      "isOpen": true,
+      "opensAt": "09:00",
+      "closesAt": "21:00",
+      "breakEnabled": false,
+      "breakStartsAt": "13:00",
+      "breakEndsAt": "14:00"
+    }
+  ],
+  "closedDays": [],
+  "specificDays": [],
+  "bookingPage": {
+    "slug": "haitham-fakhry",
+    "businessName": "Haitham Fakhry",
+    "industry": "events",
+    "email": "hello@maw3ed.app",
+    "phone": "+20 1550059876",
+    "description": "منصة مواعيد عربية للأعمال القائمة على الخدمات.",
+    "country": "مصر",
+    "state": "القاهرة",
+    "city": "القاهرة",
+    "street": "",
+    "timezone": "Africa/Cairo",
+    "onlineBookingEnabled": true,
+    "logoUrl": "",
+    "showPlatformBranding": true,
+    "socialLinks": {
+      "facebook": "",
+      "instagram": "",
+      "website": ""
+    },
+    "locale": "ar"
+  },
+  "calendarPreferences": {
+    "showBusinessHoursOnly": true,
+    "slotOrder": "start-to-end",
+    "appointmentColorMode": "service",
+    "multiServiceEnabled": true
+  },
+  "notifications": {
+    "email": {
+      "confirmation": true,
+      "reminder": true,
+      "followUp": false,
+      "cancellation": true,
+      "reschedule": true
+    },
+    "messagingChannel": "whatsapp",
+    "messaging": {
+      "confirmation": false,
+      "reminder": false,
+      "cancellation": false,
+      "reschedule": false
+    },
+    "pushDailyReminder": true
+  },
+  "expenses": [],
+  "appointments": [],
+  "activityMode": "flexible",
+  "activityModeLocked": true,
+  "activityTemplateId": "events",
+  "medicalDepartments": [],
+  "activityLabels": {
+    "customer": "العملاء",
+    "staff": "المنظمين",
+    "department": "الباقات",
+    "service": "الخدمات",
+    "appointment": "الحجوزات"
+  },
+  "activityLabelsI18n": {
+    "ar": {
+      "customer": "العملاء",
+      "staff": "المنظمين",
+      "department": "الباقات",
+      "service": "الخدمات",
+      "appointment": "الحجوزات"
+    },
+    "en": {
+      "customer": "Clients",
+      "staff": "Planners",
+      "department": "Packages",
+      "service": "Services",
+      "appointment": "Bookings"
+    }
+  },
+  "planKey": "free"
+}
