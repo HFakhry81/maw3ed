@@ -525,7 +525,7 @@ function appointmentsForCategory(categoryId) {
 }
 
 function futureAppointmentsFor({ staffId = "", serviceId = "" } = {}) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = opsDesk.todayInTimezone(store.bookingPage?.timezone || "Africa/Cairo");
   return store.appointments.filter((item) => {
     if (item.status === "cancelled" || item.status === "canceled") return false;
     if (item.date < today) return false;
@@ -1850,7 +1850,7 @@ function createExpense(payload) {
     name,
     amount,
     category: String(payload.category || "general"),
-    date: payload.date || new Date().toISOString().slice(0, 10),
+    date: payload.date || opsDesk.todayInTimezone(store.bookingPage?.timezone || "Africa/Cairo"),
     description: String(payload.description || ""),
     recurrence: payload.recurrence || "none"
   };
@@ -2783,13 +2783,14 @@ function completeDeskVisit(appointmentId, {
 
 function getStatsSummary(fallbackAppointments = []) {
   const appointments = store.appointments.length ? store.appointments : fallbackAppointments;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = opsDesk.todayInTimezone(store.bookingPage?.timezone || "Africa/Cairo");
   const completed = appointments.filter((item) => item.status === "completed" || item.status === "confirmed");
   const cancelled = appointments.filter((item) => item.status === "cancelled" || item.status === "canceled");
   const todayItems = appointments.filter((item) => item.date === today && item.status !== "cancelled" && item.status !== "canceled");
   const revenueTotal = completed.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const attendanceRate = appointments.length ? Math.round((completed.length / appointments.length) * 100) : 0;
   return {
+    today,
     appointments: {
       completedCount: completed.length,
       cancelledCount: cancelled.length,
