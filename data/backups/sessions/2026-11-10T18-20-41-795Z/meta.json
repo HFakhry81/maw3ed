@@ -1,0 +1,14 @@
+{
+  "name": "maw3ed-ops-session",
+  "reason": "refresh-all",
+  "createdAt": "2026-11-10T18:20:41.816Z",
+  "stamp": "2026-11-10T18-20-41-795Z",
+  "workspaces": [
+    "local-default"
+  ],
+  "rootFiles": [
+    "slug-index.json",
+    "maw3ed-data.json"
+  ],
+  "path": "data\\backups\\sessions\\2026-11-10T18-20-41-795Z"
+}
