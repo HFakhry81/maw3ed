@@ -5,7 +5,7 @@ import { SmartTimePicker } from "./SmartTimePicker.jsx";
 import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 import { formatMoney } from "./i18n";
 import { CategoryProvidersTable } from "./ServiceProvidersTable.jsx";
-import { localDateString } from "../civilDate.js";
+import { localDateString } from "./civilDate.js";
 
 export const STAFF_SECTIONS = [
   { id: "history", label: "تاريخ المواعيد", icon: "⏱" },

@@ -1,10 +1,4 @@
-result = await query(
-  `INSERT INTO app_users (id, clerk_user_id, email, display_name, is_platform_admin, platform_role)
-   VALUES ($1, $2, $3, $4, FALSE, NULL)
-   ON CONFLICT (clerk_user_id) DO UPDATE SET email = EXCLUDED.email, display_name = EXCLUDED.display_name, updated_at = NOW()
-   RETURNING *`,
-  [createId("user"), identity.clerkUserId, identity.email, identity.displayName]
-);const http = require("http");
+const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");

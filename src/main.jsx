@@ -64,7 +64,7 @@ import { ServicesDirectory } from "./ServicesDirectory.jsx";
 import { DepartmentDeskView } from "./DepartmentDeskView.jsx";
 import { ResourcesView } from "./ResourcesView.jsx";
 import { occupancyModeLabel, compositionLabel } from "./occupancyLabels.js";
-import { localDateString } from "../civilDate.js";
+import { localDateString } from "./civilDate.js";
 import {
   canCreateAppointments,
   canManageFinance,

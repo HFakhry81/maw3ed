@@ -33,5 +33,6 @@
             "matchCommandLine": true
         }
     },
-    "chat.permissions.default": "autoApprove"
+    "chat.permissions.default": "autoApprove",
+    "npm.packageManager": "npm"
 }
