@@ -5,7 +5,7 @@ import { SmartTimePicker } from "./SmartTimePicker.jsx";
 import { confirmSaved, confirmSaveFailed } from "./saveFeedback.jsx";
 import { toMinutes, isOvernightShift } from "./shiftHours.js";
 import { occupancyModeLabel } from "./occupancyLabels.js";
-import { localDateString } from "../civilDate.js";
+import { localDateString } from "./civilDate.js";
 
 function startOfWeek(date) {
   const value = new Date(date);
